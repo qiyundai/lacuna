@@ -1,0 +1,12 @@
+name = "lacuna-api"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "lacuna-db"
+database_id = "placeholder-replace-after-wrangler-d1-create"
+
+[vars]
+FRONTEND_ORIGIN = "http://localhost:5173"

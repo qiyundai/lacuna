@@ -1,0 +1,14 @@
+{
+  "name": "lacuna",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "pnpm -F frontend dev",
+    "dev:worker": "pnpm -F worker dev",
+    "build:frontend": "pnpm -F frontend build",
+    "build:worker": "pnpm -F worker build",
+    "deploy:worker": "pnpm -F worker deploy"
+  },
+  "engines": {
+    "pnpm": ">=9"
+  }
+}

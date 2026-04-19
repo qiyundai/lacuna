@@ -1,0 +1,42 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #0a0a0a;
+  --void-text: rgba(255, 255, 255, 0.85);
+  --void-text-dim: rgba(255, 255, 255, 0.35);
+  --void-text-faint: rgba(255, 255, 255, 0.12);
+  --accent: rgba(255, 255, 255, 0.6);
+  --font-mono: 'Courier New', Courier, monospace;
+  --font-serif: Georgia, 'Times New Roman', serif;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--void-text);
+  font-family: var(--font-serif);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Prevent iOS bounce scroll */
+body {
+  position: fixed;
+  width: 100%;
+  height: 100%;
+}
+
+/* Remove tap highlight on mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: rgba(255, 255, 255, 0.15);
+}

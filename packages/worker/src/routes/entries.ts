@@ -1,0 +1,41 @@
+import { Hono } from 'hono';
+import type { Env, JwtPayload } from '../types.js';
+import { authMiddleware } from '../middleware/auth.js';
+import { createEntry, getEntries } from '../db.js';
+import { analyzeEntriesAsync } from '../ai/analyzer.js';
+
+type Variables = { user: JwtPayload };
+
+export const entriesRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+entriesRoute.use('*', authMiddleware);
+
+entriesRoute.get('/', async (c) => {
+  const user = c.get('user');
+  const cursor = c.req.query('cursor') ?? null;
+  const limit = Math.min(parseInt(c.req.query('limit') ?? '20', 10), 50);
+
+  const entries = await getEntries(c.env.DB, user.sub, cursor, limit);
+  const nextCursor = entries.length === limit ? (entries[entries.length - 1]?.id ?? null) : null;
+
+  return c.json({ entries, nextCursor });
+});
+
+entriesRoute.post('/', async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json<{ body?: string; solidified_at?: number }>();
+
+  if (!body.body?.trim()) {
+    return c.json({ error: { code: 'BAD_REQUEST', message: 'Entry body is required' } }, 400);
+  }
+
+  const solidifiedAt = body.solidified_at ?? Math.floor(Date.now() / 1000);
+  const entry = await createEntry(c.env.DB, user.sub, body.body.trim(), solidifiedAt);
+
+  // Fire AI analysis asynchronously — does not block the response
+  c.executionCtx.waitUntil(
+    analyzeEntriesAsync(c.env, user.sub).catch((err) => console.error('AI analysis failed:', err))
+  );
+
+  return c.json({ entry }, 201);
+});
