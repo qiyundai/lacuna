@@ -1,0 +1,19 @@
+# Claude Code local settings
+.claude/
+
+# Dependencies
+node_modules/
+
+# Build outputs
+.svelte-kit/
+dist/
+.wrangler/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
