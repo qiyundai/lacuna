@@ -1,10 +1,16 @@
 <script lang="ts">
   import '../app.css';
   import { onMount } from 'svelte';
+  import { page } from '$app/state';
   import { session, hydrateSession, setAuthed } from '$lib/stores/session.svelte.js';
+  import { initWeather } from '$lib/stores/weather.svelte.js';
   import { requestMagicLink, verifyMagicToken } from '$lib/auth.js';
 
   let { children } = $props();
+
+  // The verify route must always render so it can exchange the token for a JWT,
+  // even before the session is authed.
+  let isAuthRoute = $derived(page.url.pathname.startsWith('/auth/'));
 
   let email = $state('');
   let linkSent = $state(false);
@@ -13,6 +19,7 @@
 
   onMount(() => {
     hydrateSession();
+    initWeather();
   });
 
   async function submitEmail(e: SubmitEvent) {
@@ -33,7 +40,7 @@
 
 {#if session.status === 'loading'}
   <!-- Silent loading — void background shows through -->
-{:else if session.status === 'unauthed'}
+{:else if session.status === 'unauthed' && !isAuthRoute}
   <div class="auth-overlay">
     {#if linkSent}
       <p class="auth-message">check your email</p>

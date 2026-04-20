@@ -64,6 +64,13 @@ async function sendMagicLinkEmail(
 ): Promise<void> {
   const link = `${frontendOrigin}/auth/verify?token=${encodeURIComponent(token)}`;
 
+  if (!resendApiKey) {
+    // Local dev fallback: no Resend key configured, so log the magic link
+    // to the worker console instead of sending an email.
+    console.log(`[auth] magic link for ${to}: ${link}`);
+    return;
+  }
+
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {

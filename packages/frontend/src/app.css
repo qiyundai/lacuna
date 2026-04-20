@@ -5,11 +5,11 @@
 }
 
 :root {
-  --bg: #0a0a0a;
-  --void-text: rgba(255, 255, 255, 0.85);
-  --void-text-dim: rgba(255, 255, 255, 0.35);
-  --void-text-faint: rgba(255, 255, 255, 0.12);
-  --accent: rgba(255, 255, 255, 0.6);
+  --bg: #131010;
+  --void-text: rgba(255, 238, 220, 0.88);
+  --void-text-dim: rgba(255, 238, 220, 0.38);
+  --void-text-faint: rgba(255, 238, 220, 0.14);
+  --accent: rgba(255, 238, 220, 0.6);
   --font-mono: 'Courier New', Courier, monospace;
   --font-serif: Georgia, 'Times New Roman', serif;
 }
@@ -38,5 +38,5 @@ body {
 }
 
 ::selection {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 238, 220, 0.18);
 }
