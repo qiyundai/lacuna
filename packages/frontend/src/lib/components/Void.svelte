@@ -37,6 +37,16 @@
   let reducedMotion = false;
   let rafId = 0;
 
+  let displaceEl = $state<SVGFEDisplacementMapElement | undefined>(undefined);
+  let refractRafId = 0;
+  const REFRACT_PEAK = 38;
+  const RIPPLE_MS = 2800;
+  const DISSOLVE_MS = 1100;
+
+  let glowBoost = 0;
+  let lastTickTime = 0;
+  const GLOW_DECAY_PER_SEC = 1.5;
+
   const driftCache = new Map<number, { dx: number; dy: number; dur: number; delay: number }>();
   function driftFor(id: number) {
     let d = driftCache.get(id);
@@ -77,10 +87,19 @@
 
   function tick() {
     const t = performance.now();
+    const dt = lastTickTime ? Math.min((t - lastTickTime) / 1000, 0.05) : 0.016;
+    lastTickTime = t;
+
     smoothPx += (pointerX - smoothPx) * 0.06;
     smoothPy += (pointerY - smoothPy) * 0.06;
 
-    const solidifyBoost = solidifying ? solidifyProgress : 0;
+    if (solidifying) {
+      glowBoost = solidifyProgress;
+    } else if (glowBoost > 0.001) {
+      glowBoost *= Math.exp(-GLOW_DECAY_PER_SEC * dt);
+    } else {
+      glowBoost = 0;
+    }
 
     for (let i = 0; i < orbs.length; i++) {
       const orb = orbs[i];
@@ -102,8 +121,8 @@
       dx += (smoothPx - 0.5) * orb.parallax * 4 * parallaxMag;
       dy += (smoothPy - 0.5) * orb.parallax * 4 * parallaxMag;
 
-      const scale = 1 + sizeMod + solidifyBoost * 0.08;
-      const opacity = orb.baseOpacity * (1 + solidifyBoost * 0.4);
+      const scale = 1 + sizeMod + glowBoost * 0.08;
+      const opacity = orb.baseOpacity * (1 + glowBoost * 0.4);
 
       el.style.transform = `translate(-50%, -50%) translate3d(${dx}vw, ${dy}vh, 0) scale(${scale})`;
       el.style.opacity = String(opacity);
@@ -170,12 +189,33 @@
     gestureCleanup?.();
     shakeCleanup?.();
     if (rafId) cancelAnimationFrame(rafId);
+    if (refractRafId) cancelAnimationFrame(refractRafId);
     if (container) container.removeEventListener('pointermove', handlePointerMove);
     window.removeEventListener('visibilitychange', focusInput);
   });
 
   function focusInput() {
     inputEl?.focus();
+  }
+
+  function startRefract() {
+    if (refractRafId) cancelAnimationFrame(refractRafId);
+    const start = performance.now();
+    const peak = reducedMotion ? REFRACT_PEAK * 0.3 : REFRACT_PEAK;
+    const step = () => {
+      const t = (performance.now() - start) / RIPPLE_MS;
+      if (!displaceEl) return;
+      if (t >= 1) {
+        displaceEl.setAttribute('scale', '0');
+        refractRafId = 0;
+        return;
+      }
+      const env = Math.sin(t * Math.PI);
+      const eased = env * env * (3 - 2 * env);
+      displaceEl.setAttribute('scale', String(eased * peak));
+      refractRafId = requestAnimationFrame(step);
+    };
+    refractRafId = requestAnimationFrame(step);
   }
 
   async function solidifyEntry() {
@@ -190,18 +230,16 @@
 
     dissolving = true;
     justSolidified = true;
-
-    const dissolveMs = 800;
-    const rippleMs = 1800;
+    startRefract();
 
     setTimeout(() => {
       clearDraft();
       dissolving = false;
       solidifying = false;
       solidifyProgress = 0;
-    }, dissolveMs);
+    }, DISSOLVE_MS + 400);
 
-    setTimeout(() => (justSolidified = false), rippleMs);
+    setTimeout(() => (justSolidified = false), RIPPLE_MS);
 
     try {
       const { entry } = await api.entries.create(text, solidifiedAt);
@@ -258,6 +296,28 @@
     --glow-2: {weather.palette.glows[2]};
   "
 >
+  <svg class="filter-defs" aria-hidden="true" width="0" height="0">
+    <defs>
+      <filter id="glow-refract" x="-10%" y="-10%" width="120%" height="120%">
+        <feTurbulence
+          type="fractalNoise"
+          baseFrequency="0.009 0.013"
+          numOctaves="2"
+          seed="7"
+          result="noise"
+        />
+        <feDisplacementMap
+          bind:this={displaceEl}
+          in="SourceGraphic"
+          in2="noise"
+          scale="0"
+          xChannelSelector="R"
+          yChannelSelector="G"
+        />
+      </filter>
+    </defs>
+  </svg>
+
   <div class="glow-field">
     {#each orbs as orb, i}
       <div
@@ -342,11 +402,19 @@
     transition: background 1.6s ease;
   }
 
+  .filter-defs {
+    position: absolute;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
   .glow-field {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    filter: blur(55px) saturate(1.15);
+    filter: blur(55px) saturate(1.15) url(#glow-refract);
     mix-blend-mode: screen;
     will-change: filter;
   }
@@ -420,13 +488,13 @@
   }
 
   .draft-prose.dissolving .char {
-    animation: charDissolve 750ms cubic-bezier(0.4, 0, 0.7, 0.3) forwards;
-    animation-delay: calc(var(--char-index, 0) * 8ms);
+    animation: charDissolve 1100ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+    animation-delay: calc(var(--char-index, 0) * 14ms);
   }
 
   .draft-prose.dissolving .char-space {
-    animation: charSpaceDissolve 500ms ease-out forwards;
-    animation-delay: calc(var(--char-index, 0) * 8ms);
+    animation: charSpaceDissolve 800ms ease-out forwards;
+    animation-delay: calc(var(--char-index, 0) * 14ms);
   }
 
   @keyframes charIn {
@@ -457,11 +525,13 @@
   @media (prefers-reduced-motion: reduce) {
     .word { animation: none; }
     .char { animation: charSpaceIn 140ms ease-out both; }
-    .draft-prose.dissolving .char {
-      animation: charSpaceDissolve 300ms ease-out forwards;
+    .draft-prose.dissolving .char,
+    .draft-prose.dissolving .char-space {
+      animation: charSpaceDissolve 400ms ease-out forwards;
       animation-delay: 0ms;
     }
-    .ripple { animation-duration: 900ms; }
+    .ripple-primary,
+    .ripple-secondary { animation-duration: 1400ms; }
   }
 
   .ripple {
@@ -482,16 +552,16 @@
     background: radial-gradient(
       circle,
       transparent 0%,
-      transparent 34%,
-      rgba(255, 248, 232, 0.10) 38%,
-      rgba(255, 248, 232, 0.38) 43%,
-      rgba(255, 248, 232, 0.72) 46%,
-      rgba(255, 248, 232, 0.38) 49%,
-      rgba(255, 248, 232, 0.10) 53%,
-      transparent 58%,
+      transparent 32%,
+      rgba(255, 248, 232, 0.06) 37%,
+      rgba(255, 248, 232, 0.24) 42%,
+      rgba(255, 248, 232, 0.48) 46%,
+      rgba(255, 248, 232, 0.24) 50%,
+      rgba(255, 248, 232, 0.06) 55%,
+      transparent 60%,
       transparent 100%
     );
-    animation: rippleOut 1.8s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+    animation: rippleOut 2.8s cubic-bezier(0.33, 0, 0.25, 1) forwards;
   }
 
   .ripple-secondary {
@@ -499,19 +569,21 @@
       circle,
       transparent 0%,
       transparent 38%,
-      rgba(255, 248, 232, 0.05) 41%,
-      rgba(255, 248, 232, 0.20) 44%,
-      rgba(255, 248, 232, 0.05) 47%,
-      transparent 51%,
+      rgba(255, 248, 232, 0.04) 42%,
+      rgba(255, 248, 232, 0.14) 45%,
+      rgba(255, 248, 232, 0.04) 48%,
+      transparent 52%,
       transparent 100%
     );
-    animation: rippleOut 1.8s cubic-bezier(0.22, 0.61, 0.36, 1) 160ms forwards;
-    filter: blur(14px);
+    animation: rippleOut 2.8s cubic-bezier(0.33, 0, 0.25, 1) 320ms forwards;
+    filter: blur(16px);
   }
 
   @keyframes rippleOut {
-    0%   { transform: translate(-50%, -50%) scale(0); opacity: 0.95; }
-    70%  { opacity: 0.55; }
+    0%   { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+    8%   { opacity: 0.35; }
+    28%  { opacity: 0.55; }
+    70%  { opacity: 0.28; }
     100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
   }
 
