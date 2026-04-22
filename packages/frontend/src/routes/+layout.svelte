@@ -55,6 +55,7 @@
           spellcheck={false}
           class="auth-input"
         />
+        <button type="submit" class="auth-submit" disabled={submitting}>enter</button>
         {#if authError}
           <p class="auth-error">{authError}</p>
         {/if}
@@ -105,6 +106,28 @@
     font-family: var(--font-serif);
     font-size: 1rem;
     letter-spacing: 0.05em;
+  }
+
+  .auth-submit {
+    background: transparent;
+    border: none;
+    color: var(--void-text-dim);
+    font-family: var(--font-serif);
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    padding: 0.25rem 0;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+
+  .auth-submit:hover {
+    opacity: 1;
+  }
+
+  .auth-submit:disabled {
+    opacity: 0.3;
+    cursor: default;
   }
 
   .auth-error {
