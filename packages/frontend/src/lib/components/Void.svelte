@@ -14,6 +14,9 @@
   let solidifyProgress = $state(0);
   let justSolidified = $state(false);
   let dissolving = $state(false);
+  let showingConsent = $state(false);
+  let pendingText = '';
+  let pendingAt = 0;
 
   let gestureCleanup: (() => void) | null = null;
   let shakeCleanup: (() => void) | null = null;
@@ -228,6 +231,25 @@
 
     const solidifiedAt = Math.floor(Date.now() / 1000);
 
+    if (!localStorage.getItem('lacuna_ai_consented')) {
+      pendingText = text;
+      pendingAt = solidifiedAt;
+      solidifying = false;
+      solidifyProgress = 0;
+      showingConsent = true;
+      return;
+    }
+
+    await commitEntry(text, solidifiedAt);
+  }
+
+  async function dismissConsent() {
+    localStorage.setItem('lacuna_ai_consented', '1');
+    showingConsent = false;
+    await commitEntry(pendingText, pendingAt);
+  }
+
+  async function commitEntry(text: string, solidifiedAt: number) {
     dissolving = true;
     justSolidified = true;
     startRefract();
@@ -383,7 +405,14 @@
     aria-label="Write here"
   ></textarea>
 
-  {#if !draft.isDirty}
+  {#if showingConsent}
+    <button class="consent-overlay" onclick={dismissConsent} aria-label="Understood, continue">
+      <p class="consent-text">your words are analyzed privately to surface patterns in your story. this uses anthropic's api — they process entries but do not store them for training.</p>
+      <span class="consent-hint">tap to continue</span>
+    </button>
+  {/if}
+
+  {#if !draft.isDirty && !showingConsent}
     <button class="down-hint" onclick={onSwipeDown} aria-label="Go to your story">
       <span>↓</span>
     </button>
@@ -606,5 +635,45 @@
   @keyframes bob {
     0%, 100% { transform: translateX(-50%) translateY(0); }
     50%       { transform: translateX(-50%) translateY(4px); }
+  }
+
+  .consent-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    z-index: 10;
+    padding: 2rem;
+    animation: fadeInConsent 0.6s ease forwards;
+  }
+
+  .consent-text {
+    color: var(--void-text-dim);
+    font-family: var(--font-serif);
+    font-size: clamp(0.85rem, 2vw, 1rem);
+    line-height: 1.7;
+    letter-spacing: 0.03em;
+    max-width: 34ch;
+    text-align: center;
+    margin: 0;
+  }
+
+  .consent-hint {
+    color: var(--void-text-faint);
+    font-family: var(--font-serif);
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    opacity: 0.6;
+  }
+
+  @keyframes fadeInConsent {
+    from { opacity: 0; }
+    to   { opacity: 1; }
   }
 </style>

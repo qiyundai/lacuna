@@ -1,14 +1,17 @@
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import type { Env } from '../types.js';
+import type { Env, JwtPayload } from '../types.js';
+import { authMiddleware } from '../middleware/auth.js';
 import {
   clearMagicToken,
+  deleteUser,
   getUserByMagicToken,
   setMagicToken,
   upsertUser,
 } from '../db.js';
 
-export const authRoute = new Hono<{ Bindings: Env }>();
+type Variables = { user: JwtPayload };
+export const authRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 authRoute.post('/request', async (c) => {
   const body = await c.req.json<{ email?: string }>();
@@ -54,6 +57,12 @@ authRoute.get('/verify', async (c) => {
     .sign(secret);
 
   return c.json({ jwt, user: { id: user.id, email: user.email } });
+});
+
+authRoute.delete('/account', authMiddleware, async (c) => {
+  const user = c.get('user');
+  await deleteUser(c.env.DB, user.sub);
+  return c.json({ ok: true });
 });
 
 async function sendMagicLinkEmail(

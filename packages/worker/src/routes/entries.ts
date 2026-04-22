@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env, JwtPayload } from '../types.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { createEntry, getEntries } from '../db.js';
+import { createEntry, deleteEntry, getEntries } from '../db.js';
 import { analyzeEntriesAsync } from '../ai/analyzer.js';
 
 type Variables = { user: JwtPayload };
@@ -38,4 +38,14 @@ entriesRoute.post('/', async (c) => {
   );
 
   return c.json({ entry }, 201);
+});
+
+entriesRoute.delete('/:id', async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  const deleted = await deleteEntry(c.env.DB, user.sub, id);
+  if (!deleted) {
+    return c.json({ error: { code: 'NOT_FOUND', message: 'Entry not found' } }, 404);
+  }
+  return c.json({ ok: true });
 });

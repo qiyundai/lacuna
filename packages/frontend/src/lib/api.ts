@@ -43,6 +43,8 @@ export const api = {
         {},
         false
       ),
+    deleteAccount: () =>
+      request<{ ok: boolean }>('/auth/account', { method: 'DELETE' }),
   },
   entries: {
     list: (cursor?: string) =>
@@ -54,6 +56,8 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ body, solidified_at }),
       }),
+    delete: (id: string) =>
+      request<{ ok: boolean }>(`/entries/${id}`, { method: 'DELETE' }),
   },
   patterns: {
     get: () => request<{ model_weights: ModelWeights; last_updated: number | null }>('/patterns'),

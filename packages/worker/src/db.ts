@@ -152,6 +152,22 @@ export async function getLatestMemoir(
     .first<MemoirSnapshotRow>();
 }
 
+export async function deleteUser(db: D1Database, userId: string): Promise<void> {
+  await db.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
+}
+
+export async function deleteEntry(
+  db: D1Database,
+  userId: string,
+  entryId: string
+): Promise<boolean> {
+  const result = await db
+    .prepare('DELETE FROM entries WHERE id = ? AND user_id = ?')
+    .bind(entryId, userId)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
 export async function createMemoirSnapshot(
   db: D1Database,
   userId: string,

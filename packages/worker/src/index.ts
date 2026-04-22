@@ -12,7 +12,7 @@ app.use('*', async (c, next) => {
   const origin = c.env.FRONTEND_ORIGIN ?? 'http://localhost:5173';
   return cors({
     origin,
-    allowMethods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
     maxAge: 86400,
   })(c, next);

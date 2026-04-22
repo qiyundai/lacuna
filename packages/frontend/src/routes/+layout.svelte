@@ -59,6 +59,7 @@
         {#if authError}
           <p class="auth-error">{authError}</p>
         {/if}
+        <p class="auth-privacy">entries are privately analyzed by ai to surface patterns in your story</p>
       </form>
     {/if}
   </div>
@@ -134,5 +135,17 @@
     color: rgba(255, 120, 120, 0.7);
     font-size: 0.8rem;
     font-family: var(--font-serif);
+  }
+
+  .auth-privacy {
+    color: var(--void-text-faint);
+    font-family: var(--font-serif);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-align: center;
+    max-width: 26ch;
+    line-height: 1.5;
+    margin: 0;
+    opacity: 0.5;
   }
 </style>
