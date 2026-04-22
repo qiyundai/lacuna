@@ -34,6 +34,9 @@ importers:
       vite:
         specifier: ^8.0.7
         version: 8.0.8(esbuild@0.27.3)
+      wrangler:
+        specifier: ^4.11.1
+        version: 4.83.0(@cloudflare/workers-types@4.20260418.1)
 
   packages/worker:
     dependencies:
