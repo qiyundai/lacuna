@@ -78,7 +78,7 @@ async function sendMagicLinkEmail(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'Lacuna <noreply@mail.getlacuna.com>',
+      from: 'Lacuna <noreply@quietatlas.io>',
       to,
       subject: 'Open Lacuna',
       html: `<p>Your link to enter Lacuna:</p><p><a href="${link}">${link}</a></p><p>Valid for 15 minutes.</p>`,
