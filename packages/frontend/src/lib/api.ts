@@ -1,4 +1,6 @@
-const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8787';
+const BASE = import.meta.env.VITE_API_URL ?? (
+  import.meta.env.DEV ? 'http://localhost:8787' : 'https://lacuna-api.pianoquin4126.workers.dev'
+);
 
 function getToken(): string | null {
   return localStorage.getItem('lacuna_token');
