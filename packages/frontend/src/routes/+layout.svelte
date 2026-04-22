@@ -99,7 +99,7 @@
   }
 
   .auth-input::placeholder {
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
   }
 
   .auth-message {
@@ -117,7 +117,7 @@
     font-size: 0.85rem;
     letter-spacing: 0.08em;
     cursor: pointer;
-    padding: 0.25rem 0;
+    padding: 0.4rem 0;
     opacity: 0.6;
     transition: opacity 0.2s;
   }
@@ -132,7 +132,7 @@
   }
 
   .auth-error {
-    color: rgba(255, 120, 120, 0.7);
+    color: rgba(220, 110, 100, 0.75);
     font-size: 0.8rem;
     font-family: var(--font-serif);
   }

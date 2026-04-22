@@ -1,5 +1,13 @@
 <script lang="ts">
   import { patternsStore } from '$lib/stores/patterns.svelte.js';
+  import { weather } from '$lib/stores/weather.svelte.js';
+
+  function glowRgba(hex: string, alpha: number): string {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
 
   const MODELS = [
     { id: 'story_thread', label: 'Story / Through-line' },
@@ -75,7 +83,7 @@
         <!-- Track (empty arc) -->
         <path
           d={describeArc(CX, CY, RADIUS, startAngle, endAngle)}
-          stroke="rgba(255,255,255,0.08)"
+          stroke={glowRgba(weather.palette.glows[0], 0.12)}
           stroke-width={ARC_WIDTH}
           fill="none"
           stroke-linecap="round"
@@ -85,7 +93,9 @@
         {#if weight > 0}
           <path
             d={describeArc(CX, CY, RADIUS, startAngle, fillEnd)}
-            stroke={weight > 0.5 ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.35)'}
+            stroke={weight > 0.5
+              ? glowRgba(weather.palette.glows[0], 0.75)
+              : glowRgba(weather.palette.glows[1], 0.40)}
             stroke-width={ARC_WIDTH}
             fill="none"
             stroke-linecap="round"

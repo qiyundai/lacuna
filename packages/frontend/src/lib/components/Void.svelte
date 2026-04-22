@@ -661,11 +661,11 @@
       circle,
       transparent 0%,
       transparent 32%,
-      rgba(255, 248, 232, 0.06) 37%,
-      rgba(255, 248, 232, 0.24) 42%,
-      rgba(255, 248, 232, 0.48) 46%,
-      rgba(255, 248, 232, 0.24) 50%,
-      rgba(255, 248, 232, 0.06) 55%,
+      color-mix(in srgb, var(--glow-0) 6%, transparent) 37%,
+      color-mix(in srgb, var(--glow-0) 24%, transparent) 42%,
+      color-mix(in srgb, var(--glow-0) 48%, transparent) 46%,
+      color-mix(in srgb, var(--glow-0) 24%, transparent) 50%,
+      color-mix(in srgb, var(--glow-0) 6%, transparent) 55%,
       transparent 60%,
       transparent 100%
     );
@@ -677,9 +677,9 @@
       circle,
       transparent 0%,
       transparent 38%,
-      rgba(255, 248, 232, 0.04) 42%,
-      rgba(255, 248, 232, 0.14) 45%,
-      rgba(255, 248, 232, 0.04) 48%,
+      color-mix(in srgb, var(--glow-1) 4%, transparent) 42%,
+      color-mix(in srgb, var(--glow-1) 14%, transparent) 45%,
+      color-mix(in srgb, var(--glow-1) 4%, transparent) 48%,
       transparent 52%,
       transparent 100%
     );

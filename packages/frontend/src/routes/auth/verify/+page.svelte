@@ -57,7 +57,7 @@
   }
 
   .verify-error {
-    color: rgba(255, 120, 120, 0.7);
+    color: rgba(220, 110, 100, 0.75);
     font-family: var(--font-serif);
     font-size: 0.9rem;
   }

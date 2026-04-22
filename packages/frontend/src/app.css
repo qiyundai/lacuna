@@ -9,6 +9,7 @@
   --void-text: rgba(255, 238, 220, 0.88);
   --void-text-dim: rgba(255, 238, 220, 0.38);
   --void-text-faint: rgba(255, 238, 220, 0.14);
+  --void-text-hint: rgba(255, 238, 220, 0.30);
   --accent: rgba(255, 238, 220, 0.6);
   --font-mono: 'Courier New', Courier, monospace;
   --font-serif: Georgia, 'Times New Roman', serif;

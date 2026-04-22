@@ -87,6 +87,6 @@
     font-size: 0.85rem;
     letter-spacing: 0.05em;
     cursor: pointer;
-    padding: 0.5rem;
+    padding: 0.4rem 0;
   }
 </style>
