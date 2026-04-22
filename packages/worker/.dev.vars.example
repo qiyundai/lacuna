@@ -1,0 +1,4 @@
+FRONTEND_ORIGIN=http://localhost:5173
+JWT_SECRET=replace-with-any-strong-random-string
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxx

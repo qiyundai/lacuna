@@ -4,8 +4,6 @@ A low-UI, self-memoir reflection space.
 
 Not a journal app. Not a chat app. A room you type into when you're staring at the ceiling. Words float into the void. Hold to solidify a thought. Swipe down to see the shape of your story over time.
 
-> [getlacuna.com](https://getlacuna.com)
-
 ---
 
 ## What it does

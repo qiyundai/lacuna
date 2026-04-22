@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "lacuna-db"
-database_id = "placeholder-replace-after-wrangler-d1-create"
+database_id = "aa2e68ac-6b77-4c8f-9947-6865d5e8d330"
 
 [vars]
-FRONTEND_ORIGIN = "http://localhost:5173"
+FRONTEND_ORIGIN = "https://lacuna.pages.dev"
