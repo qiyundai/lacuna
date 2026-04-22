@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { draft, appendText, deleteChar, clearDraft, type DraftChar } from '$lib/stores/draft.svelte.js';
+  import { draft, appendText, insertAt, deleteRange, deleteChar, clearDraft, type DraftChar } from '$lib/stores/draft.svelte.js';
   import { weather } from '$lib/stores/weather.svelte.js';
   import { holdDetector, shakeDetector } from '$lib/gesture.js';
   import { api } from '$lib/api.js';
@@ -20,6 +20,26 @@
 
   let gestureCleanup: (() => void) | null = null;
   let shakeCleanup: (() => void) | null = null;
+
+  let cursorPos = $state(0);
+  let cursorVisible = $state(false);
+  let cursorTimer: ReturnType<typeof setTimeout> | null = null;
+  let selStart = $state(0);
+  let selEnd = $state(0);
+  const hasSelection = $derived(selStart < selEnd);
+
+  function showCursorBriefly() {
+    cursorVisible = true;
+    if (cursorTimer) clearTimeout(cursorTimer);
+    cursorTimer = setTimeout(() => { cursorVisible = false; }, 1500);
+  }
+
+  function handleSelectionChange() {
+    if (!inputEl || document.activeElement !== inputEl) return;
+    selStart = inputEl.selectionStart ?? 0;
+    selEnd = inputEl.selectionEnd ?? 0;
+    cursorPos = selEnd;
+  }
 
   const orbEls: HTMLDivElement[] = [];
   const orbs = [
@@ -85,7 +105,13 @@
   });
 
   $effect(() => {
-    if (draft.chars.length === 0) driftCache.clear();
+    if (draft.chars.length === 0) {
+      driftCache.clear();
+      selStart = 0;
+      selEnd = 0;
+      cursorPos = 0;
+      cursorVisible = false;
+    }
   });
 
   function tick() {
@@ -184,6 +210,7 @@
     shakeCleanup = shake.destroy;
 
     window.addEventListener('visibilitychange', focusInput);
+    document.addEventListener('selectionchange', handleSelectionChange);
 
     rafId = requestAnimationFrame(tick);
   });
@@ -195,6 +222,7 @@
     if (refractRafId) cancelAnimationFrame(refractRafId);
     if (container) container.removeEventListener('pointermove', handlePointerMove);
     window.removeEventListener('visibilitychange', focusInput);
+    document.removeEventListener('selectionchange', handleSelectionChange);
   });
 
   function focusInput() {
@@ -277,15 +305,26 @@
       target.value = draft.text;
       return;
     }
-    const val = target.value;
-    if (val.length > draft.text.length) {
-      const added = val.slice(draft.text.length);
-      for (const ch of added) appendText(ch);
-    } else {
-      const deleted = draft.text.length - val.length;
-      for (let i = 0; i < deleted; i++) deleteChar();
+
+    const newVal = target.value;
+    const oldVal = draft.text;
+    const newCursorPos = target.selectionStart ?? newVal.length;
+
+    if (newVal !== oldVal) {
+      // Find common prefix and suffix to isolate the changed region
+      let pfx = 0;
+      while (pfx < oldVal.length && pfx < newVal.length && oldVal[pfx] === newVal[pfx]) pfx++;
+      let oldEnd = oldVal.length;
+      let newEnd = newVal.length;
+      while (oldEnd > pfx && newEnd > pfx && oldVal[oldEnd - 1] === newVal[newEnd - 1]) { oldEnd--; newEnd--; }
+
+      if (oldEnd > pfx) deleteRange(pfx, oldEnd);
+      if (newEnd > pfx) insertAt(pfx, newVal.slice(pfx, newEnd));
     }
+
     target.value = draft.text;
+    target.setSelectionRange(newCursorPos, newCursorPos);
+    cursorPos = newCursorPos;
   }
 
   function handleKeyDown(e: KeyboardEvent) {
@@ -297,13 +336,37 @@
       e.preventDefault();
       if (!draft.isDirty) return;
       solidifying = true;
-      solidifyProgress = 1;
-      solidifyEntry();
+      const start = performance.now();
+      const CONDENSE_MS = 220;
+      const animateCondense = () => {
+        solidifyProgress = Math.min((performance.now() - start) / CONDENSE_MS, 1);
+        if (solidifyProgress < 1) {
+          requestAnimationFrame(animateCondense);
+        } else {
+          solidifyEntry();
+        }
+      };
+      requestAnimationFrame(animateCondense);
       return;
     }
     if (e.key === 'Enter') {
       e.preventDefault();
-      appendText('\n');
+      const pos = inputEl?.selectionStart ?? draft.text.length;
+      insertAt(pos, '\n');
+      if (inputEl) {
+        inputEl.value = draft.text;
+        inputEl.setSelectionRange(pos + 1, pos + 1);
+        cursorPos = pos + 1;
+      }
+      return;
+    }
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) {
+      setTimeout(() => {
+        if (inputEl) {
+          cursorPos = inputEl.selectionStart ?? draft.text.length;
+          showCursorBriefly();
+        }
+      }, 0);
     }
   }
 
@@ -376,7 +439,14 @@
       {#each words as word (word.id)}
         {#if word.isSpace}
           {#each word.chars as entry (entry.char.id)}
-            <span class="char char-space" style="--char-index: {entry.idx}">{entry.char.ch}</span>
+            {#if cursorVisible && !hasSelection && entry.idx === cursorPos}
+              <span class="cursor" aria-hidden="true"></span>
+            {/if}
+            <span
+              class="char char-space"
+              class:selected={hasSelection && entry.idx >= selStart && entry.idx < selEnd}
+              style="--char-index: {entry.idx}"
+            >{entry.char.ch}</span>
           {/each}
         {:else}
           {@const drift = driftFor(word.id)}
@@ -385,12 +455,19 @@
             style="--drift-x: {drift.dx}px; --drift-y: {drift.dy}px; --drift-dur: {drift.dur}s; --drift-delay: {drift.delay}s;"
           >
             {#each word.chars as entry (entry.char.id)}
-              <span class="char" style="--char-index: {entry.idx}">{entry.char.ch}</span>
+              {#if cursorVisible && !hasSelection && entry.idx === cursorPos}
+                <span class="cursor" aria-hidden="true"></span>
+              {/if}
+              <span
+                class="char"
+                class:selected={hasSelection && entry.idx >= selStart && entry.idx < selEnd}
+                style="--char-index: {entry.idx}"
+              >{entry.char.ch}</span>
             {/each}
           </span>
         {/if}
       {/each}
-      {#if !dissolving && !solidifying}
+      {#if cursorVisible && !hasSelection && cursorPos >= draft.chars.length}
         <span class="cursor" aria-hidden="true"></span>
       {/if}
     </div>
@@ -421,10 +498,6 @@
       <p class="consent-text">your words are analyzed privately to surface patterns in your story. this uses anthropic's api — they process entries but do not store them for training.</p>
       <span class="consent-hint">tap to continue</span>
     </button>
-  {/if}
-
-  {#if !draft.isDirty && !showingConsent && !dissolving}
-    <span class="cursor cursor-center" aria-hidden="true"></span>
   {/if}
 
   {#if !showingConsent}
@@ -547,8 +620,8 @@
   }
 
   @keyframes proseDissolve {
-    from { opacity: 1; filter: blur(0);    transform: translate(-50%, -50%); }
-    to   { opacity: 0; filter: blur(20px); transform: translate(-50%, calc(-50% - 16px)); }
+    from { opacity: 0.7; filter: blur(6px);  transform: translate(-50%, -50%) scale(0.85); }
+    to   { opacity: 0;   filter: blur(20px); transform: translate(-50%, calc(-50% - 16px)) scale(0.75); }
   }
 
   @keyframes drift {
@@ -651,7 +724,9 @@
     align-items: center;
     justify-content: center;
     gap: 1.5rem;
-    background: transparent;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
     border: none;
     cursor: pointer;
     z-index: 10;
@@ -660,7 +735,7 @@
   }
 
   .consent-text {
-    color: var(--void-text-dim);
+    color: var(--void-text);
     font-family: var(--font-serif);
     font-size: clamp(0.85rem, 2vw, 1rem);
     line-height: 1.7;
@@ -688,22 +763,15 @@
     width: 1.5px;
     height: 1.1em;
     background: var(--void-text);
-    opacity: 0.45;
+    opacity: 0.5;
     margin-left: 1px;
     vertical-align: middle;
-    animation: blink 1s step-end infinite;
   }
 
-  .cursor-center {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-  }
-
-  @keyframes blink {
-    0%, 100% { opacity: 0.45; }
-    50%       { opacity: 0; }
+  .char.selected,
+  .char-space.selected {
+    background: rgba(255, 255, 220, 0.18);
+    border-radius: 2px;
   }
 
   .down-hint.faint {
