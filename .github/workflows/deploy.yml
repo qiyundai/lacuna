@@ -32,7 +32,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Deploy frontend to Pages
-        run: pnpm -F frontend exec wrangler pages deploy build --project-name=lacuna
+        run: pnpm -F frontend exec wrangler pages deploy build --project-name=lacuna-app
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
