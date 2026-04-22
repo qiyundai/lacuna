@@ -47,7 +47,7 @@
   </button>
 
   <!-- View container -->
-  <div class="views" style="transform: translateX({-currentView * 100}%)">
+  <div class="views" style="transform: translateX(-{currentView * 100}vw)">
     <div class="view"><Timeline /></div>
     <div class="view"><SoulMap /></div>
     <div class="view"><LivingMemoir /></div>
