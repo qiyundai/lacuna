@@ -293,9 +293,17 @@
       e.preventDefault();
       return;
     }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      if (!draft.isDirty) return;
+      solidifying = true;
+      solidifyProgress = 1;
+      solidifyEntry();
+      return;
+    }
     if (e.key === 'Enter') {
       e.preventDefault();
-      appendText(' ');
+      appendText('\n');
     }
   }
 
@@ -382,6 +390,9 @@
           </span>
         {/if}
       {/each}
+      {#if !dissolving && !solidifying}
+        <span class="cursor" aria-hidden="true"></span>
+      {/if}
     </div>
   {/if}
 
@@ -412,8 +423,12 @@
     </button>
   {/if}
 
-  {#if !draft.isDirty && !showingConsent}
-    <button class="down-hint" onclick={onSwipeDown} aria-label="Go to your story">
+  {#if !draft.isDirty && !showingConsent && !dissolving}
+    <span class="cursor cursor-center" aria-hidden="true"></span>
+  {/if}
+
+  {#if !showingConsent}
+    <button class="down-hint" class:faint={draft.isDirty} onclick={onSwipeDown} aria-label="Go to your story">
       <span>↓</span>
     </button>
   {/if}
@@ -496,6 +511,7 @@
   .draft-prose.condensing {
     transform: translate(-50%, -50%) scale(calc(1 - var(--condense-progress) * 0.15));
     opacity: calc(1 - var(--condense-progress) * 0.3);
+    filter: blur(calc(var(--condense-progress) * 6px));
   }
 
   .word {
@@ -516,14 +532,8 @@
     animation: charSpaceIn 520ms ease-out both;
   }
 
-  .draft-prose.dissolving .char {
-    animation: charDissolve 1100ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
-    animation-delay: calc(var(--char-index, 0) * 14ms);
-  }
-
-  .draft-prose.dissolving .char-space {
-    animation: charSpaceDissolve 800ms ease-out forwards;
-    animation-delay: calc(var(--char-index, 0) * 14ms);
+  .draft-prose.dissolving {
+    animation: proseDissolve 1100ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
   }
 
   @keyframes charIn {
@@ -536,14 +546,9 @@
     to   { opacity: 1; }
   }
 
-  @keyframes charDissolve {
-    from { opacity: 1; transform: translateY(0); filter: blur(0); letter-spacing: 0.02em; }
-    to   { opacity: 0; transform: translateY(-20px); filter: blur(10px); letter-spacing: 0.5em; }
-  }
-
-  @keyframes charSpaceDissolve {
-    from { opacity: 1; }
-    to   { opacity: 0; }
+  @keyframes proseDissolve {
+    from { opacity: 1; filter: blur(0);    transform: translate(-50%, -50%); }
+    to   { opacity: 0; filter: blur(20px); transform: translate(-50%, calc(-50% - 16px)); }
   }
 
   @keyframes drift {
@@ -554,10 +559,11 @@
   @media (prefers-reduced-motion: reduce) {
     .word { animation: none; }
     .char { animation: charSpaceIn 140ms ease-out both; }
-    .draft-prose.dissolving .char,
-    .draft-prose.dissolving .char-space {
-      animation: charSpaceDissolve 400ms ease-out forwards;
-      animation-delay: 0ms;
+    .draft-prose.condensing { filter: none; }
+    .draft-prose.dissolving { animation: proseFade 400ms ease-out forwards; }
+    @keyframes proseFade {
+      from { opacity: 1; }
+      to   { opacity: 0; }
     }
     .ripple-primary,
     .ripple-secondary { animation-duration: 1400ms; }
@@ -675,5 +681,32 @@
   @keyframes fadeInConsent {
     from { opacity: 0; }
     to   { opacity: 1; }
+  }
+
+  .cursor {
+    display: inline-block;
+    width: 1.5px;
+    height: 1.1em;
+    background: var(--void-text);
+    opacity: 0.45;
+    margin-left: 1px;
+    vertical-align: middle;
+    animation: blink 1s step-end infinite;
+  }
+
+  .cursor-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 0.45; }
+    50%       { opacity: 0; }
+  }
+
+  .down-hint.faint {
+    opacity: 0.12;
   }
 </style>
