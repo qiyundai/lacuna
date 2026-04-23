@@ -6,6 +6,7 @@
   import Timeline from './Timeline.svelte';
   import SoulMap from './SoulMap.svelte';
   import LivingMemoir from './LivingMemoir.svelte';
+  import UserMenu from './UserMenu.svelte';
 
   let { onSwipeUp }: { onSwipeUp: () => void } = $props();
 
@@ -41,6 +42,8 @@
   role="region"
   aria-label="Your story"
 >
+  <UserMenu />
+
   <!-- Up hint -->
   <button class="up-hint" onclick={onSwipeUp} aria-label="Return to void">
     <span>↑</span>
