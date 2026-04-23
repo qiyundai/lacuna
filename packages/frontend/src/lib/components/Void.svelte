@@ -18,6 +18,17 @@
   let pendingText = '';
   let pendingAt = 0;
 
+  let showIntro = $state(false);
+  let introVisible = $state(false);
+  let introTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function dismissIntro() {
+    if (introTimer) clearTimeout(introTimer);
+    introTimer = null;
+    introVisible = false;
+    setTimeout(() => { showIntro = false; }, 800);
+  }
+
   let gestureCleanup: (() => void) | null = null;
   let shakeCleanup: (() => void) | null = null;
 
@@ -213,6 +224,13 @@
     document.addEventListener('selectionchange', handleSelectionChange);
 
     rafId = requestAnimationFrame(tick);
+
+    if (!localStorage.getItem('lacuna_intro_shown')) {
+      localStorage.setItem('lacuna_intro_shown', '1');
+      showIntro = true;
+      setTimeout(() => { introVisible = true; }, 50);
+      introTimer = setTimeout(dismissIntro, 5500);
+    }
   });
 
   onDestroy(() => {
@@ -476,6 +494,18 @@
   {#if justSolidified}
     <div class="ripple ripple-primary"></div>
     <div class="ripple ripple-secondary"></div>
+  {/if}
+
+  {#if showIntro}
+    <div
+      class="intro-hint"
+      class:visible={introVisible && !draft.isDirty}
+      aria-hidden="true"
+    >
+      <span>type anything</span>
+      <span>hold to keep it</span>
+      <span>swipe down to see your story</span>
+    </div>
   {/if}
 
   <textarea
@@ -776,5 +806,34 @@
 
   .down-hint.faint {
     opacity: 0.12;
+  }
+
+  .intro-hint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    color: var(--void-text-faint);
+    font-family: var(--font-serif);
+    font-size: clamp(0.8rem, 2vw, 0.95rem);
+    line-height: 2.2;
+    letter-spacing: 0.06em;
+    pointer-events: none;
+    user-select: none;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 0.8s ease;
+  }
+
+  .intro-hint.visible {
+    opacity: 0.7;
+  }
+
+  .intro-hint span {
+    display: block;
   }
 </style>

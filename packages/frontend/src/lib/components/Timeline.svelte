@@ -14,7 +14,10 @@
   {#if entriesStore.status === 'loading' && entriesStore.entries.length === 0}
     <div class="state-message">...</div>
   {:else if entriesStore.entries.length === 0}
-    <div class="state-message">nothing yet</div>
+    <div class="state-message">
+      <span>nothing here yet.</span>
+      <span class="state-sub">type in the void above to begin.</span>
+    </div>
   {:else}
     <ul class="entry-list">
       {#each entriesStore.entries as entry (entry.id)}
@@ -75,6 +78,13 @@
     font-size: 0.95rem;
     line-height: 1.65;
     letter-spacing: 0.02em;
+  }
+
+  .state-sub {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    opacity: 0.6;
   }
 
   .load-more {
