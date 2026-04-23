@@ -187,3 +187,16 @@ SVG radial gauge. 6 arc segments (one per model). Arc fill = weight (0–1). Emp
 - iOS DeviceMotion requires permission; prompt fires after first solidify, Escape is permanent fallback if denied
 - Soul Map dimensions that lack sufficient data show as unfilled (not hidden)
 - `touch-action: none` on the Void prevents native scroll interfering with gesture detection
+
+---
+
+## UI & Interaction Philosophy (Mandatory)
+
+Lacuna is a **low-UI, gestural space**. Every interface element must dissolve into the experience rather than announce itself. These are not preferences — violating them is a defect:
+
+- **No widget chrome.** No dropdown boxes, bordered panels, modals with headers, toolbars, or conventional UI affordances. These shatter the space.
+- **Full-screen layers only.** Any overlay, menu, or informational screen must fill the full viewport — blurred backdrop, content centered and breathable, no containing box or card. The space itself is the container.
+- **Always easing.** Every state transition — open, close, reveal, dismiss — must carry a CSS or Svelte transition with an easing curve (`cubic-bezier` or equivalent). Instant cuts are not permitted.
+- **Spacious text.** Interactive items and prose need generous `line-height` (1.7+), `letter-spacing`, and vertical rhythm. Density reads as foreign here.
+- **Gestural dismissal.** Overlays close by touching or clicking anywhere (the full backdrop is the dismiss target). Explicit close buttons may exist but must be faint and secondary.
+- **Escape the transform stack.** Any full-screen overlay must be rendered outside transformed ancestors using a `portal` action (appends to `document.body`). The `space-container` in `+page.svelte` applies `transform: translateY(...)`, which traps `position: fixed` children — always portal overlays to body to avoid this.
