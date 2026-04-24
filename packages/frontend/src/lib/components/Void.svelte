@@ -15,6 +15,7 @@
   let justSolidified = $state(false);
   let dissolving = $state(false);
   let showingConsent = $state(false);
+  let scattering = $state(false);
   let pendingText = '';
   let pendingAt = 0;
 
@@ -76,20 +77,24 @@
   const REFRACT_PEAK = 38;
   const RIPPLE_MS = 2800;
   const DISSOLVE_MS = 1100;
+  const SCATTER_MS = 700;
 
   let glowBoost = 0;
   let lastTickTime = 0;
   const GLOW_DECAY_PER_SEC = 1.5;
 
-  const driftCache = new Map<number, { dx: number; dy: number; dur: number; delay: number }>();
+  const driftCache = new Map<number, { dx: number; dy: number; dur: number; delay: number; sx: number; sy: number }>();
   function driftFor(id: number) {
     let d = driftCache.get(id);
     if (!d) {
+      const sign = () => (Math.random() < 0.5 ? 1 : -1);
       d = {
         dx: (Math.random() - 0.5) * 14,
         dy: (Math.random() - 0.5) * 14,
         dur: 9 + Math.random() * 6,
         delay: -Math.random() * 10,
+        sx: sign() * (80 + Math.random() * 40),
+        sy: sign() * (80 + Math.random() * 40),
       };
       driftCache.set(id, d);
     }
@@ -216,7 +221,12 @@
     }
 
     const shake = shakeDetector(() => {
-      clearDraft();
+      if (!draft.isDirty || scattering) return;
+      scattering = true;
+      setTimeout(() => {
+        clearDraft();
+        scattering = false;
+      }, SCATTER_MS);
     });
     shakeCleanup = shake.destroy;
 
@@ -319,7 +329,7 @@
 
   function handleInput(e: Event) {
     const target = e.target as HTMLTextAreaElement;
-    if (dissolving) {
+    if (dissolving || scattering) {
       target.value = draft.text;
       return;
     }
@@ -346,7 +356,7 @@
   }
 
   function handleKeyDown(e: KeyboardEvent) {
-    if (dissolving) {
+    if (dissolving || scattering) {
       e.preventDefault();
       return;
     }
@@ -452,6 +462,7 @@
       class="draft-prose"
       class:condensing={solidifying}
       class:dissolving
+      class:scattering
       style="--condense-progress: {solidifyProgress}"
     >
       {#each words as word (word.id)}
@@ -470,7 +481,7 @@
           {@const drift = driftFor(word.id)}
           <span
             class="word"
-            style="--drift-x: {drift.dx}px; --drift-y: {drift.dy}px; --drift-dur: {drift.dur}s; --drift-delay: {drift.delay}s;"
+            style="--drift-x: {drift.dx}px; --drift-y: {drift.dy}px; --drift-dur: {drift.dur}s; --drift-delay: {drift.delay}s; --scatter-x: {drift.sx}px; --scatter-y: {drift.sy}px;"
           >
             {#each word.chars as entry (entry.char.id)}
               {#if cursorVisible && !hasSelection && entry.idx === cursorPos}
@@ -639,6 +650,16 @@
     animation: proseDissolve 1100ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
   }
 
+  .draft-prose.scattering .word {
+    animation: wordScatter 700ms cubic-bezier(0.22, 0, 0.36, 1) forwards;
+  }
+
+  @keyframes wordScatter {
+    0%   { opacity: 1;   filter: blur(0px);   transform: translate(0, 0); }
+    60%  { opacity: 0.6; filter: blur(4px);   transform: translate(calc(var(--scatter-x) * 0.6), calc(var(--scatter-y) * 0.6)); }
+    100% { opacity: 0;   filter: blur(10px);  transform: translate(var(--scatter-x), var(--scatter-y)); }
+  }
+
   @keyframes charIn {
     from { opacity: 0; transform: translateY(10px); filter: blur(3px); }
     to   { opacity: 1; transform: translateY(0); filter: blur(0); }
@@ -664,7 +685,12 @@
     .char { animation: charSpaceIn 140ms ease-out both; }
     .draft-prose.condensing { filter: none; }
     .draft-prose.dissolving { animation: proseFade 400ms ease-out forwards; }
+    .draft-prose.scattering .word { animation: scatterFade 300ms ease-out forwards; }
     @keyframes proseFade {
+      from { opacity: 1; }
+      to   { opacity: 0; }
+    }
+    @keyframes scatterFade {
       from { opacity: 1; }
       to   { opacity: 0; }
     }

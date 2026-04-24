@@ -106,16 +106,37 @@ export function swipeDetector(
 // Shake detection — DeviceMotion on mobile, Escape key on desktop
 export function shakeDetector(onShake: () => void): { destroy: () => void } {
   let lastShake = 0;
+  const crossings: number[] = [];
+  const WINDOW_MS = 700;
+  const DEBOUNCE_MS = 1500;
+  const THRESH_PURE = 12;
+  const THRESH_GRAVITY = 25;
 
   function handleMotion(e: DeviceMotionEvent) {
-    const acc = e.accelerationIncludingGravity;
-    if (!acc) return;
-    const magnitude = Math.sqrt(
-      (acc.x ?? 0) ** 2 + (acc.y ?? 0) ** 2 + (acc.z ?? 0) ** 2
-    );
     const now = Date.now();
-    if (magnitude > 20 && now - lastShake > 1000) {
+
+    // Prefer gravity-free acceleration (≈0 at rest); fall back to with-gravity
+    const pure = e.acceleration;
+    let magnitude: number;
+    let threshold: number;
+    if (pure && (Math.abs(pure.x ?? 0) + Math.abs(pure.y ?? 0) + Math.abs(pure.z ?? 0)) > 0) {
+      magnitude = Math.sqrt((pure.x ?? 0) ** 2 + (pure.y ?? 0) ** 2 + (pure.z ?? 0) ** 2);
+      threshold = THRESH_PURE;
+    } else {
+      const acc = e.accelerationIncludingGravity;
+      if (!acc) return;
+      magnitude = Math.sqrt((acc.x ?? 0) ** 2 + (acc.y ?? 0) ** 2 + (acc.z ?? 0) ** 2);
+      threshold = THRESH_GRAVITY;
+    }
+
+    if (magnitude > threshold) crossings.push(now);
+
+    const cutoff = now - WINDOW_MS;
+    while (crossings.length > 0 && crossings[0]! < cutoff) crossings.shift();
+
+    if (crossings.length >= 2 && now - lastShake > DEBOUNCE_MS) {
       lastShake = now;
+      crossings.length = 0;
       onShake();
     }
   }
