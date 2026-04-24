@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { draft, appendText, insertAt, deleteRange, deleteChar, clearDraft, type DraftChar } from '$lib/stores/draft.svelte.js';
   import { weather } from '$lib/stores/weather.svelte.js';
-  import { holdDetector, shakeDetector } from '$lib/gesture.js';
+  import { holdDetector } from '$lib/gesture.js';
   import { api } from '$lib/api.js';
   import { prependEntry } from '$lib/stores/entries.svelte.js';
 
@@ -31,7 +31,6 @@
   }
 
   let gestureCleanup: (() => void) | null = null;
-  let shakeCleanup: (() => void) | null = null;
 
   let cursorPos = $state(0);
   let cursorVisible = $state(false);
@@ -183,6 +182,13 @@
     pointerY = (e.clientY - rect.top) / rect.height;
   }
 
+  function onEscapeKey(e: KeyboardEvent) {
+    if (e.key === 'Escape' && draft.isDirty && !scattering) {
+      scattering = true;
+      setTimeout(() => { clearDraft(); scattering = false; }, SCATTER_MS);
+    }
+  }
+
   onMount(() => {
     if (typeof window !== 'undefined') {
       reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -220,16 +226,7 @@
       container.addEventListener('pointermove', handlePointerMove);
     }
 
-    const shake = shakeDetector(() => {
-      if (!draft.isDirty || scattering) return;
-      scattering = true;
-      setTimeout(() => {
-        clearDraft();
-        scattering = false;
-      }, SCATTER_MS);
-    });
-    shakeCleanup = shake.destroy;
-
+    window.addEventListener('keydown', onEscapeKey);
     window.addEventListener('visibilitychange', focusInput);
     document.addEventListener('selectionchange', handleSelectionChange);
 
@@ -245,10 +242,10 @@
 
   onDestroy(() => {
     gestureCleanup?.();
-    shakeCleanup?.();
     if (rafId) cancelAnimationFrame(rafId);
     if (refractRafId) cancelAnimationFrame(refractRafId);
     if (container) container.removeEventListener('pointermove', handlePointerMove);
+    window.removeEventListener('keydown', onEscapeKey);
     window.removeEventListener('visibilitychange', focusInput);
     document.removeEventListener('selectionchange', handleSelectionChange);
   });
