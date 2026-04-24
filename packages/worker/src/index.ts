@@ -18,6 +18,14 @@ app.use('*', async (c, next) => {
   })(c, next);
 });
 
+app.use('*', async (c, next) => {
+  await next();
+  c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('X-Frame-Options', 'DENY');
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+});
+
 app.get('/health', (c) => c.json({ ok: true, version: '0.1.0' }));
 
 app.route('/auth', authRoute);

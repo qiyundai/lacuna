@@ -299,6 +299,8 @@
   async function dismissConsent() {
     localStorage.setItem('lacuna_ai_consented', '1');
     showingConsent = false;
+    // Persist consent server-side for audit trail; fire-and-forget
+    api.auth.consentAi().catch(() => {});
     await commitEntry(pendingText, pendingAt);
   }
 
@@ -533,7 +535,7 @@
 
   {#if showingConsent}
     <button class="consent-overlay" onclick={dismissConsent} aria-label="Understood, continue">
-      <p class="consent-text">your words are analyzed privately to surface patterns in your story. this uses anthropic's api — they process entries but do not store them for training.</p>
+      <p class="consent-text">your words are analyzed to surface patterns in your story. this uses anthropic's api — entries are sent to their servers for processing. anthropic may retain data per their usage policy.</p>
       <span class="consent-hint">tap to continue</span>
     </button>
   {/if}

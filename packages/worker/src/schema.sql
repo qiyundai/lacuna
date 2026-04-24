@@ -1,9 +1,8 @@
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
   email TEXT UNIQUE,
-  magic_token TEXT,
-  magic_token_expires_at INTEGER,
   recovery_code_hash TEXT,
+  ai_consent_at INTEGER,
   created_at INTEGER DEFAULT (unixepoch())
 );
 
@@ -50,6 +49,12 @@ CREATE TABLE IF NOT EXISTS passkey_challenges (
   user_id TEXT,
   type TEXT NOT NULL CHECK(type IN ('registration','authentication')),
   expires_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key TEXT PRIMARY KEY,
+  count INTEGER NOT NULL DEFAULT 1,
+  window_end INTEGER NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_entries_user_created ON entries(user_id, created_at DESC);

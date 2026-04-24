@@ -81,6 +81,8 @@ export const api = {
           false
         ),
     },
+    consentAi: () =>
+      request<{ ok: boolean }>('/auth/ai-consent', { method: 'POST', body: '{}' }),
     setEmail: (email: string) =>
       request<{ ok: boolean }>('/auth/email', {
         method: 'PATCH',
