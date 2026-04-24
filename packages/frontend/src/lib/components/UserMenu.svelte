@@ -4,6 +4,7 @@
   import { api } from '$lib/api.js';
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
+  import InfoOverlay from './InfoOverlay.svelte';
 
   let open = $state(false);
   let confirming = $state(false);
@@ -77,24 +78,7 @@
   </div>
 {/if}
 
-{#if showInfo}
-  <div
-    use:portal
-    class="screen-overlay info-overlay"
-    transition:fade={{ duration: 500, easing: cubicOut }}
-    role="dialog"
-    aria-modal="true"
-    aria-label="What is Lacuna"
-    onclick={() => { showInfo = false; ui.menuOpen = false; }}
-  >
-    <div class="info-content">
-      <p>a private space, just yours. you type, words float, nothing goes anywhere unless you hold a thought long enough to mean it.</p>
-      <p>if you keep coming back, those fragments start to find each other. something like a shape of you begins to appear.</p>
-      <p>swipe down whenever you're ready to see what's gathered — the things you've written, the patterns within them, and in time, a kind of living story woven from all of it.</p>
-      <p class="hint">anywhere to close</p>
-    </div>
-  </div>
-{/if}
+<InfoOverlay bind:show={showInfo} />
 
 <style>
   .trigger {
@@ -201,37 +185,4 @@
     opacity: 1;
   }
 
-  .info-overlay {
-    background: color-mix(in srgb, var(--bg) 55%, transparent);
-    cursor: pointer;
-  }
-
-  /* ── Info ─────────────────────────────────── */
-
-  .info-content {
-    position: relative;
-    z-index: 1;
-    max-width: 34ch;
-    display: flex;
-    flex-direction: column;
-    gap: 1.75rem;
-    padding: 2rem;
-    text-align: center;
-  }
-
-  .info-content p {
-    color: var(--void-text-dim);
-    font-family: var(--font-serif);
-    font-size: 1rem;
-    line-height: 1.85;
-    letter-spacing: 0.025em;
-    margin: 0;
-  }
-
-  .info-content .hint {
-    color: var(--void-text-faint);
-    font-size: 0.72rem;
-    letter-spacing: 0.1em;
-    margin-top: 0.5rem;
-  }
 </style>
