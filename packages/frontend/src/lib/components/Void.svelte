@@ -5,7 +5,6 @@
   import { holdDetector, shakeDetector } from '$lib/gesture.js';
   import { api } from '$lib/api.js';
   import { prependEntry } from '$lib/stores/entries.svelte.js';
-  import InfoOverlay from './InfoOverlay.svelte';
 
   let { onSwipeDown }: { onSwipeDown: () => void } = $props();
 
@@ -20,7 +19,6 @@
   let pendingText = '';
   let pendingAt = 0;
 
-  let showInfo = $state(false);
   let showIntro = $state(false);
   let introVisible = $state(false);
   let introTimer: ReturnType<typeof setTimeout> | null = null;
@@ -549,15 +547,6 @@
     </button>
   {/if}
 
-  {#if !showingConsent && !draft.isDirty}
-    <button
-      class="void-what-is-this"
-      onclick={() => (showInfo = true)}
-      aria-label="What is Lacuna"
-    >what is this</button>
-  {/if}
-
-  <InfoOverlay bind:show={showInfo} />
 </div>
 
 <style>
@@ -844,31 +833,6 @@
 
   .down-hint.faint {
     opacity: 0.12;
-  }
-
-  .void-what-is-this {
-    position: absolute;
-    bottom: 2rem;
-    left: 1.5rem;
-    background: none;
-    border: none;
-    color: var(--void-text-faint);
-    font-family: var(--font-serif);
-    font-size: 0.68rem;
-    letter-spacing: 0.1em;
-    cursor: pointer;
-    padding: 0.5rem;
-    opacity: 0.5;
-    z-index: 3;
-    transition: opacity 0.3s ease, color 0.3s ease;
-    user-select: none;
-  }
-
-  .void-what-is-this:hover,
-  .void-what-is-this:focus {
-    opacity: 1;
-    color: var(--void-text-dim);
-    outline: none;
   }
 
   .intro-hint {
