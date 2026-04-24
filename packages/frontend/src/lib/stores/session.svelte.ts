@@ -3,7 +3,7 @@ import { getStoredToken, getStoredUser, clearSession } from '../auth.js';
 export type AuthStatus = 'loading' | 'authed' | 'unauthed';
 
 export const session = $state<{
-  user: { id: string; email: string } | null;
+  user: { id: string } | null;
   status: AuthStatus;
 }>({
   user: null,
@@ -22,7 +22,7 @@ export function hydrateSession(): void {
   }
 }
 
-export function setAuthed(user: { id: string; email: string }): void {
+export function setAuthed(user: { id: string }): void {
   session.user = user;
   session.status = 'authed';
 }

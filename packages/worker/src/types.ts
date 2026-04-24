@@ -2,16 +2,39 @@ export interface Env {
   DB: D1Database;
   FRONTEND_ORIGIN: string;
   JWT_SECRET: string;
-  RESEND_API_KEY: string;
   ANTHROPIC_API_KEY: string;
+  RESEND_API_KEY?: string;
 }
 
 export interface UserRow {
   id: string;
-  email: string;
+  email: string | null;
   magic_token: string | null;
   magic_token_expires_at: number | null;
+  recovery_code_hash: string | null;
   created_at: number;
+}
+
+export interface EmailOTPRow {
+  id: string;
+  user_id: string;
+  code_hash: string;
+  expires_at: number;
+}
+
+export interface CredentialRow {
+  id: string;
+  user_id: string;
+  public_key: string;
+  sign_count: number;
+  created_at: number;
+}
+
+export interface ChallengeRow {
+  challenge: string;
+  user_id: string | null;
+  type: 'registration' | 'authentication';
+  expires_at: number;
 }
 
 export interface EntryRow {
@@ -39,7 +62,7 @@ export interface MemoirSnapshotRow {
 
 export interface JwtPayload {
   sub: string;
-  email: string;
+  email: string | null;
   iat: number;
   exp: number;
 }
