@@ -10,4 +10,3 @@ database_id = "aa2e68ac-6b77-4c8f-9947-6865d5e8d330"
 
 [vars]
 FRONTEND_ORIGIN = "https://lacuna-app.pages.dev"
-RP_ID           = "lacuna-app.pages.dev"

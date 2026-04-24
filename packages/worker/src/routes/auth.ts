@@ -100,7 +100,7 @@ authRoute.post('/passkey/register-challenge', async (c) => {
 
   const options = await generateRegistrationOptions({
     rpName: 'Lacuna',
-    rpID: c.env.RP_ID,
+    rpID: new URL(c.env.FRONTEND_ORIGIN).hostname,
     userName: user.id,
     userDisplayName: 'lacuna',
     attestationType: 'none',
@@ -135,7 +135,7 @@ authRoute.post('/passkey/register', async (c) => {
       response: body.credential as Parameters<typeof verifyRegistrationResponse>[0]['response'],
       expectedChallenge: challengeRow.challenge,
       expectedOrigin: c.env.FRONTEND_ORIGIN,
-      expectedRPID: c.env.RP_ID,
+      expectedRPID: new URL(c.env.FRONTEND_ORIGIN).hostname,
       requireUserVerification: false,
     });
   } catch (err) {
@@ -166,7 +166,7 @@ authRoute.post('/passkey/auth-challenge', async (c) => {
   await expireChallenges(c.env.DB);
 
   const options = await generateAuthenticationOptions({
-    rpID: c.env.RP_ID,
+    rpID: new URL(c.env.FRONTEND_ORIGIN).hostname,
     userVerification: 'preferred',
   });
 
@@ -206,7 +206,7 @@ authRoute.post('/passkey/auth', async (c) => {
       response: body.credential as Parameters<typeof verifyAuthenticationResponse>[0]['response'],
       expectedChallenge: challengeRow.challenge,
       expectedOrigin: c.env.FRONTEND_ORIGIN,
-      expectedRPID: c.env.RP_ID,
+      expectedRPID: new URL(c.env.FRONTEND_ORIGIN).hostname,
       requireUserVerification: false,
       credential: {
         id: storedCred.id,

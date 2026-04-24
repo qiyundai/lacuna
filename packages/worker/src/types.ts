@@ -1,7 +1,6 @@
 export interface Env {
   DB: D1Database;
   FRONTEND_ORIGIN: string;
-  RP_ID: string;
   JWT_SECRET: string;
   ANTHROPIC_API_KEY: string;
   RESEND_API_KEY?: string;
