@@ -43,7 +43,7 @@
 {#if session.status === 'loading'}
   <!-- Silent loading — void background shows through -->
 {:else if session.status === 'unauthed' && !isAuthRoute}
-  <div class="auth-overlay">
+  <div class="auth-overlay" class:blurred={showInfo}>
     <div class="auth-glow auth-glow-a" aria-hidden="true"></div>
     <div class="auth-glow auth-glow-b" aria-hidden="true"></div>
     <div class="auth-content">
@@ -85,6 +85,11 @@
     justify-content: center;
     background: var(--bg);
     overflow: hidden;
+    transition: filter 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  .auth-overlay.blurred {
+    filter: blur(8px);
   }
 
   .auth-content {
