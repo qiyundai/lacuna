@@ -12,17 +12,25 @@ import { authMiddleware } from '../middleware/auth.js';
 import {
   consumeChallenge,
   consumeChallengeByUser,
+  consumeEmailOTP,
   createCredential,
   createUser,
   deleteUser,
   expireChallenges,
   getCredentialById,
+  getUserByEmail,
+  getUserByRecoveryHash,
+  setRecoveryCodeHash,
+  setUserEmail,
   storeChallenge,
+  storeEmailOTP,
   updateCredentialSignCount,
 } from '../db.js';
 
 type Variables = { user: JwtPayload };
 export const authRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function issueJwt(env: Env, userId: string): Promise<string> {
   const secret = new TextEncoder().encode(env.JWT_SECRET);
@@ -31,6 +39,57 @@ async function issueJwt(env: Env, userId: string): Promise<string> {
     .setIssuedAt()
     .setExpirationTime('7d')
     .sign(secret);
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function generateRecoveryCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  const hex = Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase();
+  return `${hex.slice(0, 4)}-${hex.slice(4, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}`;
+}
+
+function generateOTP(): string {
+  const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1000000;
+  return String(n).padStart(6, '0');
+}
+
+async function sendOTPEmail(
+  resendApiKey: string | undefined,
+  to: string,
+  code: string
+): Promise<void> {
+  if (!resendApiKey) {
+    console.log(`[auth] OTP for ${to}: ${code}`);
+    return;
+  }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${resendApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'Lacuna <noreply@quietatlas.io>',
+      to,
+      subject: 'Your Lacuna code',
+      html: `<p>Your one-time code for Lacuna:</p><p style="font-size:2rem;letter-spacing:0.2em"><strong>${code}</strong></p><p>Valid for 10 minutes.</p>`,
+      text: `Your Lacuna recovery code: ${code}\n\nValid for 10 minutes.`,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Resend API error ${res.status}: ${body}`);
+  }
 }
 
 // ── POST /auth/passkey/register-challenge ─────────────────────────────────────
@@ -89,13 +148,17 @@ authRoute.post('/passkey/register', async (c) => {
   }
 
   const { credential } = verification.registrationInfo;
-  // credential.id is already a Base64URLString; credential.publicKey is Uint8Array
   const publicKeyB64 = isoBase64URL.fromBuffer(credential.publicKey);
 
   await createCredential(c.env.DB, credential.id, body.userId, publicKeyB64, credential.counter);
 
+  // Generate and store recovery code
+  const recoveryCode = generateRecoveryCode();
+  const recoveryHash = await sha256Hex(recoveryCode);
+  await setRecoveryCodeHash(c.env.DB, body.userId, recoveryHash);
+
   const jwt = await issueJwt(c.env, body.userId);
-  return c.json({ jwt, user: { id: body.userId } });
+  return c.json({ jwt, user: { id: body.userId }, recoveryCode });
 });
 
 // ── POST /auth/passkey/auth-challenge ─────────────────────────────────────────
@@ -105,7 +168,6 @@ authRoute.post('/passkey/auth-challenge', async (c) => {
   const options = await generateAuthenticationOptions({
     rpID: c.env.RP_ID,
     userVerification: 'preferred',
-    // No allowCredentials → discoverable: browser shows its own passkey picker
   });
 
   await storeChallenge(c.env.DB, options.challenge, 'authentication', null);
@@ -120,7 +182,6 @@ authRoute.post('/passkey/auth', async (c) => {
     return c.json({ error: { code: 'BAD_REQUEST', message: 'Missing credential' } }, 400);
   }
 
-  // Extract the challenge from clientDataJSON to look up our stored challenge row
   let clientChallenge: string;
   try {
     const clientDataJSON = JSON.parse(isoBase64URL.toUTF8String(body.credential.response.clientDataJSON));
@@ -170,6 +231,95 @@ authRoute.post('/passkey/auth', async (c) => {
 
   const jwt = await issueJwt(c.env, storedCred.user_id);
   return c.json({ jwt, user: { id: storedCred.user_id } });
+});
+
+// ── POST /auth/recovery/email-request ────────────────────────────────────────
+authRoute.post('/recovery/email-request', async (c) => {
+  const body = await c.req.json<{ email?: string }>();
+  const email = body.email?.trim().toLowerCase();
+  if (!email || !email.includes('@')) {
+    return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid email' } }, 400);
+  }
+
+  const user = await getUserByEmail(c.env.DB, email);
+  if (user) {
+    const code = generateOTP();
+    const codeHash = await sha256Hex(code);
+    await storeEmailOTP(c.env.DB, user.id, codeHash);
+    await sendOTPEmail(c.env.RESEND_API_KEY, email, code);
+  }
+  // Always return OK to avoid leaking whether the email is registered
+  return c.json({ ok: true });
+});
+
+// ── POST /auth/recovery/email-verify ─────────────────────────────────────────
+authRoute.post('/recovery/email-verify', async (c) => {
+  const body = await c.req.json<{ email?: string; code?: string }>();
+  const email = body.email?.trim().toLowerCase();
+  const code = body.code?.trim().replace(/\s/g, '');
+  if (!email || !code) {
+    return c.json({ error: { code: 'BAD_REQUEST', message: 'Missing fields' } }, 400);
+  }
+
+  const user = await getUserByEmail(c.env.DB, email);
+  if (!user) {
+    return c.json({ error: { code: 'INVALID_CODE', message: 'Invalid or expired code' } }, 401);
+  }
+
+  const codeHash = await sha256Hex(code);
+  const valid = await consumeEmailOTP(c.env.DB, user.id, codeHash);
+  if (!valid) {
+    return c.json({ error: { code: 'INVALID_CODE', message: 'Invalid or expired code' } }, 401);
+  }
+
+  const jwt = await issueJwt(c.env, user.id);
+  return c.json({ jwt, user: { id: user.id } });
+});
+
+// ── POST /auth/recovery/code-verify ──────────────────────────────────────────
+authRoute.post('/recovery/code-verify', async (c) => {
+  const body = await c.req.json<{ code?: string }>();
+  const code = body.code?.trim().replace(/[-\s]/g, '').toUpperCase();
+  if (!code) {
+    return c.json({ error: { code: 'BAD_REQUEST', message: 'Missing code' } }, 400);
+  }
+
+  // Support both raw and formatted (XXXX-XXXX-XXXX-XXXX) codes
+  const formatted = code.length === 16
+    ? `${code.slice(0, 4)}-${code.slice(4, 8)}-${code.slice(8, 12)}-${code.slice(12, 16)}`
+    : body.code!.trim().toUpperCase();
+
+  const codeHash = await sha256Hex(formatted);
+  const user = await getUserByRecoveryHash(c.env.DB, codeHash);
+  if (!user) {
+    return c.json({ error: { code: 'INVALID_CODE', message: 'Invalid recovery code' } }, 401);
+  }
+
+  // Rotate: generate a new recovery code immediately
+  const newCode = generateRecoveryCode();
+  const newHash = await sha256Hex(newCode);
+  await setRecoveryCodeHash(c.env.DB, user.id, newHash);
+
+  const jwt = await issueJwt(c.env, user.id);
+  return c.json({ jwt, user: { id: user.id }, newRecoveryCode: newCode });
+});
+
+// ── PATCH /auth/email ─────────────────────────────────────────────────────────
+authRoute.patch('/email', authMiddleware, async (c) => {
+  const jwtUser = c.get('user');
+  const body = await c.req.json<{ email?: string }>();
+  const email = body.email?.trim().toLowerCase();
+  if (!email || !email.includes('@')) {
+    return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid email' } }, 400);
+  }
+
+  const existing = await getUserByEmail(c.env.DB, email);
+  if (existing && existing.id !== jwtUser.sub) {
+    return c.json({ error: { code: 'EMAIL_TAKEN', message: 'Email already in use' } }, 409);
+  }
+
+  await setUserEmail(c.env.DB, jwtUser.sub, email);
+  return c.json({ ok: true });
 });
 
 // ── DELETE /auth/account ──────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import type {
   ChallengeRow,
   CredentialRow,
+  EmailOTPRow,
   EntryRow,
   MemoirSnapshotRow,
   PatternRow,
@@ -11,6 +12,57 @@ import type {
 
 export async function getUserById(db: D1Database, id: string): Promise<UserRow | null> {
   return db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first<UserRow>();
+}
+
+export async function getUserByEmail(db: D1Database, email: string): Promise<UserRow | null> {
+  return db.prepare('SELECT * FROM users WHERE email = ?').bind(email).first<UserRow>();
+}
+
+export async function setUserEmail(db: D1Database, userId: string, email: string): Promise<void> {
+  await db.prepare('UPDATE users SET email = ? WHERE id = ?').bind(email, userId).run();
+}
+
+export async function setRecoveryCodeHash(db: D1Database, userId: string, hash: string): Promise<void> {
+  await db.prepare('UPDATE users SET recovery_code_hash = ? WHERE id = ?').bind(hash, userId).run();
+}
+
+export async function getUserByRecoveryHash(db: D1Database, hash: string): Promise<UserRow | null> {
+  return db
+    .prepare('SELECT * FROM users WHERE recovery_code_hash = ?')
+    .bind(hash)
+    .first<UserRow>();
+}
+
+export async function storeEmailOTP(
+  db: D1Database,
+  userId: string,
+  codeHash: string,
+  ttlSeconds = 600
+): Promise<void> {
+  const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
+  // One OTP per user at a time — delete any existing before inserting
+  await db.prepare('DELETE FROM email_otps WHERE user_id = ?').bind(userId).run();
+  await db
+    .prepare('INSERT INTO email_otps (user_id, code_hash, expires_at) VALUES (?, ?, ?)')
+    .bind(userId, codeHash, expiresAt)
+    .run();
+}
+
+export async function consumeEmailOTP(
+  db: D1Database,
+  userId: string,
+  codeHash: string
+): Promise<boolean> {
+  const now = Math.floor(Date.now() / 1000);
+  const row = await db
+    .prepare(
+      'SELECT id FROM email_otps WHERE user_id = ? AND code_hash = ? AND expires_at > ?'
+    )
+    .bind(userId, codeHash, now)
+    .first<EmailOTPRow>();
+  if (!row) return false;
+  await db.prepare('DELETE FROM email_otps WHERE id = ?').bind(row.id).run();
+  return true;
 }
 
 export async function createUser(db: D1Database): Promise<UserRow> {

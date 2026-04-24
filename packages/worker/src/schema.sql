@@ -3,7 +3,15 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE,
   magic_token TEXT,
   magic_token_expires_at INTEGER,
+  recovery_code_hash TEXT,
   created_at INTEGER DEFAULT (unixepoch())
+);
+
+CREATE TABLE IF NOT EXISTS email_otps (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL,
+  expires_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS entries (

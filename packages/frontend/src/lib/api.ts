@@ -45,7 +45,7 @@ export const api = {
           '/auth/passkey/register-challenge', { method: 'POST', body: '{}' }, false
         ),
       register: (userId: string, credential: RegistrationResponseJSON) =>
-        request<{ jwt: string; user: { id: string } }>(
+        request<{ jwt: string; user: { id: string }; recoveryCode: string }>(
           '/auth/passkey/register',
           { method: 'POST', body: JSON.stringify({ userId, credential }) },
           false
@@ -61,6 +61,31 @@ export const api = {
           false
         ),
     },
+    recovery: {
+      emailRequest: (email: string) =>
+        request<{ ok: boolean }>(
+          '/auth/recovery/email-request',
+          { method: 'POST', body: JSON.stringify({ email }) },
+          false
+        ),
+      emailVerify: (email: string, code: string) =>
+        request<{ jwt: string; user: { id: string } }>(
+          '/auth/recovery/email-verify',
+          { method: 'POST', body: JSON.stringify({ email, code }) },
+          false
+        ),
+      codeVerify: (code: string) =>
+        request<{ jwt: string; user: { id: string }; newRecoveryCode: string }>(
+          '/auth/recovery/code-verify',
+          { method: 'POST', body: JSON.stringify({ code }) },
+          false
+        ),
+    },
+    setEmail: (email: string) =>
+      request<{ ok: boolean }>('/auth/email', {
+        method: 'PATCH',
+        body: JSON.stringify({ email }),
+      }),
     deleteAccount: () =>
       request<{ ok: boolean }>('/auth/account', { method: 'DELETE' }),
   },

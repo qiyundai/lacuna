@@ -27,12 +27,12 @@ export function clearSession(): void {
   localStorage.removeItem(USER_KEY);
 }
 
-export async function registerPasskey(): Promise<{ id: string }> {
+export async function registerPasskey(): Promise<{ id: string; recoveryCode: string }> {
   const { options, userId } = await api.auth.passkey.registerChallenge();
   const credential = await startRegistration({ optionsJSON: options });
-  const { jwt, user } = await api.auth.passkey.register(userId, credential);
+  const { jwt, user, recoveryCode } = await api.auth.passkey.register(userId, credential);
   storeSession(jwt, user);
-  return user;
+  return { ...user, recoveryCode };
 }
 
 export async function authenticatePasskey(): Promise<{ id: string }> {
@@ -41,4 +41,20 @@ export async function authenticatePasskey(): Promise<{ id: string }> {
   const { jwt, user } = await api.auth.passkey.auth(credential);
   storeSession(jwt, user);
   return user;
+}
+
+export async function requestEmailOTP(email: string): Promise<void> {
+  await api.auth.recovery.emailRequest(email);
+}
+
+export async function verifyEmailOTP(email: string, code: string): Promise<{ id: string }> {
+  const { jwt, user } = await api.auth.recovery.emailVerify(email, code);
+  storeSession(jwt, user);
+  return user;
+}
+
+export async function verifyRecoveryCode(code: string): Promise<{ id: string; newRecoveryCode: string }> {
+  const { jwt, user, newRecoveryCode } = await api.auth.recovery.codeVerify(code);
+  storeSession(jwt, user);
+  return { ...user, newRecoveryCode };
 }

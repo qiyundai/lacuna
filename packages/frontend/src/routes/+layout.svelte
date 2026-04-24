@@ -6,6 +6,8 @@
   import { initWeather } from '$lib/stores/weather.svelte.js';
   import { authenticatePasskey, registerPasskey } from '$lib/auth.js';
   import InfoOverlay from '$lib/components/InfoOverlay.svelte';
+  import RecoveryCodeSave from '$lib/components/RecoveryCodeSave.svelte';
+  import RecoveryOverlay from '$lib/components/RecoveryOverlay.svelte';
 
   let { children } = $props();
 
@@ -14,6 +16,11 @@
   let entering = $state(false);
   let authError = $state('');
   let showInfo = $state(false);
+  let showRecovery = $state(false);
+
+  // Pending state: don't set authed until user acknowledges the recovery code
+  let pendingUser = $state<{ id: string } | null>(null);
+  let pendingRecoveryCode = $state('');
 
   onMount(() => {
     hydrateSession();
@@ -30,7 +37,11 @@
       const name = e instanceof Error ? e.name : '';
       if (name === 'NotAllowedError') { entering = false; return; }
       try {
-        setAuthed(await registerPasskey());
+        const result = await registerPasskey();
+        // Hold the session until user saves their recovery code
+        pendingUser = { id: result.id };
+        pendingRecoveryCode = result.recoveryCode;
+        entering = false;
       } catch (r: unknown) {
         if ((r instanceof Error ? r.name : '') !== 'NotAllowedError') {
           authError = 'passkey unavailable';
@@ -39,27 +50,58 @@
       }
     }
   }
+
+  function acknowledgeRecoveryCode() {
+    if (!pendingUser) return;
+    setAuthed(pendingUser);
+    pendingUser = null;
+    pendingRecoveryCode = '';
+  }
+
+  function handleRecoverySuccess(user: { id: string }, newRecoveryCode?: string) {
+    if (newRecoveryCode) {
+      // Recovery code was used — overlay shows the new code, then closes via onClose
+      // Session is already set in verifyRecoveryCode, just close the recovery overlay on done
+    } else {
+      showRecovery = false;
+      setAuthed(user);
+    }
+  }
 </script>
 
 {#if session.status === 'loading'}
   <!-- Silent loading — void background shows through -->
 {:else if session.status === 'unauthed' && !isAuthRoute}
-  <div class="auth-overlay" class:blurred={showInfo}>
-    <div class="auth-glow auth-glow-a" aria-hidden="true"></div>
-    <div class="auth-glow auth-glow-b" aria-hidden="true"></div>
-    <div class="auth-content">
-      <p class="app-name">lacuna</p>
-      <button class="auth-enter" onclick={enter} disabled={entering}>
-        {entering ? '·····' : 'enter'}
-      </button>
-      {#if authError}
-        <p class="auth-error">{authError}</p>
-      {/if}
-      <p class="auth-privacy">entries are privately analyzed by ai to surface patterns in your story</p>
-      <button class="what-is-this" onclick={() => (showInfo = true)}>what is this</button>
+  {#if pendingRecoveryCode}
+    <RecoveryCodeSave code={pendingRecoveryCode} onAcknowledge={acknowledgeRecoveryCode} />
+  {:else}
+    <div class="auth-overlay" class:blurred={showInfo || showRecovery}>
+      <div class="auth-glow auth-glow-a" aria-hidden="true"></div>
+      <div class="auth-glow auth-glow-b" aria-hidden="true"></div>
+      <div class="auth-content">
+        <p class="app-name">lacuna</p>
+        <button class="auth-enter" onclick={enter} disabled={entering}>
+          {entering ? '·····' : 'enter'}
+        </button>
+        {#if authError}
+          <p class="auth-error">{authError}</p>
+        {/if}
+        <p class="auth-privacy">entries are privately analyzed by ai to surface patterns in your story</p>
+        <div class="auth-links">
+          <button class="what-is-this" onclick={() => (showInfo = true)}>what is this</button>
+          <span class="auth-sep" aria-hidden="true">·</span>
+          <button class="what-is-this" onclick={() => (showRecovery = true)}>can't enter?</button>
+        </div>
+      </div>
     </div>
-  </div>
-  <InfoOverlay bind:show={showInfo} />
+    <InfoOverlay bind:show={showInfo} />
+    {#if showRecovery}
+      <RecoveryOverlay
+        onSuccess={handleRecoverySuccess}
+        onClose={() => (showRecovery = false)}
+      />
+    {/if}
+  {/if}
 {:else}
   {@render children()}
 {/if}
@@ -167,6 +209,19 @@
     opacity: 0.5;
   }
 
+  .auth-links {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 1.5rem;
+  }
+
+  .auth-sep {
+    color: var(--void-text-faint);
+    opacity: 0.3;
+    font-size: 0.72rem;
+  }
+
   .what-is-this {
     background: transparent;
     border: none;
@@ -176,7 +231,6 @@
     letter-spacing: 0.1em;
     cursor: pointer;
     padding: 0.4rem 0;
-    margin-top: 1.5rem;
     opacity: 0.6;
     transition: opacity 0.3s ease, color 0.3s ease;
   }

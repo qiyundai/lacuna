@@ -4,6 +4,7 @@ export interface Env {
   RP_ID: string;
   JWT_SECRET: string;
   ANTHROPIC_API_KEY: string;
+  RESEND_API_KEY?: string;
 }
 
 export interface UserRow {
@@ -11,7 +12,15 @@ export interface UserRow {
   email: string | null;
   magic_token: string | null;
   magic_token_expires_at: number | null;
+  recovery_code_hash: string | null;
   created_at: number;
+}
+
+export interface EmailOTPRow {
+  id: string;
+  user_id: string;
+  code_hash: string;
+  expires_at: number;
 }
 
 export interface CredentialRow {
