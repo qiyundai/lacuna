@@ -1,3 +1,10 @@
+import type {
+  AuthenticationResponseJSON,
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+  RegistrationResponseJSON,
+} from '@simplewebauthn/browser';
+
 const BASE = import.meta.env.VITE_API_URL ?? (
   import.meta.env.DEV ? 'http://localhost:8787' : 'https://lacuna-api.pianoquin4126.workers.dev'
 );
@@ -32,17 +39,28 @@ async function request<T>(
 
 export const api = {
   auth: {
-    request: (email: string) =>
-      request<{ ok: boolean }>('/auth/request', {
-        method: 'POST',
-        body: JSON.stringify({ email }),
-      }, false),
-    verify: (token: string) =>
-      request<{ jwt: string; user: { id: string; email: string } }>(
-        `/auth/verify?token=${encodeURIComponent(token)}`,
-        {},
-        false
-      ),
+    passkey: {
+      registerChallenge: () =>
+        request<{ options: PublicKeyCredentialCreationOptionsJSON; userId: string }>(
+          '/auth/passkey/register-challenge', { method: 'POST', body: '{}' }, false
+        ),
+      register: (userId: string, credential: RegistrationResponseJSON) =>
+        request<{ jwt: string; user: { id: string } }>(
+          '/auth/passkey/register',
+          { method: 'POST', body: JSON.stringify({ userId, credential }) },
+          false
+        ),
+      authChallenge: () =>
+        request<{ options: PublicKeyCredentialRequestOptionsJSON }>(
+          '/auth/passkey/auth-challenge', { method: 'POST', body: '{}' }, false
+        ),
+      auth: (credential: AuthenticationResponseJSON) =>
+        request<{ jwt: string; user: { id: string } }>(
+          '/auth/passkey/auth',
+          { method: 'POST', body: JSON.stringify({ credential }) },
+          false
+        ),
+    },
     deleteAccount: () =>
       request<{ ok: boolean }>('/auth/account', { method: 'DELETE' }),
   },

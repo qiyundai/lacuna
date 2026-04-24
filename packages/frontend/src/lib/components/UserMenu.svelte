@@ -66,7 +66,6 @@
   >
     <button class="overlay-backdrop" onclick={close} aria-label="Close menu" tabindex="-1"></button>
     <div class="menu-content">
-      <p class="menu-email">{session.user?.email}</p>
       <nav class="menu-actions">
         <button class="menu-item" onclick={() => { open = false; confirming = false; showInfo = true; }}>what is this</button>
         <button class="menu-item" onclick={signOut}>sign out</button>
@@ -136,14 +135,6 @@
     flex-direction: column;
     align-items: center;
     gap: 3rem;
-  }
-
-  .menu-email {
-    color: var(--void-text-faint);
-    font-family: var(--font-serif);
-    font-size: 0.72rem;
-    letter-spacing: 0.06em;
-    margin: 0;
   }
 
   .menu-actions {
