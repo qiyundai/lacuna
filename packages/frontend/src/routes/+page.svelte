@@ -3,7 +3,7 @@
   import Void from '$lib/components/Void.svelte';
   import DownSpace from '$lib/components/DownSpace.svelte';
 
-  // 0 = void, -100 = down space (in vh units)
+  // 0 = void, -100 = down space (in dvh units)
   let spaceOffset = $state(0);
   let transitioning = $state(false);
 
@@ -24,7 +24,7 @@
 
 <div
   class="space-container"
-  style="transform: translateY({spaceOffset}vh)"
+  style="transform: translateY({spaceOffset}dvh)"
   use:swipeDetector={{ onSwipeDown: goDown, onSwipeUp: goUp }}
 >
   <div class="space-panel void-panel">
@@ -39,7 +39,7 @@
   .space-container {
     position: fixed;
     inset: 0;
-    height: 200vh;
+    height: 200dvh;
     transition: transform 0.65s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     will-change: transform;
   }
@@ -47,7 +47,7 @@
   .space-panel {
     position: absolute;
     width: 100%;
-    height: 50%; /* 50% of 200vh = 100vh */
+    height: 50%; /* 50% of 200dvh = 100dvh */
   }
 
   .void-panel {
