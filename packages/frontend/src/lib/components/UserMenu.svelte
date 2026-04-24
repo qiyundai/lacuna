@@ -67,7 +67,7 @@
     <div class="menu-content">
       <p class="menu-email">{session.user?.email}</p>
       <nav class="menu-actions">
-        <button class="menu-item" onclick={() => { showInfo = true; ui.menuOpen = true; close(); }}>what is this</button>
+        <button class="menu-item" onclick={() => { open = false; confirming = false; showInfo = true; }}>what is this</button>
         <button class="menu-item" onclick={signOut}>sign out</button>
         <button class="menu-item danger" onclick={handleDelete}>
           {confirming ? 'sure?' : 'delete account'}
@@ -80,13 +80,13 @@
 {#if showInfo}
   <div
     use:portal
-    class="screen-overlay"
+    class="screen-overlay info-overlay"
     transition:fade={{ duration: 500, easing: cubicOut }}
     role="dialog"
     aria-modal="true"
     aria-label="What is Lacuna"
+    onclick={() => { showInfo = false; ui.menuOpen = false; }}
   >
-    <button class="overlay-backdrop" onclick={() => { showInfo = false; ui.menuOpen = false; }} aria-label="Close" tabindex="-1"></button>
     <div class="info-content">
       <p>a private space, just yours. you type, words float, nothing goes anywhere unless you hold a thought long enough to mean it.</p>
       <p>if you keep coming back, those fragments start to find each other. something like a shape of you begins to appear.</p>
@@ -199,6 +199,11 @@
   .menu-item.danger:focus {
     color: rgba(220, 110, 100, 1);
     opacity: 1;
+  }
+
+  .info-overlay {
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    cursor: pointer;
   }
 
   /* ── Info ─────────────────────────────────── */
