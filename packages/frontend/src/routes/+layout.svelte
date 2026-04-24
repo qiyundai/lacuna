@@ -44,28 +44,32 @@
   <!-- Silent loading — void background shows through -->
 {:else if session.status === 'unauthed' && !isAuthRoute}
   <div class="auth-overlay">
-    <p class="app-name">lacuna</p>
-    {#if linkSent}
-      <p class="auth-message">check your email</p>
-    {:else}
-      <form onsubmit={submitEmail} class="auth-form">
-        <input
-          type="email"
-          placeholder="your email"
-          bind:value={email}
-          autocomplete="email"
-          autocapitalize="none"
-          spellcheck={false}
-          class="auth-input"
-        />
-        <button type="submit" class="auth-submit" disabled={submitting}>enter</button>
-        {#if authError}
-          <p class="auth-error">{authError}</p>
-        {/if}
-        <p class="auth-privacy">entries are privately analyzed by ai to surface patterns in your story</p>
-      </form>
-    {/if}
-    <button class="what-is-this" onclick={() => (showInfo = true)}>what is this</button>
+    <div class="auth-glow auth-glow-a" aria-hidden="true"></div>
+    <div class="auth-glow auth-glow-b" aria-hidden="true"></div>
+    <div class="auth-content">
+      <p class="app-name">lacuna</p>
+      {#if linkSent}
+        <p class="auth-message">check your email</p>
+      {:else}
+        <form onsubmit={submitEmail} class="auth-form">
+          <input
+            type="email"
+            placeholder="your email"
+            bind:value={email}
+            autocomplete="email"
+            autocapitalize="none"
+            spellcheck={false}
+            class="auth-input"
+          />
+          <button type="submit" class="auth-submit" disabled={submitting}>enter</button>
+          {#if authError}
+            <p class="auth-error">{authError}</p>
+          {/if}
+          <p class="auth-privacy">entries are privately analyzed by ai to surface patterns in your story</p>
+        </form>
+      {/if}
+      <button class="what-is-this" onclick={() => (showInfo = true)}>what is this</button>
+    </div>
   </div>
   <InfoOverlay bind:show={showInfo} />
 {:else}
@@ -77,10 +81,49 @@
     position: fixed;
     inset: 0;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
     background: var(--bg);
+    overflow: hidden;
+  }
+
+  .auth-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .auth-glow {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  .auth-glow-a {
+    width: 55vmin;
+    height: 55vmin;
+    top: 25%;
+    left: 32%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, rgba(255, 200, 140, 0.22) 0%, transparent 65%);
+    animation: auth-breathe 9s ease-in-out infinite;
+  }
+
+  .auth-glow-b {
+    width: 44vmin;
+    height: 44vmin;
+    top: 72%;
+    left: 66%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, rgba(180, 160, 240, 0.15) 0%, transparent 65%);
+    animation: auth-breathe 12s ease-in-out infinite reverse;
+  }
+
+  @keyframes auth-breathe {
+    0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+    50%       { opacity: 1;   transform: translate(-50%, -50%) scale(1.14); }
   }
 
   .app-name {
