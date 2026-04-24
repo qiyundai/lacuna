@@ -26,6 +26,12 @@ export async function setRecoveryCodeHash(db: D1Database, userId: string, hash: 
   await db.prepare('UPDATE users SET recovery_code_hash = ? WHERE id = ?').bind(hash, userId).run();
 }
 
+export async function setAiConsent(db: D1Database, userId: string): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  await db.prepare('UPDATE users SET ai_consent_at = ? WHERE id = ? AND ai_consent_at IS NULL')
+    .bind(now, userId).run();
+}
+
 export async function getUserByRecoveryHash(db: D1Database, hash: string): Promise<UserRow | null> {
   return db
     .prepare('SELECT * FROM users WHERE recovery_code_hash = ?')

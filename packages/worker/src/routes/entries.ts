@@ -3,6 +3,9 @@ import type { Env, JwtPayload } from '../types.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { createEntry, deleteEntry, getEntries } from '../db.js';
 import { analyzeEntriesAsync } from '../ai/analyzer.js';
+import { checkRateLimit } from '../ratelimit.js';
+
+const MAX_ENTRY_LENGTH = 10_000;
 
 type Variables = { user: JwtPayload };
 
@@ -23,10 +26,20 @@ entriesRoute.get('/', async (c) => {
 
 entriesRoute.post('/', async (c) => {
   const user = c.get('user');
+
+  // 50 entries per user per hour
+  const allowed = await checkRateLimit(c.env.DB, `entry:${user.sub}`, 50, 3600);
+  if (!allowed) {
+    return c.json({ error: { code: 'RATE_LIMITED', message: 'Too many entries' } }, 429);
+  }
+
   const body = await c.req.json<{ body?: string; solidified_at?: number }>();
 
   if (!body.body?.trim()) {
     return c.json({ error: { code: 'BAD_REQUEST', message: 'Entry body is required' } }, 400);
+  }
+  if (body.body.length > MAX_ENTRY_LENGTH) {
+    return c.json({ error: { code: 'BAD_REQUEST', message: 'Entry too long' } }, 400);
   }
 
   const solidifiedAt = body.solidified_at ?? Math.floor(Date.now() / 1000);

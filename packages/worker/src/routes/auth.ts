@@ -20,12 +20,14 @@ import {
   getCredentialById,
   getUserByEmail,
   getUserByRecoveryHash,
+  setAiConsent,
   setRecoveryCodeHash,
   setUserEmail,
   storeChallenge,
   storeEmailOTP,
   updateCredentialSignCount,
 } from '../db.js';
+import { checkRateLimit } from '../ratelimit.js';
 
 type Variables = { user: JwtPayload };
 export const authRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -94,6 +96,12 @@ async function sendOTPEmail(
 
 // ── POST /auth/passkey/register-challenge ─────────────────────────────────────
 authRoute.post('/passkey/register-challenge', async (c) => {
+  const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Real-IP') ?? 'unknown';
+  const allowed = await checkRateLimit(c.env.DB, `reg:${ip}`, 10, 3600);
+  if (!allowed) {
+    return c.json({ error: { code: 'RATE_LIMITED', message: 'Too many requests' } }, 429);
+  }
+
   await expireChallenges(c.env.DB);
 
   const user = await createUser(c.env.DB);
@@ -241,6 +249,12 @@ authRoute.post('/recovery/email-request', async (c) => {
     return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid email' } }, 400);
   }
 
+  // 5 OTP requests per email per hour
+  const allowed = await checkRateLimit(c.env.DB, `otp-req:${email}`, 5, 3600);
+  if (!allowed) {
+    return c.json({ error: { code: 'RATE_LIMITED', message: 'Too many requests' } }, 429);
+  }
+
   const user = await getUserByEmail(c.env.DB, email);
   if (user) {
     const code = generateOTP();
@@ -261,6 +275,12 @@ authRoute.post('/recovery/email-verify', async (c) => {
     return c.json({ error: { code: 'BAD_REQUEST', message: 'Missing fields' } }, 400);
   }
 
+  // 5 verify attempts per email per 10 minutes — prevents OTP brute force
+  const allowed = await checkRateLimit(c.env.DB, `otp-verify:${email}`, 5, 600);
+  if (!allowed) {
+    return c.json({ error: { code: 'RATE_LIMITED', message: 'Too many attempts' } }, 429);
+  }
+
   const user = await getUserByEmail(c.env.DB, email);
   if (!user) {
     return c.json({ error: { code: 'INVALID_CODE', message: 'Invalid or expired code' } }, 401);
@@ -278,6 +298,13 @@ authRoute.post('/recovery/email-verify', async (c) => {
 
 // ── POST /auth/recovery/code-verify ──────────────────────────────────────────
 authRoute.post('/recovery/code-verify', async (c) => {
+  const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Real-IP') ?? 'unknown';
+  // 5 attempts per IP per 15 minutes
+  const allowed = await checkRateLimit(c.env.DB, `rc-verify:${ip}`, 5, 900);
+  if (!allowed) {
+    return c.json({ error: { code: 'RATE_LIMITED', message: 'Too many attempts' } }, 429);
+  }
+
   const body = await c.req.json<{ code?: string }>();
   const code = body.code?.trim().replace(/[-\s]/g, '').toUpperCase();
   if (!code) {
@@ -319,6 +346,13 @@ authRoute.patch('/email', authMiddleware, async (c) => {
   }
 
   await setUserEmail(c.env.DB, jwtUser.sub, email);
+  return c.json({ ok: true });
+});
+
+// ── POST /auth/ai-consent ─────────────────────────────────────────────────────
+authRoute.post('/ai-consent', authMiddleware, async (c) => {
+  const user = c.get('user');
+  await setAiConsent(c.env.DB, user.sub);
   return c.json({ ok: true });
 });
 

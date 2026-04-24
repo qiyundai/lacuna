@@ -9,9 +9,8 @@ export interface Env {
 export interface UserRow {
   id: string;
   email: string | null;
-  magic_token: string | null;
-  magic_token_expires_at: number | null;
   recovery_code_hash: string | null;
+  ai_consent_at: number | null;
   created_at: number;
 }
 
