@@ -5,6 +5,7 @@
   import { session, hydrateSession, setAuthed } from '$lib/stores/session.svelte.js';
   import { initWeather } from '$lib/stores/weather.svelte.js';
   import { requestMagicLink, verifyMagicToken } from '$lib/auth.js';
+  import InfoOverlay from '$lib/components/InfoOverlay.svelte';
 
   let { children } = $props();
 
@@ -16,6 +17,7 @@
   let linkSent = $state(false);
   let authError = $state('');
   let submitting = $state(false);
+  let showInfo = $state(false);
 
   onMount(() => {
     hydrateSession();
@@ -42,6 +44,7 @@
   <!-- Silent loading — void background shows through -->
 {:else if session.status === 'unauthed' && !isAuthRoute}
   <div class="auth-overlay">
+    <p class="app-name">lacuna</p>
     {#if linkSent}
       <p class="auth-message">check your email</p>
     {:else}
@@ -62,7 +65,9 @@
         <p class="auth-privacy">entries are privately analyzed by ai to surface patterns in your story</p>
       </form>
     {/if}
+    <button class="what-is-this" onclick={() => (showInfo = true)}>what is this</button>
   </div>
+  <InfoOverlay bind:show={showInfo} />
 {:else}
   {@render children()}
 {/if}
@@ -72,9 +77,41 @@
     position: fixed;
     inset: 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     background: var(--bg);
+  }
+
+  .app-name {
+    color: var(--void-text-dim);
+    font-family: var(--font-serif);
+    font-size: 1.6rem;
+    letter-spacing: 0.18em;
+    font-weight: 400;
+    margin: 0 0 2.5rem;
+    opacity: 0.7;
+  }
+
+  .what-is-this {
+    background: transparent;
+    border: none;
+    color: var(--void-text-faint);
+    font-family: var(--font-serif);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    padding: 0.4rem 0;
+    margin-top: 1.5rem;
+    opacity: 0.6;
+    transition: opacity 0.3s ease, color 0.3s ease;
+  }
+
+  .what-is-this:hover,
+  .what-is-this:focus {
+    opacity: 1;
+    color: var(--void-text-dim);
+    outline: none;
   }
 
   .auth-form {
