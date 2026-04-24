@@ -1,5 +1,6 @@
 <script lang="ts">
   import { session, signOut } from '$lib/stores/session.svelte.js';
+  import { ui } from '$lib/stores/ui.svelte.js';
   import { api } from '$lib/api.js';
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
@@ -11,11 +12,13 @@
   function toggle() {
     open = !open;
     if (!open) confirming = false;
+    ui.menuOpen = open;
   }
 
   function close() {
     open = false;
     confirming = false;
+    ui.menuOpen = false;
   }
 
   async function handleDelete() {
@@ -29,7 +32,7 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
-      if (showInfo) { showInfo = false; return; }
+      if (showInfo) { showInfo = false; ui.menuOpen = false; return; }
       if (open) { close(); return; }
     }
   }
@@ -64,7 +67,7 @@
     <div class="menu-content">
       <p class="menu-email">{session.user?.email}</p>
       <nav class="menu-actions">
-        <button class="menu-item" onclick={() => { showInfo = true; close(); }}>what is this</button>
+        <button class="menu-item" onclick={() => { showInfo = true; ui.menuOpen = true; close(); }}>what is this</button>
         <button class="menu-item" onclick={signOut}>sign out</button>
         <button class="menu-item danger" onclick={handleDelete}>
           {confirming ? 'sure?' : 'delete account'}
@@ -83,7 +86,7 @@
     aria-modal="true"
     aria-label="What is Lacuna"
   >
-    <button class="overlay-backdrop" onclick={() => (showInfo = false)} aria-label="Close" tabindex="-1"></button>
+    <button class="overlay-backdrop" onclick={() => { showInfo = false; ui.menuOpen = false; }} aria-label="Close" tabindex="-1"></button>
     <div class="info-content">
       <p>a private space, just yours. you type, words float, nothing goes anywhere unless you hold a thought long enough to mean it.</p>
       <p>if you keep coming back, those fragments start to find each other. something like a shape of you begins to appear.</p>
@@ -130,7 +133,7 @@
   .overlay-backdrop {
     position: absolute;
     inset: 0;
-    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
     border: none;

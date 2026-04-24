@@ -7,6 +7,7 @@
   import SoulMap from './SoulMap.svelte';
   import LivingMemoir from './LivingMemoir.svelte';
   import UserMenu from './UserMenu.svelte';
+  import { ui } from '$lib/stores/ui.svelte.js';
 
   let { onSwipeUp }: { onSwipeUp: () => void } = $props();
 
@@ -37,6 +38,7 @@
 
 <div
   class="down-space"
+  class:menu-open={ui.menuOpen}
   ontouchstart={touchStart}
   ontouchend={touchEnd}
   role="region"
@@ -76,6 +78,11 @@
     height: 100%;
     background: var(--bg);
     overflow: hidden;
+    transition: filter 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  .down-space.menu-open {
+    filter: blur(8px);
   }
 
   .views {
