@@ -5,10 +5,12 @@
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import InfoOverlay from './InfoOverlay.svelte';
+  import PrivacyOverlay from './PrivacyOverlay.svelte';
 
   let open = $state(false);
   let confirming = $state(false);
   let showInfo = $state(false);
+  let showPrivacy = $state(false);
   let emailInput = $state('');
   let emailSaving = $state(false);
   let emailSaved = $state(false);
@@ -61,6 +63,7 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       if (showInfo) { showInfo = false; ui.menuOpen = false; return; }
+      if (showPrivacy) { showPrivacy = false; ui.menuOpen = false; return; }
       if (showEmailForm) { showEmailForm = false; emailInput = ''; emailError = ''; return; }
       if (open) { close(); return; }
     }
@@ -96,6 +99,7 @@
     <div class="menu-content">
       <nav class="menu-actions">
         <button class="menu-item" onclick={() => { open = false; confirming = false; showInfo = true; }}>what is this</button>
+        <button class="menu-item" onclick={() => { open = false; confirming = false; showPrivacy = true; }}>data & privacy</button>
         {#if showEmailForm}
           <div class="email-form">
             <input
@@ -128,6 +132,7 @@
 {/if}
 
 <InfoOverlay bind:show={showInfo} />
+<PrivacyOverlay bind:show={showPrivacy} />
 
 <style>
   .trigger {
