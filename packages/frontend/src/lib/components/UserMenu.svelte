@@ -1,6 +1,5 @@
 <script lang="ts">
   import { session, signOut } from '$lib/stores/session.svelte.js';
-  import { ui } from '$lib/stores/ui.svelte.js';
   import { api } from '$lib/api.js';
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
@@ -20,7 +19,6 @@
   function toggle() {
     open = !open;
     if (!open) { confirming = false; showEmailForm = false; emailInput = ''; emailError = ''; }
-    ui.menuOpen = open;
   }
 
   function close() {
@@ -29,7 +27,12 @@
     showEmailForm = false;
     emailInput = '';
     emailError = '';
-    ui.menuOpen = false;
+  }
+
+  function openSub(target: 'info' | 'privacy') {
+    close();
+    if (target === 'info') showInfo = true;
+    else showPrivacy = true;
   }
 
   async function handleDelete() {
@@ -62,8 +65,8 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
-      if (showInfo) { showInfo = false; ui.menuOpen = false; return; }
-      if (showPrivacy) { showPrivacy = false; ui.menuOpen = false; return; }
+      if (showInfo) { showInfo = false; return; }
+      if (showPrivacy) { showPrivacy = false; return; }
       if (showEmailForm) { showEmailForm = false; emailInput = ''; emailError = ''; return; }
       if (open) { close(); return; }
     }
@@ -98,8 +101,8 @@
     <button class="overlay-backdrop" onclick={close} aria-label="Close menu" tabindex="-1"></button>
     <div class="menu-content">
       <nav class="menu-actions">
-        <button class="menu-item" onclick={() => { open = false; confirming = false; showInfo = true; }}>what is this</button>
-        <button class="menu-item" onclick={() => { open = false; confirming = false; showPrivacy = true; }}>data & privacy</button>
+        <button class="menu-item" onclick={() => openSub('info')}>what is this</button>
+        <button class="menu-item" onclick={() => openSub('privacy')}>data & privacy</button>
         {#if showEmailForm}
           <div class="email-form">
             <input
@@ -137,24 +140,24 @@
 <style>
   .trigger {
     position: absolute;
-    top: 1.25rem;
-    right: 1.25rem;
+    top: var(--space-5);
+    right: var(--space-5);
     z-index: 20;
     background: none;
     border: none;
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
     font-family: var(--font-serif);
-    font-size: 1rem;
-    letter-spacing: 0.1em;
+    font-size: var(--text-sm);
+    letter-spacing: var(--ls-label);
     cursor: pointer;
-    padding: 0.4rem;
+    padding: var(--space-2);
     line-height: 1;
-    transition: color 0.3s ease;
+    transition: color var(--dur-base) var(--ease-soft);
   }
 
   .trigger:hover,
   .trigger:focus {
-    color: var(--void-text-dim);
+    color: var(--void-text);
     outline: none;
   }
 
@@ -189,14 +192,14 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 3rem;
+    gap: var(--space-7);
   }
 
   .menu-actions {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2rem;
+    gap: var(--space-6);
   }
 
   .menu-item {
@@ -204,17 +207,15 @@
     border: none;
     color: var(--void-text-dim);
     font-family: var(--font-serif);
-    font-size: 1.15rem;
-    letter-spacing: 0.06em;
+    font-size: var(--text-md);
+    letter-spacing: var(--ls-ui);
     cursor: pointer;
-    padding: 0;
-    opacity: 0.6;
-    transition: opacity 0.3s ease, color 0.3s ease;
+    padding: var(--space-2) var(--space-3);
+    transition: color var(--dur-base) var(--ease-soft);
   }
 
   .menu-item:hover,
   .menu-item:focus {
-    opacity: 1;
     color: var(--void-text);
     outline: none;
   }
@@ -223,7 +224,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.6rem;
+    gap: var(--space-3);
     width: 100%;
   }
 
@@ -233,46 +234,44 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
     color: var(--void-text);
     font-family: var(--font-serif);
-    font-size: 0.9rem;
-    letter-spacing: 0.03em;
+    font-size: var(--text-sm);
+    letter-spacing: var(--ls-prose);
     outline: none;
-    padding: 0.4rem 0;
+    padding: var(--space-2) 0;
     text-align: center;
-    width: 200px;
-    transition: border-color 0.3s ease;
+    width: 220px;
+    transition: border-color var(--dur-base) var(--ease-soft);
   }
 
   .email-input:focus {
-    border-bottom-color: rgba(255, 255, 255, 0.35);
+    border-bottom-color: rgba(255, 255, 255, 0.4);
   }
 
   .email-input::placeholder {
-    color: var(--void-text-hint);
-    opacity: 0.4;
+    color: var(--void-text-faint);
   }
 
   .email-save:disabled {
-    opacity: 0.2;
+    color: var(--void-text-faint);
     cursor: default;
   }
 
   .email-error {
-    color: rgba(220, 110, 100, 0.75);
+    color: var(--void-danger);
     font-family: var(--font-serif);
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     margin: 0;
   }
 
   .menu-item.danger {
-    color: rgba(220, 110, 100, 0.65);
-    font-size: 0.88rem;
-    letter-spacing: 0.08em;
+    color: var(--void-danger);
+    font-size: var(--text-sm);
+    letter-spacing: var(--ls-label);
   }
 
   .menu-item.danger:hover,
   .menu-item.danger:focus {
-    color: rgba(220, 110, 100, 1);
-    opacity: 1;
+    color: rgba(232, 130, 120, 1);
   }
 
 </style>

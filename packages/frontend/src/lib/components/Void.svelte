@@ -610,9 +610,9 @@
     text-align: center;
     color: var(--void-text);
     font-family: var(--font-serif);
-    font-size: clamp(1.1rem, 2.6vw, 1.5rem);
-    line-height: 1.6;
-    letter-spacing: 0.02em;
+    font-size: var(--text-void);
+    line-height: var(--lh-prose);
+    letter-spacing: var(--ls-prose);
     pointer-events: none;
     user-select: none;
     word-break: break-word;
@@ -752,18 +752,18 @@
 
   .down-hint {
     position: absolute;
-    bottom: 2rem;
+    bottom: var(--space-6);
     left: 50%;
     transform: translateX(-50%);
     background: none;
     border: none;
     color: var(--void-text-faint);
-    font-size: 1.2rem;
+    font-size: var(--text-md);
     cursor: pointer;
     animation: bob 2s ease-in-out infinite;
     user-select: none;
     z-index: 3;
-    padding: 0.5rem;
+    padding: var(--space-2);
   }
 
   @keyframes bob {
@@ -800,20 +800,20 @@
     flex-direction: column;
     align-items: center;
     text-align: center;
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
     font-family: var(--font-serif);
-    font-size: clamp(0.8rem, 2vw, 0.95rem);
+    font-size: var(--text-sm);
     line-height: 2.2;
-    letter-spacing: 0.06em;
+    letter-spacing: var(--ls-label);
     pointer-events: none;
     user-select: none;
     z-index: 2;
     opacity: 0;
-    transition: opacity 0.8s ease;
+    transition: opacity var(--dur-slow) var(--ease-soft);
   }
 
   .intro-hint.visible {
-    opacity: 0.7;
+    opacity: 1;
   }
 
   .intro-hint span {
@@ -822,21 +822,21 @@
 
   .char-limit {
     position: absolute;
-    bottom: 2rem;
-    right: 1.5rem;
-    font-family: var(--font-serif);
-    font-size: 0.7rem;
-    letter-spacing: 0.08em;
-    color: var(--void-text-faint);
-    opacity: 0.4;
+    bottom: var(--space-6);
+    right: var(--space-5);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: var(--ls-label);
+    color: var(--void-text-hint);
     pointer-events: none;
     user-select: none;
     z-index: 3;
     animation: fadeIn 0.6s ease forwards;
+    opacity: 0;
   }
 
   @keyframes fadeIn {
     from { opacity: 0; }
-    to   { opacity: 0.4; }
+    to   { opacity: 1; }
   }
 </style>

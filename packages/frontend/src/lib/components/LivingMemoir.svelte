@@ -37,50 +37,51 @@
 
 <style>
   .memoir {
-    padding: 4rem 2rem 5rem;
+    padding: var(--space-8) var(--space-6) var(--space-9);
     min-height: 100%;
   }
 
   .state-message {
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
     font-family: var(--font-serif);
-    font-size: 0.9rem;
+    font-size: var(--text-sm);
     text-align: center;
-    padding-top: 3rem;
-    letter-spacing: 0.04em;
+    padding-top: var(--space-7);
+    letter-spacing: var(--ls-ui);
+    line-height: var(--lh-prose);
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: var(--space-2);
   }
 
   .sub {
-    font-size: 0.75rem;
-    opacity: 0.6;
+    font-size: var(--text-xs);
+    color: var(--void-text-faint);
   }
 
   .prose {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: var(--space-5);
     animation: fadeIn 0.8s ease forwards;
   }
 
   .generated-at {
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
     font-family: var(--font-mono);
-    font-size: 0.68rem;
-    letter-spacing: 0.08em;
+    font-size: var(--text-xs);
+    letter-spacing: var(--ls-label);
     text-transform: uppercase;
     display: block;
-    margin-bottom: 0.5rem;
+    margin-bottom: var(--space-2);
   }
 
   p {
     color: var(--void-text);
     font-family: var(--font-serif);
-    font-size: 0.95rem;
-    line-height: 1.8;
-    letter-spacing: 0.02em;
+    font-size: var(--text-md);
+    line-height: var(--lh-prose);
+    letter-spacing: var(--ls-prose);
   }
 
   @keyframes fadeIn {

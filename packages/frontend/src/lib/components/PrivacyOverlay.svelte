@@ -53,27 +53,27 @@
   .privacy-content {
     position: relative;
     z-index: 1;
-    max-width: 34ch;
+    max-width: 36ch;
     display: flex;
     flex-direction: column;
-    gap: 1.75rem;
-    padding: 2rem;
+    gap: var(--space-5);
+    padding: var(--space-6);
     text-align: center;
   }
 
   .privacy-content p {
-    color: var(--void-text-dim);
+    color: var(--void-text);
     font-family: var(--font-serif);
-    font-size: 1rem;
-    line-height: 1.85;
-    letter-spacing: 0.025em;
+    font-size: var(--text-md);
+    line-height: var(--lh-prose);
+    letter-spacing: var(--ls-prose);
     margin: 0;
   }
 
   .privacy-content .hint {
-    color: var(--void-text-faint);
-    font-size: 0.72rem;
-    letter-spacing: 0.1em;
-    margin-top: 0.5rem;
+    color: var(--void-text-hint);
+    font-size: var(--text-xs);
+    letter-spacing: var(--ls-label);
+    margin-top: var(--space-3);
   }
 </style>

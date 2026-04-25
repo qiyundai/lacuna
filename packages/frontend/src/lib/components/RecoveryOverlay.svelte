@@ -213,35 +213,33 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1.25rem;
-    max-width: 320px;
-    padding: 0 2rem;
+    gap: var(--space-5);
+    max-width: 340px;
+    padding: 0 var(--space-6);
     text-align: center;
   }
 
   .heading {
-    color: var(--void-text-dim);
+    color: var(--void-text);
     font-family: var(--font-serif);
-    font-size: 1rem;
-    letter-spacing: 0.1em;
+    font-size: var(--text-md);
+    letter-spacing: var(--ls-label);
     margin: 0;
-    opacity: 0.8;
   }
 
   .sub {
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
     font-family: var(--font-serif);
-    font-size: 0.72rem;
-    letter-spacing: 0.04em;
-    line-height: 1.7;
+    font-size: var(--text-xs);
+    letter-spacing: var(--ls-ui);
+    line-height: var(--lh-prose);
     margin: 0;
-    opacity: 0.6;
   }
 
   .options {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: var(--space-5);
     width: 100%;
   }
 
@@ -251,16 +249,15 @@
     color: var(--void-text-dim);
     cursor: pointer;
     font-family: var(--font-serif);
-    font-size: 0.92rem;
-    letter-spacing: 0.06em;
-    opacity: 0.55;
-    padding: 0.3rem 0;
-    transition: opacity 0.3s ease;
+    font-size: var(--text-sm);
+    letter-spacing: var(--ls-ui);
+    padding: var(--space-2) 0;
+    transition: color var(--dur-base) var(--ease-soft);
   }
 
   .option:hover,
   .option:focus {
-    opacity: 1;
+    color: var(--void-text);
     outline: none;
   }
 
@@ -270,33 +267,32 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
     color: var(--void-text);
     font-family: var(--font-serif);
-    font-size: 1rem;
-    letter-spacing: 0.03em;
+    font-size: var(--text-sm);
+    letter-spacing: var(--ls-prose);
     outline: none;
-    padding: 0.5rem 0;
+    padding: var(--space-2) 0;
     text-align: center;
     width: 100%;
-    transition: border-color 0.3s ease;
+    transition: border-color var(--dur-base) var(--ease-soft);
   }
 
   .field:focus {
-    border-bottom-color: rgba(255, 255, 255, 0.35);
+    border-bottom-color: rgba(255, 255, 255, 0.4);
   }
 
   .field::placeholder {
-    color: var(--void-text-hint);
-    opacity: 0.4;
+    color: var(--void-text-faint);
   }
 
   .field-code {
-    font-size: 1.4rem;
+    font-size: var(--text-lg);
     letter-spacing: 0.2em;
   }
 
   .field-recovery {
-    font-family: var(--font-mono, monospace);
-    font-size: 1rem;
-    letter-spacing: 0.12em;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    letter-spacing: var(--ls-display);
     text-transform: uppercase;
   }
 
@@ -306,81 +302,79 @@
     color: var(--void-text-dim);
     cursor: pointer;
     font-family: var(--font-serif);
-    font-size: 0.88rem;
-    letter-spacing: 0.1em;
-    opacity: 0.55;
-    padding: 0.4rem 0;
-    transition: opacity 0.3s ease;
+    font-size: var(--text-sm);
+    letter-spacing: var(--ls-label);
+    padding: var(--space-2) var(--space-4);
+    transition: color var(--dur-base) var(--ease-soft);
   }
 
   .action:hover:not(:disabled),
   .action:focus:not(:disabled) {
-    opacity: 1;
+    color: var(--void-text);
     outline: none;
   }
 
   .action:disabled {
-    opacity: 0.2;
+    color: var(--void-text-faint);
     cursor: default;
   }
 
   .back {
     background: transparent;
     border: none;
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
     cursor: pointer;
     font-family: var(--font-serif);
-    font-size: 0.7rem;
-    letter-spacing: 0.08em;
-    opacity: 0.4;
-    padding: 0.2rem 0;
-    transition: opacity 0.3s ease;
+    font-size: var(--text-xs);
+    letter-spacing: var(--ls-label);
+    padding: var(--space-2) 0;
+    transition: color var(--dur-base) var(--ease-soft);
   }
 
   .back:hover,
   .back:focus {
-    opacity: 0.8;
+    color: var(--void-text-dim);
     outline: none;
   }
 
   .error {
-    color: rgba(220, 110, 100, 0.75);
+    color: var(--void-danger);
     font-family: var(--font-serif);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     margin: 0;
   }
 
   .code-block {
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 4px;
     cursor: pointer;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.5rem;
-    padding: 1.25rem 2rem;
-    transition: border-color 0.3s ease;
+    gap: var(--space-3);
+    padding: var(--space-5) var(--space-6);
+    transition: border-color var(--dur-base) var(--ease-soft);
     width: 100%;
   }
 
-  .code-block:hover {
-    border-color: rgba(255, 255, 255, 0.18);
+  .code-block:hover,
+  .code-block:focus {
+    border-color: rgba(255, 255, 255, 0.28);
+    outline: none;
   }
 
   .code-text {
     color: var(--void-text);
-    font-family: var(--font-mono, monospace);
-    font-size: 1rem;
-    letter-spacing: 0.18em;
-    opacity: 0.9;
+    font-family: var(--font-mono);
+    font-size: var(--text-md);
+    letter-spacing: var(--ls-display);
   }
 
   .copy-hint {
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
     font-family: var(--font-serif);
-    font-size: 0.65rem;
-    letter-spacing: 0.08em;
-    opacity: 0.5;
+    font-size: var(--text-xs);
+    letter-spacing: var(--ls-label);
   }
 </style>

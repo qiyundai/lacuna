@@ -75,7 +75,7 @@
   {#if pendingRecoveryCode}
     <RecoveryCodeSave code={pendingRecoveryCode} onAcknowledge={acknowledgeRecoveryCode} />
   {:else}
-    <div class="auth-overlay" class:blurred={showInfo || showRecovery}>
+    <div class="auth-overlay">
       <div class="auth-glow auth-glow-a" aria-hidden="true"></div>
       <div class="auth-glow auth-glow-b" aria-hidden="true"></div>
       <div class="auth-content">
@@ -115,11 +115,6 @@
     justify-content: center;
     background: var(--bg);
     overflow: hidden;
-    transition: filter 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  }
-
-  .auth-overlay.blurred {
-    filter: blur(8px);
   }
 
   .auth-content {
@@ -162,13 +157,12 @@
   }
 
   .app-name {
-    color: var(--void-text-dim);
+    color: var(--void-text);
     font-family: var(--font-serif);
-    font-size: 1.6rem;
-    letter-spacing: 0.18em;
+    font-size: var(--text-xl);
+    letter-spacing: var(--ls-display);
     font-weight: 400;
-    margin: 0 0 2.5rem;
-    opacity: 0.7;
+    margin: 0 0 var(--space-7);
   }
 
   .auth-enter {
@@ -176,76 +170,71 @@
     border: none;
     color: var(--void-text-dim);
     font-family: var(--font-serif);
-    font-size: 1.1rem;
-    letter-spacing: 0.18em;
+    font-size: var(--text-md);
+    letter-spacing: var(--ls-display);
     cursor: pointer;
-    padding: 0.5rem 0;
-    opacity: 0.55;
-    transition: opacity 0.3s ease;
-    margin-bottom: 1.5rem;
+    padding: var(--space-2) var(--space-4);
+    transition: color var(--dur-base) var(--ease-soft), letter-spacing var(--dur-base) var(--ease-soft);
+    margin-bottom: var(--space-5);
   }
 
   .auth-enter:hover,
   .auth-enter:focus {
-    opacity: 1;
+    color: var(--void-text);
     outline: none;
   }
 
   .auth-enter:disabled {
-    opacity: 0.25;
+    color: var(--void-text-hint);
     cursor: default;
     letter-spacing: 0.35em;
   }
 
   .auth-privacy {
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
     font-family: var(--font-serif);
-    font-size: 0.72rem;
-    letter-spacing: 0.04em;
+    font-size: var(--text-xs);
+    letter-spacing: var(--ls-ui);
     text-align: center;
-    max-width: 26ch;
-    line-height: 1.5;
-    margin: 0 0 0.5rem;
-    opacity: 0.5;
+    max-width: 30ch;
+    line-height: var(--lh-prose);
+    margin: 0 0 var(--space-2);
   }
 
   .auth-links {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    margin-top: 1.5rem;
+    gap: var(--space-3);
+    margin-top: var(--space-5);
   }
 
   .auth-sep {
     color: var(--void-text-faint);
-    opacity: 0.3;
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
   }
 
   .what-is-this {
     background: transparent;
     border: none;
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
     font-family: var(--font-serif);
-    font-size: 0.72rem;
-    letter-spacing: 0.1em;
+    font-size: var(--text-xs);
+    letter-spacing: var(--ls-label);
     cursor: pointer;
-    padding: 0.4rem 0;
-    opacity: 0.6;
-    transition: opacity 0.3s ease, color 0.3s ease;
+    padding: var(--space-2) var(--space-3);
+    transition: color var(--dur-base) var(--ease-soft);
   }
 
   .what-is-this:hover,
   .what-is-this:focus {
-    opacity: 1;
-    color: var(--void-text-dim);
+    color: var(--void-text);
     outline: none;
   }
 
   .auth-error {
-    color: rgba(220, 110, 100, 0.75);
-    font-size: 0.8rem;
+    color: var(--void-danger);
+    font-size: var(--text-sm);
     font-family: var(--font-serif);
-    margin: 0 0 0.75rem;
+    margin: 0 0 var(--space-3);
   }
 </style>

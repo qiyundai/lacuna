@@ -60,68 +60,67 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1.5rem;
-    max-width: 340px;
-    padding: 0 2rem;
+    gap: var(--space-5);
+    max-width: 360px;
+    padding: 0 var(--space-6);
     text-align: center;
   }
 
   .heading {
-    color: var(--void-text-dim);
+    color: var(--void-text);
     font-family: var(--font-serif);
-    font-size: 1rem;
-    letter-spacing: 0.1em;
+    font-size: var(--text-md);
+    letter-spacing: var(--ls-label);
     margin: 0;
-    opacity: 0.8;
   }
 
   .sub {
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
     font-family: var(--font-serif);
-    font-size: 0.72rem;
-    letter-spacing: 0.04em;
-    line-height: 1.7;
+    font-size: var(--text-xs);
+    letter-spacing: var(--ls-ui);
+    line-height: var(--lh-prose);
     margin: 0;
-    opacity: 0.6;
   }
 
   .code {
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 4px;
     cursor: pointer;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.5rem;
-    padding: 1.25rem 2rem;
-    transition: border-color 0.3s ease;
+    gap: var(--space-3);
+    padding: var(--space-5) var(--space-6);
+    transition: border-color var(--dur-base) var(--ease-soft);
     width: 100%;
   }
 
-  .code:hover {
-    border-color: rgba(255, 255, 255, 0.18);
+  .code:hover,
+  .code:focus {
+    border-color: rgba(255, 255, 255, 0.28);
+    outline: none;
   }
 
   .code-text {
     color: var(--void-text);
-    font-family: var(--font-mono, monospace);
-    font-size: 1.1rem;
-    letter-spacing: 0.18em;
-    opacity: 0.9;
+    font-family: var(--font-mono);
+    font-size: var(--text-md);
+    letter-spacing: var(--ls-display);
   }
 
   .copy-hint {
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
     font-family: var(--font-serif);
-    font-size: 0.65rem;
-    letter-spacing: 0.08em;
-    opacity: 0.5;
-    transition: opacity 0.2s;
+    font-size: var(--text-xs);
+    letter-spacing: var(--ls-label);
+    transition: color var(--dur-fast) var(--ease-soft);
   }
 
-  .code:hover .copy-hint {
-    opacity: 0.9;
+  .code:hover .copy-hint,
+  .code:focus .copy-hint {
+    color: var(--void-text);
   }
 
   .acknowledge {
@@ -130,16 +129,15 @@
     color: var(--void-text-dim);
     cursor: pointer;
     font-family: var(--font-serif);
-    font-size: 0.88rem;
-    letter-spacing: 0.1em;
-    opacity: 0.5;
-    padding: 0.4rem 0;
-    transition: opacity 0.3s ease;
+    font-size: var(--text-sm);
+    letter-spacing: var(--ls-label);
+    padding: var(--space-2) var(--space-4);
+    transition: color var(--dur-base) var(--ease-soft);
   }
 
   .acknowledge:hover,
   .acknowledge:focus {
-    opacity: 1;
+    color: var(--void-text);
     outline: none;
   }
 </style>

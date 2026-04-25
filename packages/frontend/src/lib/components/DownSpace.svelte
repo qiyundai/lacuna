@@ -7,7 +7,6 @@
   import SoulMap from './SoulMap.svelte';
   import LivingMemoir from './LivingMemoir.svelte';
   import UserMenu from './UserMenu.svelte';
-  import { ui } from '$lib/stores/ui.svelte.js';
 
   let { onSwipeUp }: { onSwipeUp: () => void } = $props();
 
@@ -38,7 +37,6 @@
 
 <div
   class="down-space"
-  class:menu-open={ui.menuOpen}
   ontouchstart={touchStart}
   ontouchend={touchEnd}
   role="region"
@@ -78,11 +76,6 @@
     height: 100%;
     background: var(--bg);
     overflow: hidden;
-    transition: filter 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  }
-
-  .down-space.menu-open {
-    filter: blur(8px);
   }
 
   .views {
@@ -102,16 +95,16 @@
 
   .up-hint {
     position: absolute;
-    top: 1.25rem;
+    top: var(--space-5);
     left: 50%;
     transform: translateX(-50%);
     background: none;
     border: none;
     color: var(--void-text-faint);
-    font-size: 1.2rem;
+    font-size: var(--text-md);
     cursor: pointer;
     z-index: 10;
-    padding: 0.5rem;
+    padding: var(--space-2);
     animation: bob-up 2s ease-in-out infinite;
   }
 
@@ -122,23 +115,23 @@
 
   .dots {
     position: absolute;
-    bottom: 1.5rem;
+    bottom: var(--space-5);
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 0.5rem;
+    gap: var(--space-2);
     z-index: 10;
   }
 
   .dot {
-    width: 5px;
-    height: 5px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: var(--void-text-faint);
     border: none;
     cursor: pointer;
     padding: 0;
-    transition: background 0.3s ease;
+    transition: background var(--dur-base) var(--ease-soft);
   }
 
   .dot.active {

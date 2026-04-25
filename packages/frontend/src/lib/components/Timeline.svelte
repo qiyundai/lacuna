@@ -38,65 +38,73 @@
 
 <style>
   .timeline {
-    padding: 4rem 2rem 5rem;
+    padding: var(--space-8) var(--space-6) var(--space-9);
     min-height: 100%;
   }
 
   .state-message {
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
     font-family: var(--font-serif);
-    font-size: 0.9rem;
+    font-size: var(--text-sm);
     text-align: center;
-    padding-top: 3rem;
-    letter-spacing: 0.05em;
+    padding-top: var(--space-7);
+    letter-spacing: var(--ls-ui);
+    line-height: var(--lh-prose);
   }
 
   .entry-list {
     list-style: none;
     display: flex;
     flex-direction: column;
-    gap: 2.5rem;
+    gap: var(--space-7);
   }
 
   .entry {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: var(--space-2);
   }
 
   .entry-date {
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
     font-family: var(--font-mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.08em;
+    font-size: var(--text-xs);
+    letter-spacing: var(--ls-label);
     text-transform: uppercase;
   }
 
   .entry-body {
     color: var(--void-text);
     font-family: var(--font-serif);
-    font-size: 0.95rem;
-    line-height: 1.65;
-    letter-spacing: 0.02em;
+    font-size: var(--text-md);
+    line-height: var(--lh-prose);
+    letter-spacing: var(--ls-prose);
   }
 
   .state-sub {
     display: block;
-    margin-top: 0.5rem;
-    font-size: 0.8rem;
-    opacity: 0.6;
+    margin-top: var(--space-2);
+    font-size: var(--text-xs);
+    color: var(--void-text-faint);
   }
 
   .load-more {
     display: block;
-    margin: 2rem auto 0;
+    margin: var(--space-7) auto 0;
     background: none;
     border: none;
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
     font-family: var(--font-serif);
-    font-size: 0.85rem;
-    letter-spacing: 0.05em;
+    font-size: var(--text-xs);
+    letter-spacing: var(--ls-label);
     cursor: pointer;
-    padding: 0.4rem 0;
+    padding: var(--space-2) var(--space-4);
+    transition: color var(--dur-base) var(--ease-soft);
+  }
+
+  .load-more:hover,
+  .load-more:focus {
+    color: var(--void-text-dim);
+    outline: none;
   }
 </style>
