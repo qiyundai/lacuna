@@ -8,7 +8,7 @@
 
   let { onSwipeDown }: { onSwipeDown: () => void } = $props();
 
-  const MAX_CHARS = 10_000;
+  const MAX_CHARS = 500;
 
   let inputEl = $state<HTMLTextAreaElement | undefined>(undefined);
   let container = $state<HTMLDivElement | undefined>(undefined);
@@ -314,7 +314,7 @@
   }
 
   const charsLeft = $derived(MAX_CHARS - draft.chars.length);
-  const nearLimit = $derived(charsLeft <= 300);
+  const nearLimit = $derived(charsLeft <= 80);
 
   function handleInput(e: Event) {
     const target = e.target as HTMLTextAreaElement;
