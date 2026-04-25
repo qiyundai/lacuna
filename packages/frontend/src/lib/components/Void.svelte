@@ -15,6 +15,7 @@
   let justSolidified = $state(false);
   let dissolving = $state(false);
   let scattering = $state(false);
+  let keyboardShift = $state(0);
 
   let showIntro = $state(false);
   let introVisible = $state(false);
@@ -235,6 +236,9 @@
       setTimeout(() => { introVisible = true; }, 50);
       introTimer = setTimeout(dismissIntro, 5500);
     }
+
+    window.visualViewport?.addEventListener('resize', handleViewportResize);
+    handleViewportResize();
   });
 
   onDestroy(() => {
@@ -245,6 +249,7 @@
     window.removeEventListener('keydown', onEscapeKey);
     window.removeEventListener('visibilitychange', focusInput);
     document.removeEventListener('selectionchange', handleSelectionChange);
+    window.visualViewport?.removeEventListener('resize', handleViewportResize);
   });
 
   function focusInput() {
@@ -380,6 +385,11 @@
   function handleTouchEnd() {
     setTimeout(() => inputEl?.focus(), 0);
   }
+
+  function handleViewportResize() {
+    if (!window.visualViewport) return;
+    keyboardShift = Math.max(0, window.innerHeight - window.visualViewport.height) / 2;
+  }
 </script>
 
 <div
@@ -394,6 +404,7 @@
     --glow-0: {weather.palette.glows[0]};
     --glow-1: {weather.palette.glows[1]};
     --glow-2: {weather.palette.glows[2]};
+    --keyboard-shift: {keyboardShift}px;
   "
 >
   <svg class="filter-defs" aria-hidden="true" width="0" height="0">
@@ -580,7 +591,7 @@
 
   .draft-prose {
     position: absolute;
-    top: 50%;
+    top: calc(50% - var(--keyboard-shift, 0px));
     left: 50%;
     transform: translate(-50%, -50%);
     max-width: 38ch;
@@ -596,7 +607,7 @@
     word-break: break-word;
     white-space: pre-wrap;
     z-index: 2;
-    transition: opacity 0.3s ease;
+    transition: opacity 0.3s ease, top 0.25s ease;
   }
 
   .draft-prose.condensing {
