@@ -18,6 +18,7 @@ export function holdDetector(
 
   function start(e: PointerEvent) {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.pointerType !== 'mouse') e.preventDefault();
     holding = false;
     onHoldStart?.();
     timer = setTimeout(() => {
@@ -40,10 +41,15 @@ export function holdDetector(
     if (Math.abs(e.movementX) > 8 || Math.abs(e.movementY) > 8) cancel();
   }
 
+  function preventContextMenu(e: Event) {
+    e.preventDefault();
+  }
+
   node.addEventListener('pointerdown', start);
   node.addEventListener('pointerup', cancel);
   node.addEventListener('pointercancel', cancel);
   node.addEventListener('pointermove', move);
+  node.addEventListener('contextmenu', preventContextMenu);
 
   return {
     destroy() {
@@ -51,6 +57,7 @@ export function holdDetector(
       node.removeEventListener('pointerup', cancel);
       node.removeEventListener('pointercancel', cancel);
       node.removeEventListener('pointermove', move);
+      node.removeEventListener('contextmenu', preventContextMenu);
       if (timer) clearTimeout(timer);
     },
   };

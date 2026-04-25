@@ -527,6 +527,9 @@
     background: var(--bg);
     overflow: hidden;
     touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
     cursor: text;
     transition: background 1.6s ease;
   }
@@ -570,6 +573,9 @@
     caret-color: transparent;
     cursor: text;
     z-index: 1;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
   }
 
   .draft-prose {
