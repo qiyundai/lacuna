@@ -8,6 +8,8 @@
 
   let { onSwipeDown }: { onSwipeDown: () => void } = $props();
 
+  const MAX_CHARS = 500;
+
   let inputEl = $state<HTMLTextAreaElement | undefined>(undefined);
   let container = $state<HTMLDivElement | undefined>(undefined);
   let solidifying = $state(false);
@@ -311,6 +313,9 @@
     }
   }
 
+  const charsLeft = $derived(MAX_CHARS - draft.chars.length);
+  const nearLimit = $derived(charsLeft <= 80);
+
   function handleInput(e: Event) {
     const target = e.target as HTMLTextAreaElement;
     if (dissolving || scattering) {
@@ -318,7 +323,8 @@
       return;
     }
 
-    const newVal = target.value;
+    let newVal = target.value;
+    if (newVal.length > MAX_CHARS) newVal = newVal.slice(0, MAX_CHARS);
     const oldVal = draft.text;
     const newCursorPos = target.selectionStart ?? newVal.length;
 
@@ -516,6 +522,7 @@
     autocorrect="off"
     autocapitalize="off"
     spellcheck={false}
+    maxlength={MAX_CHARS}
     oninput={handleInput}
     onkeydown={handleKeyDown}
     onclick={focusInput}
@@ -523,6 +530,10 @@
     value={draft.text}
     aria-label="Write here"
   ></textarea>
+
+  {#if nearLimit}
+    <div class="char-limit" aria-live="polite">{charsLeft}</div>
+  {/if}
 
   <button class="down-hint" class:faint={draft.isDirty} onclick={onSwipeDown} aria-label="Go to your story">
     <span>↓</span>
@@ -807,5 +818,25 @@
 
   .intro-hint span {
     display: block;
+  }
+
+  .char-limit {
+    position: absolute;
+    bottom: 2rem;
+    right: 1.5rem;
+    font-family: var(--font-serif);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    color: var(--void-text-faint);
+    opacity: 0.4;
+    pointer-events: none;
+    user-select: none;
+    z-index: 3;
+    animation: fadeIn 0.6s ease forwards;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 0.4; }
   }
 </style>

@@ -5,7 +5,7 @@ import { createEntry, deleteEntry, getEntries } from '../db.js';
 import { analyzeEntriesAsync } from '../ai/analyzer.js';
 import { checkRateLimit } from '../ratelimit.js';
 
-const MAX_ENTRY_LENGTH = 10_000;
+const MAX_ENTRY_LENGTH = 500;
 
 type Variables = { user: JwtPayload };
 
