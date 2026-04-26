@@ -18,7 +18,9 @@ export async function getUserByMagicToken(db: D1Database, token: string): Promis
 
 export async function upsertUser(db: D1Database, email: string): Promise<UserRow> {
   await db
-    .prepare('INSERT INTO users (email) VALUES (?) ON CONFLICT(email) DO NOTHING')
+    .prepare(
+      'INSERT INTO users (email, consent_given_at) VALUES (?, unixepoch()) ON CONFLICT(email) DO NOTHING'
+    )
     .bind(email)
     .run();
   const user = await getUserByEmail(db, email);

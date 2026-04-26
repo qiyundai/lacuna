@@ -11,6 +11,7 @@ export interface UserRow {
   email: string;
   magic_token: string | null;
   magic_token_expires_at: number | null;
+  consent_given_at: number | null;
   created_at: number;
 }
 

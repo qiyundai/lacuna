@@ -6,6 +6,7 @@
   import { initWeather } from '$lib/stores/weather.svelte.js';
   import { requestMagicLink, verifyMagicToken } from '$lib/auth.js';
   import InfoOverlay from '$lib/components/InfoOverlay.svelte';
+  import PrivacyOverlay from '$lib/components/PrivacyOverlay.svelte';
 
   let { children } = $props();
 
@@ -19,9 +20,20 @@
   let submitting = $state(false);
   let showInfo = $state(false);
 
+  let consentGiven = $state(false);
+  let showConsentOverlay = $state(false);
+
+  function handleConsent() {
+    localStorage.setItem('lacuna_consented', '1');
+    consentGiven = true;
+  }
+
   onMount(() => {
     hydrateSession();
     initWeather();
+    const stored = localStorage.getItem('lacuna_consented');
+    consentGiven = !!stored;
+    if (!stored) showConsentOverlay = true;
   });
 
   async function submitEmail(e: SubmitEvent) {
@@ -46,31 +58,37 @@
   <div class="auth-overlay">
     <div class="auth-glow auth-glow-a" aria-hidden="true"></div>
     <div class="auth-glow auth-glow-b" aria-hidden="true"></div>
-    <div class="auth-content">
-      <p class="app-name">lacuna</p>
-      {#if linkSent}
-        <p class="auth-message">check your email</p>
-      {:else}
-        <form onsubmit={submitEmail} class="auth-form">
-          <input
-            type="email"
-            placeholder="your email"
-            bind:value={email}
-            autocomplete="email"
-            autocapitalize="none"
-            spellcheck={false}
-            class="auth-input"
-          />
-          <button type="submit" class="auth-submit" disabled={submitting}>enter</button>
-          {#if authError}
-            <p class="auth-error">{authError}</p>
-          {/if}
-          <p class="auth-privacy">entries are privately analyzed by ai to surface patterns in your story</p>
-        </form>
-      {/if}
-      <button class="what-is-this" onclick={() => (showInfo = true)}>what is this</button>
-    </div>
+    {#if consentGiven}
+      <div class="auth-content">
+        <p class="app-name">lacuna</p>
+        {#if linkSent}
+          <p class="auth-message">check your email</p>
+        {:else}
+          <form onsubmit={submitEmail} class="auth-form">
+            <input
+              type="email"
+              placeholder="your email"
+              bind:value={email}
+              autocomplete="email"
+              autocapitalize="none"
+              spellcheck={false}
+              class="auth-input"
+            />
+            <button type="submit" class="auth-submit" disabled={submitting}>enter</button>
+            {#if authError}
+              <p class="auth-error">{authError}</p>
+            {/if}
+          </form>
+        {/if}
+        <button class="what-is-this" onclick={() => (showInfo = true)}>what is this</button>
+      </div>
+    {/if}
   </div>
+  <PrivacyOverlay
+    bind:show={showConsentOverlay}
+    consentMode={true}
+    onConsent={handleConsent}
+  />
   <InfoOverlay bind:show={showInfo} />
 {:else}
   {@render children()}
@@ -217,15 +235,4 @@
     font-family: var(--font-serif);
   }
 
-  .auth-privacy {
-    color: var(--void-text-faint);
-    font-family: var(--font-serif);
-    font-size: 0.72rem;
-    letter-spacing: 0.04em;
-    text-align: center;
-    max-width: 26ch;
-    line-height: 1.5;
-    margin: 0;
-    opacity: 0.5;
-  }
 </style>
