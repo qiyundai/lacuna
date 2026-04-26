@@ -1,35 +1,22 @@
 <script lang="ts">
   import { session, signOut } from '$lib/stores/session.svelte.js';
-  import { ui } from '$lib/stores/ui.svelte.js';
   import { api } from '$lib/api.js';
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import InfoOverlay from './InfoOverlay.svelte';
-  import PrivacyOverlay from './PrivacyOverlay.svelte';
 
   let open = $state(false);
   let confirming = $state(false);
   let showInfo = $state(false);
-  let showPrivacy = $state(false);
-  let emailInput = $state('');
-  let emailSaving = $state(false);
-  let emailSaved = $state(false);
-  let emailError = $state('');
-  let showEmailForm = $state(false);
 
   function toggle() {
     open = !open;
-    if (!open) { confirming = false; showEmailForm = false; emailInput = ''; emailError = ''; }
-    ui.menuOpen = open;
+    if (!open) confirming = false;
   }
 
   function close() {
     open = false;
     confirming = false;
-    showEmailForm = false;
-    emailInput = '';
-    emailError = '';
-    ui.menuOpen = false;
   }
 
   async function handleDelete() {
@@ -41,30 +28,9 @@
     signOut();
   }
 
-  async function saveEmail() {
-    const email = emailInput.trim().toLowerCase();
-    if (!email || emailSaving) return;
-    emailSaving = true;
-    emailError = '';
-    try {
-      await api.auth.setEmail(email);
-      emailSaved = true;
-      showEmailForm = false;
-      emailInput = '';
-      setTimeout(() => { emailSaved = false; }, 3000);
-    } catch (err: unknown) {
-      const code = (err as { code?: string }).code;
-      emailError = code === 'EMAIL_TAKEN' ? 'already in use' : 'something went wrong';
-    } finally {
-      emailSaving = false;
-    }
-  }
-
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
-      if (showInfo) { showInfo = false; ui.menuOpen = false; return; }
-      if (showPrivacy) { showPrivacy = false; ui.menuOpen = false; return; }
-      if (showEmailForm) { showEmailForm = false; emailInput = ''; emailError = ''; return; }
+      if (showInfo) { showInfo = false; return; }
       if (open) { close(); return; }
     }
   }
@@ -97,31 +63,9 @@
   >
     <button class="overlay-backdrop" onclick={close} aria-label="Close menu" tabindex="-1"></button>
     <div class="menu-content">
+      <p class="menu-email">{session.user?.email}</p>
       <nav class="menu-actions">
         <button class="menu-item" onclick={() => { open = false; confirming = false; showInfo = true; }}>what is this</button>
-        <button class="menu-item" onclick={() => { open = false; confirming = false; showPrivacy = true; }}>data & privacy</button>
-        {#if showEmailForm}
-          <div class="email-form">
-            <input
-              class="email-input"
-              type="email"
-              placeholder="recovery email"
-              bind:value={emailInput}
-              autocomplete="email"
-              autocapitalize="none"
-              spellcheck={false}
-              onkeydown={(e) => e.key === 'Enter' && saveEmail()}
-            />
-            {#if emailError}<p class="email-error">{emailError}</p>{/if}
-            <button class="menu-item email-save" onclick={saveEmail} disabled={emailSaving || !emailInput.trim()}>
-              {emailSaving ? '·····' : 'save'}
-            </button>
-          </div>
-        {:else}
-          <button class="menu-item" onclick={() => { showEmailForm = true; emailError = ''; }}>
-            {emailSaved ? 'email saved ·' : 'add recovery email'}
-          </button>
-        {/if}
         <button class="menu-item" onclick={signOut}>sign out</button>
         <button class="menu-item danger" onclick={handleDelete}>
           {confirming ? 'sure?' : 'delete account'}
@@ -132,7 +76,6 @@
 {/if}
 
 <InfoOverlay bind:show={showInfo} />
-<PrivacyOverlay bind:show={showPrivacy} />
 
 <style>
   .trigger {
@@ -192,6 +135,14 @@
     gap: 3rem;
   }
 
+  .menu-email {
+    color: var(--void-text-faint);
+    font-family: var(--font-serif);
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    margin: 0;
+  }
+
   .menu-actions {
     display: flex;
     flex-direction: column;
@@ -217,50 +168,6 @@
     opacity: 1;
     color: var(--void-text);
     outline: none;
-  }
-
-  .email-form {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.6rem;
-    width: 100%;
-  }
-
-  .email-input {
-    background: transparent;
-    border: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
-    color: var(--void-text);
-    font-family: var(--font-serif);
-    font-size: 0.9rem;
-    letter-spacing: 0.03em;
-    outline: none;
-    padding: 0.4rem 0;
-    text-align: center;
-    width: 200px;
-    transition: border-color 0.3s ease;
-  }
-
-  .email-input:focus {
-    border-bottom-color: rgba(255, 255, 255, 0.35);
-  }
-
-  .email-input::placeholder {
-    color: var(--void-text-hint);
-    opacity: 0.4;
-  }
-
-  .email-save:disabled {
-    opacity: 0.2;
-    cursor: default;
-  }
-
-  .email-error {
-    color: rgba(220, 110, 100, 0.75);
-    font-family: var(--font-serif);
-    font-size: 0.72rem;
-    margin: 0;
   }
 
   .menu-item.danger {

@@ -142,29 +142,30 @@
 
 <style>
   .soul-map {
-    padding: 3.5rem 1.5rem 5rem;
+    padding: var(--space-8) var(--space-6) var(--space-9);
     min-height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2rem;
+    gap: var(--space-6);
   }
 
   .state-message {
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
     font-family: var(--font-serif);
-    font-size: 0.9rem;
+    font-size: var(--text-sm);
     text-align: center;
-    padding-top: 3rem;
-    letter-spacing: 0.04em;
+    padding-top: var(--space-7);
+    letter-spacing: var(--ls-ui);
+    line-height: var(--lh-prose);
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: var(--space-2);
   }
 
   .sub {
-    font-size: 0.75rem;
-    opacity: 0.6;
+    font-size: var(--text-xs);
+    color: var(--void-text-faint);
   }
 
   .map-svg {
@@ -188,23 +189,20 @@
   .labels {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: var(--space-3);
     width: 100%;
-    max-width: 260px;
+    max-width: 280px;
   }
 
   .label {
     display: flex;
     flex-direction: column;
-    gap: 0.15rem;
-    transition: opacity 0.3s ease;
-    opacity: 0.4;
+    gap: var(--space-1);
+    transition: opacity var(--dur-base) var(--ease-soft);
+    opacity: 0.5;
   }
 
-  .label.active {
-    opacity: 1;
-  }
-
+  .label.active,
   .label.hovered {
     opacity: 1;
   }
@@ -212,15 +210,15 @@
   .label-text {
     color: var(--void-text-dim);
     font-family: var(--font-serif);
-    font-size: 0.8rem;
-    letter-spacing: 0.04em;
+    font-size: var(--text-xs);
+    letter-spacing: var(--ls-ui);
   }
 
   .label-summary {
-    color: var(--void-text-faint);
+    color: var(--void-text-hint);
     font-family: var(--font-serif);
-    font-size: 0.72rem;
-    line-height: 1.5;
+    font-size: var(--text-xs);
+    line-height: var(--lh-ui);
     font-style: italic;
   }
 </style>
