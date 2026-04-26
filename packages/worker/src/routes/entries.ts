@@ -27,8 +27,11 @@ entriesRoute.get('/', async (c) => {
 entriesRoute.post('/', async (c) => {
   const user = c.get('user');
 
-  // 50 entries per user per hour
-  const allowed = await checkRateLimit(c.env.DB, `entry:${user.sub}`, 50, 3600);
+  // 50 entries per user per hour — fail-open so a missing table never blocks writes
+  const allowed = await checkRateLimit(c.env.DB, `entry:${user.sub}`, 50, 3600).catch((err) => {
+    console.error('Rate limit check failed:', err);
+    return true;
+  });
   if (!allowed) {
     return c.json({ error: { code: 'RATE_LIMITED', message: 'Too many entries' } }, 429);
   }
