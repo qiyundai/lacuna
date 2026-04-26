@@ -4,6 +4,7 @@
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import InfoOverlay from './InfoOverlay.svelte';
+  import { overlayStore } from '$lib/stores/overlay.svelte.js';
 
   let open = $state(false);
   let confirming = $state(false);
@@ -34,6 +35,11 @@
       if (open) { close(); return; }
     }
   }
+
+  $effect(() => {
+    overlayStore.open = open;
+    return () => { overlayStore.open = false; };
+  });
 
   // Escapes transformed ancestors (space-container uses translateY, which
   // traps position:fixed children). Appending to body restores true fixed.

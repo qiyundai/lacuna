@@ -7,6 +7,7 @@
   import SoulMap from './SoulMap.svelte';
   import LivingMemoir from './LivingMemoir.svelte';
   import UserMenu from './UserMenu.svelte';
+  import { overlayStore } from '$lib/stores/overlay.svelte.js';
 
   let { onSwipeUp }: { onSwipeUp: () => void } = $props();
 
@@ -37,6 +38,7 @@
 
 <div
   class="down-space"
+  class:menu-open={overlayStore.open}
   ontouchstart={touchStart}
   ontouchend={touchEnd}
   role="region"
@@ -76,6 +78,11 @@
     height: 100%;
     background: var(--bg);
     overflow: hidden;
+    transition: filter var(--dur-slow) var(--ease-soft);
+  }
+
+  .down-space.menu-open {
+    filter: blur(12px);
   }
 
   .views {
