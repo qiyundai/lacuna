@@ -52,11 +52,11 @@ lacuna/
 │   │   └── static/_redirects ← "/* /index.html 200" for Pages SPA routing
 │   └── worker/               ← Cloudflare Worker
 │       ├── wrangler.toml     ← D1 binding, FRONTEND_ORIGIN var
+│       ├── migrations/       ← numbered D1 migrations (applied by CI on deploy)
 │       └── src/
 │           ├── index.ts      ← Hono app entry, CORS, route registration
 │           ├── types.ts      ← Env, row interfaces, JwtPayload
 │           ├── db.ts         ← D1 query helpers
-│           ├── schema.sql    ← canonical D1 schema (run with wrangler d1 execute)
 │           ├── middleware/auth.ts   ← JWT verification (jose)
 │           ├── routes/       ← auth, entries, patterns, memoir
 │           └── ai/           ← models, prompts, analyzer
@@ -92,9 +92,8 @@ pnpm install
 cd packages/worker
 wrangler d1 create lacuna-db
 
-# 3. Apply schema locally and remotely
-wrangler d1 execute lacuna-db --local  --file=src/schema.sql
-wrangler d1 execute lacuna-db --remote --file=src/schema.sql
+# 3. Apply migrations locally (remote is applied automatically by CI on deploy)
+pnpm -F worker db:migrate:local
 
 # 4. Set secrets (required for auth and AI)
 wrangler secret put JWT_SECRET         # any strong random string
@@ -104,6 +103,17 @@ wrangler secret put ANTHROPIC_API_KEY  # from console.anthropic.com
 # 5. Set FRONTEND_ORIGIN in wrangler.toml [vars] for production
 #    (already set to http://localhost:5173 for local dev)
 ```
+
+### Adding a schema change
+
+```bash
+cd packages/worker
+wrangler d1 migrations create lacuna-db add_thing   # creates migrations/NNNN_add_thing.sql
+# edit the file, then:
+pnpm db:migrate:local                                # apply locally
+```
+
+Commit the new migration file with the code that depends on it. CI applies it to remote D1 before deploying the worker on push to `main` — never run `db:migrate:remote` by hand.
 
 ---
 

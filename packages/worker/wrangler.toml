@@ -7,6 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 binding = "DB"
 database_name = "lacuna-db"
 database_id = "aa2e68ac-6b77-4c8f-9947-6865d5e8d330"
+migrations_dir = "migrations"
 
 [vars]
 FRONTEND_ORIGIN = "https://lacuna-app.pages.dev"
