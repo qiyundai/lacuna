@@ -60,9 +60,9 @@
     role="dialog"
     aria-modal="true"
     aria-label="Menu"
+    onclick={close}
   >
-    <button class="overlay-backdrop" onclick={close} aria-label="Close menu" tabindex="-1"></button>
-    <div class="menu-content">
+    <div class="menu-content" onclick={(e) => e.stopPropagation()}>
       <p class="menu-email">{session.user?.email}</p>
       <nav class="menu-actions">
         <button class="menu-item" onclick={() => { open = false; confirming = false; showInfo = true; }}>what is this</button>
@@ -101,7 +101,6 @@
     outline: none;
   }
 
-  /* Both overlays share this full-screen shell */
   .screen-overlay {
     position: fixed;
     inset: 0;
@@ -109,18 +108,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-
-  .overlay-backdrop {
-    position: absolute;
-    inset: 0;
-    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    background: rgba(19, 16, 16, 0.82);
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
-    border: none;
-    width: 100%;
-    height: 100%;
-    padding: 0;
     cursor: pointer;
   }
 
@@ -133,6 +124,7 @@
     flex-direction: column;
     align-items: center;
     gap: 3rem;
+    cursor: default;
   }
 
   .menu-email {

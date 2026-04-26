@@ -51,7 +51,8 @@
   }
 
   .privacy-overlay {
-    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    background: rgba(19, 16, 16, 0.82);
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
     cursor: pointer;
