@@ -4,11 +4,13 @@
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import InfoOverlay from './InfoOverlay.svelte';
+  import PrivacyOverlay from './PrivacyOverlay.svelte';
   import { overlayStore } from '$lib/stores/overlay.svelte.js';
 
   let open = $state(false);
   let confirming = $state(false);
   let showInfo = $state(false);
+  let showPrivacy = $state(false);
 
   function toggle() {
     open = !open;
@@ -32,12 +34,13 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       if (showInfo) { showInfo = false; return; }
+      if (showPrivacy) { showPrivacy = false; return; }
       if (open) { close(); return; }
     }
   }
 
   $effect(() => {
-    overlayStore.open = open;
+    overlayStore.open = open || showInfo || showPrivacy;
     return () => { overlayStore.open = false; };
   });
 
@@ -72,6 +75,7 @@
       <p class="menu-email">{session.user?.email}</p>
       <nav class="menu-actions">
         <button class="menu-item" onclick={() => { open = false; confirming = false; showInfo = true; }}>what is this</button>
+        <button class="menu-item" onclick={() => { open = false; confirming = false; showPrivacy = true; }}>data & privacy</button>
         <button class="menu-item" onclick={signOut}>sign out</button>
         <button class="menu-item danger" onclick={handleDelete}>
           {confirming ? 'sure?' : 'delete account'}
@@ -82,6 +86,7 @@
 {/if}
 
 <InfoOverlay bind:show={showInfo} />
+<PrivacyOverlay bind:show={showPrivacy} />
 
 <style>
   .trigger {

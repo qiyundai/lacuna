@@ -19,6 +19,7 @@
   let authError = $state('');
   let submitting = $state(false);
   let showInfo = $state(false);
+  let showPrivacy = $state(false);
 
   let consentGiven = $state(false);
   let showConsentOverlay = $state(false);
@@ -55,7 +56,7 @@
 {#if session.status === 'loading'}
   <!-- Silent loading — void background shows through -->
 {:else if session.status === 'unauthed' && !isAuthRoute}
-  <div class="auth-overlay">
+  <div class="auth-overlay" class:blurred={showInfo || showPrivacy}>
     <div class="auth-glow auth-glow-a" aria-hidden="true"></div>
     <div class="auth-glow auth-glow-b" aria-hidden="true"></div>
     {#if consentGiven}
@@ -80,7 +81,11 @@
             {/if}
           </form>
         {/if}
-        <button class="what-is-this" onclick={() => (showInfo = true)}>what is this</button>
+        <div class="auth-links">
+          <button class="what-is-this" onclick={() => (showInfo = true)}>what is this</button>
+          <span class="auth-sep" aria-hidden="true">·</span>
+          <button class="what-is-this" onclick={() => (showPrivacy = true)}>data & privacy</button>
+        </div>
       </div>
     {/if}
   </div>
@@ -89,6 +94,7 @@
     consentMode={true}
     onConsent={handleConsent}
   />
+  <PrivacyOverlay bind:show={showPrivacy} />
   <InfoOverlay bind:show={showInfo} />
 {:else}
   {@render children()}
@@ -103,6 +109,11 @@
     justify-content: center;
     background: var(--bg);
     overflow: hidden;
+    transition: filter 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  .auth-overlay.blurred {
+    filter: blur(8px);
   }
 
   .auth-content {
@@ -154,6 +165,19 @@
     opacity: 0.7;
   }
 
+  .auth-links {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 1.5rem;
+  }
+
+  .auth-sep {
+    color: var(--void-text-faint);
+    opacity: 0.3;
+    font-size: 0.72rem;
+  }
+
   .what-is-this {
     background: transparent;
     border: none;
@@ -163,7 +187,6 @@
     letter-spacing: 0.1em;
     cursor: pointer;
     padding: 0.4rem 0;
-    margin-top: 1.5rem;
     opacity: 0.6;
     transition: opacity 0.3s ease, color 0.3s ease;
   }
