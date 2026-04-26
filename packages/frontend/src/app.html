@@ -5,10 +5,20 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
 		<meta name="theme-color" content="#0a0a0a" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<meta name="apple-mobile-web-app-title" content="Lacuna" />
+		<link rel="manifest" href="/manifest.json" />
+		<link rel="apple-touch-icon" href="/icon.png" />
+		<link rel="icon" type="image/png" href="/icon.png" />
 		<title>Lacuna</title>
 		%sveltekit.head%
 	</head>
 	<body>
+		<script>
+			if ('serviceWorker' in navigator) {
+				window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+			}
+		</script>
 		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>
