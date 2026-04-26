@@ -1,189 +1,48 @@
-import type {
-  ChallengeRow,
-  CredentialRow,
-  EmailOTPRow,
-  EntryRow,
-  MemoirSnapshotRow,
-  PatternRow,
-  UserRow,
-} from './types.js';
-
-// ── Users ────────────────────────────────────────────────────────────────────
-
-export async function getUserById(db: D1Database, id: string): Promise<UserRow | null> {
-  return db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first<UserRow>();
-}
+import type { EntryRow, MemoirSnapshotRow, PatternRow, UserRow } from './types.js';
 
 export async function getUserByEmail(db: D1Database, email: string): Promise<UserRow | null> {
   return db.prepare('SELECT * FROM users WHERE email = ?').bind(email).first<UserRow>();
 }
 
-export async function setUserEmail(db: D1Database, userId: string, email: string): Promise<void> {
-  await db.prepare('UPDATE users SET email = ? WHERE id = ?').bind(email, userId).run();
+export async function getUserById(db: D1Database, id: string): Promise<UserRow | null> {
+  return db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first<UserRow>();
 }
 
-export async function setRecoveryCodeHash(db: D1Database, userId: string, hash: string): Promise<void> {
-  await db.prepare('UPDATE users SET recovery_code_hash = ? WHERE id = ?').bind(hash, userId).run();
-}
-
-export async function setAiConsent(db: D1Database, userId: string): Promise<void> {
-  const now = Math.floor(Date.now() / 1000);
-  await db.prepare('UPDATE users SET ai_consent_at = ? WHERE id = ? AND ai_consent_at IS NULL')
-    .bind(now, userId).run();
-}
-
-export async function getUserByRecoveryHash(db: D1Database, hash: string): Promise<UserRow | null> {
+export async function getUserByMagicToken(db: D1Database, token: string): Promise<UserRow | null> {
   return db
-    .prepare('SELECT * FROM users WHERE recovery_code_hash = ?')
-    .bind(hash)
+    .prepare('SELECT * FROM users WHERE magic_token = ?')
+    .bind(token)
     .first<UserRow>();
 }
 
-export async function storeEmailOTP(
-  db: D1Database,
-  userId: string,
-  codeHash: string,
-  ttlSeconds = 600
-): Promise<void> {
-  const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
-  // One OTP per user at a time — delete any existing before inserting
-  await db.prepare('DELETE FROM email_otps WHERE user_id = ?').bind(userId).run();
+export async function upsertUser(db: D1Database, email: string): Promise<UserRow> {
   await db
-    .prepare('INSERT INTO email_otps (user_id, code_hash, expires_at) VALUES (?, ?, ?)')
-    .bind(userId, codeHash, expiresAt)
+    .prepare('INSERT INTO users (email) VALUES (?) ON CONFLICT(email) DO NOTHING')
+    .bind(email)
     .run();
-}
-
-export async function consumeEmailOTP(
-  db: D1Database,
-  userId: string,
-  codeHash: string
-): Promise<boolean> {
-  const now = Math.floor(Date.now() / 1000);
-  const row = await db
-    .prepare(
-      'SELECT id FROM email_otps WHERE user_id = ? AND code_hash = ? AND expires_at > ?'
-    )
-    .bind(userId, codeHash, now)
-    .first<EmailOTPRow>();
-  if (!row) return false;
-  await db.prepare('DELETE FROM email_otps WHERE id = ?').bind(row.id).run();
-  return true;
-}
-
-export async function createUser(db: D1Database): Promise<UserRow> {
-  const id = crypto.randomUUID().replace(/-/g, '');
-  await db.prepare('INSERT INTO users (id) VALUES (?)').bind(id).run();
-  const user = await getUserById(db, id);
-  if (!user) throw new Error('Failed to create user');
+  const user = await getUserByEmail(db, email);
+  if (!user) throw new Error('Failed to upsert user');
   return user;
 }
 
-export async function deleteUser(db: D1Database, userId: string): Promise<void> {
-  await db.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
-}
-
-// ── Challenges ───────────────────────────────────────────────────────────────
-
-export async function storeChallenge(
-  db: D1Database,
-  challenge: string,
-  type: 'registration' | 'authentication',
-  userId: string | null,
-  ttlSeconds = 300
-): Promise<void> {
-  const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
-  await db
-    .prepare(
-      'INSERT OR REPLACE INTO passkey_challenges (challenge, user_id, type, expires_at) VALUES (?, ?, ?, ?)'
-    )
-    .bind(challenge, userId, type, expiresAt)
-    .run();
-}
-
-export async function consumeChallenge(
-  db: D1Database,
-  challenge: string,
-  type: 'registration' | 'authentication'
-): Promise<ChallengeRow | null> {
-  const now = Math.floor(Date.now() / 1000);
-  const row = await db
-    .prepare(
-      'SELECT * FROM passkey_challenges WHERE challenge = ? AND type = ? AND expires_at > ?'
-    )
-    .bind(challenge, type, now)
-    .first<ChallengeRow>();
-  if (!row) return null;
-  await db.prepare('DELETE FROM passkey_challenges WHERE challenge = ?').bind(challenge).run();
-  return row;
-}
-
-export async function consumeChallengeByUser(
+export async function setMagicToken(
   db: D1Database,
   userId: string,
-  type: 'registration' | 'authentication'
-): Promise<ChallengeRow | null> {
-  const now = Math.floor(Date.now() / 1000);
-  const row = await db
-    .prepare(
-      'SELECT * FROM passkey_challenges WHERE user_id = ? AND type = ? AND expires_at > ? LIMIT 1'
-    )
-    .bind(userId, type, now)
-    .first<ChallengeRow>();
-  if (!row) return null;
-  await db
-    .prepare('DELETE FROM passkey_challenges WHERE challenge = ?')
-    .bind(row.challenge)
-    .run();
-  return row;
-}
-
-export async function expireChallenges(db: D1Database): Promise<void> {
-  await db
-    .prepare('DELETE FROM passkey_challenges WHERE expires_at <= ?')
-    .bind(Math.floor(Date.now() / 1000))
-    .run();
-}
-
-// ── Credentials ──────────────────────────────────────────────────────────────
-
-export async function createCredential(
-  db: D1Database,
-  credentialId: string,
-  userId: string,
-  publicKey: string,
-  signCount: number
+  token: string,
+  expiresAt: number
 ): Promise<void> {
   await db
-    .prepare(
-      'INSERT INTO passkey_credentials (id, user_id, public_key, sign_count) VALUES (?, ?, ?, ?)'
-    )
-    .bind(credentialId, userId, publicKey, signCount)
+    .prepare('UPDATE users SET magic_token = ?, magic_token_expires_at = ? WHERE id = ?')
+    .bind(token, expiresAt, userId)
     .run();
 }
 
-export async function getCredentialById(
-  db: D1Database,
-  credentialId: string
-): Promise<CredentialRow | null> {
-  return db
-    .prepare('SELECT * FROM passkey_credentials WHERE id = ?')
-    .bind(credentialId)
-    .first<CredentialRow>();
-}
-
-export async function updateCredentialSignCount(
-  db: D1Database,
-  credentialId: string,
-  signCount: number
-): Promise<void> {
+export async function clearMagicToken(db: D1Database, userId: string): Promise<void> {
   await db
-    .prepare('UPDATE passkey_credentials SET sign_count = ? WHERE id = ?')
-    .bind(signCount, credentialId)
+    .prepare('UPDATE users SET magic_token = NULL, magic_token_expires_at = NULL WHERE id = ?')
+    .bind(userId)
     .run();
 }
-
-// ── Entries ──────────────────────────────────────────────────────────────────
 
 export async function createEntry(
   db: D1Database,
@@ -218,6 +77,7 @@ export async function getEntries(
       .bind(cursor, userId)
       .first<{ created_at: number }>();
     if (!cursorEntry) return [];
+    // Compound cursor: (created_at DESC, id DESC) avoids skipping rows with identical timestamps
     const result = await db
       .prepare(
         `SELECT * FROM entries
@@ -243,20 +103,6 @@ export async function getAllEntriesForUser(db: D1Database, userId: string): Prom
     .all<EntryRow>();
   return result.results;
 }
-
-export async function deleteEntry(
-  db: D1Database,
-  userId: string,
-  entryId: string
-): Promise<boolean> {
-  const result = await db
-    .prepare('DELETE FROM entries WHERE id = ? AND user_id = ?')
-    .bind(entryId, userId)
-    .run();
-  return (result.meta.changes ?? 0) > 0;
-}
-
-// ── Patterns ─────────────────────────────────────────────────────────────────
 
 export async function getPatterns(db: D1Database, userId: string): Promise<PatternRow | null> {
   return db.prepare('SELECT * FROM patterns WHERE user_id = ?').bind(userId).first<PatternRow>();
@@ -296,8 +142,6 @@ export async function upsertPatterns(
   }
 }
 
-// ── Memoir ───────────────────────────────────────────────────────────────────
-
 export async function getLatestMemoir(
   db: D1Database,
   userId: string
@@ -306,6 +150,22 @@ export async function getLatestMemoir(
     .prepare('SELECT * FROM memoir_snapshots WHERE user_id = ? ORDER BY generated_at DESC LIMIT 1')
     .bind(userId)
     .first<MemoirSnapshotRow>();
+}
+
+export async function deleteUser(db: D1Database, userId: string): Promise<void> {
+  await db.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
+}
+
+export async function deleteEntry(
+  db: D1Database,
+  userId: string,
+  entryId: string
+): Promise<boolean> {
+  const result = await db
+    .prepare('DELETE FROM entries WHERE id = ? AND user_id = ?')
+    .bind(entryId, userId)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
 }
 
 export async function createMemoirSnapshot(

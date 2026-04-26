@@ -4,67 +4,38 @@
   import { page } from '$app/state';
   import { session, hydrateSession, setAuthed } from '$lib/stores/session.svelte.js';
   import { initWeather } from '$lib/stores/weather.svelte.js';
-  import { authenticatePasskey, registerPasskey } from '$lib/auth.js';
+  import { requestMagicLink, verifyMagicToken } from '$lib/auth.js';
   import InfoOverlay from '$lib/components/InfoOverlay.svelte';
-  import RecoveryCodeSave from '$lib/components/RecoveryCodeSave.svelte';
-  import RecoveryOverlay from '$lib/components/RecoveryOverlay.svelte';
 
   let { children } = $props();
 
+  // The verify route must always render so it can exchange the token for a JWT,
+  // even before the session is authed.
   let isAuthRoute = $derived(page.url.pathname.startsWith('/auth/'));
 
-  let entering = $state(false);
+  let email = $state('');
+  let linkSent = $state(false);
   let authError = $state('');
+  let submitting = $state(false);
   let showInfo = $state(false);
-  let showRecovery = $state(false);
-
-  // Pending state: don't set authed until user acknowledges the recovery code
-  let pendingUser = $state<{ id: string } | null>(null);
-  let pendingRecoveryCode = $state('');
 
   onMount(() => {
     hydrateSession();
     initWeather();
   });
 
-  async function enter() {
-    if (entering) return;
-    entering = true;
+  async function submitEmail(e: SubmitEvent) {
+    e.preventDefault();
+    if (!email.trim() || submitting) return;
+    submitting = true;
     authError = '';
     try {
-      setAuthed(await authenticatePasskey());
-    } catch (e: unknown) {
-      const name = e instanceof Error ? e.name : '';
-      if (name === 'NotAllowedError') { entering = false; return; }
-      try {
-        const result = await registerPasskey();
-        // Hold the session until user saves their recovery code
-        pendingUser = { id: result.id };
-        pendingRecoveryCode = result.recoveryCode;
-        entering = false;
-      } catch (r: unknown) {
-        if ((r instanceof Error ? r.name : '') !== 'NotAllowedError') {
-          authError = 'passkey unavailable';
-        }
-        entering = false;
-      }
-    }
-  }
-
-  function acknowledgeRecoveryCode() {
-    if (!pendingUser) return;
-    setAuthed(pendingUser);
-    pendingUser = null;
-    pendingRecoveryCode = '';
-  }
-
-  function handleRecoverySuccess(user: { id: string }, newRecoveryCode?: string) {
-    if (newRecoveryCode) {
-      // Recovery code was used — overlay shows the new code, then closes via onClose
-      // Session is already set in verifyRecoveryCode, just close the recovery overlay on done
-    } else {
-      showRecovery = false;
-      setAuthed(user);
+      await requestMagicLink(email.trim().toLowerCase());
+      linkSent = true;
+    } catch {
+      authError = 'Something went wrong. Try again.';
+    } finally {
+      submitting = false;
     }
   }
 </script>
@@ -72,36 +43,35 @@
 {#if session.status === 'loading'}
   <!-- Silent loading — void background shows through -->
 {:else if session.status === 'unauthed' && !isAuthRoute}
-  {#if pendingRecoveryCode}
-    <RecoveryCodeSave code={pendingRecoveryCode} onAcknowledge={acknowledgeRecoveryCode} />
-  {:else}
-    <div class="auth-overlay">
-      <div class="auth-glow auth-glow-a" aria-hidden="true"></div>
-      <div class="auth-glow auth-glow-b" aria-hidden="true"></div>
-      <div class="auth-content">
-        <p class="app-name">lacuna</p>
-        <button class="auth-enter" onclick={enter} disabled={entering}>
-          {entering ? '·····' : 'enter'}
-        </button>
-        {#if authError}
-          <p class="auth-error">{authError}</p>
-        {/if}
-        <p class="auth-privacy">entries are privately analyzed by ai to surface patterns in your story</p>
-        <div class="auth-links">
-          <button class="what-is-this" onclick={() => (showInfo = true)}>what is this</button>
-          <span class="auth-sep" aria-hidden="true">·</span>
-          <button class="what-is-this" onclick={() => (showRecovery = true)}>can't enter?</button>
-        </div>
-      </div>
+  <div class="auth-overlay">
+    <div class="auth-glow auth-glow-a" aria-hidden="true"></div>
+    <div class="auth-glow auth-glow-b" aria-hidden="true"></div>
+    <div class="auth-content">
+      <p class="app-name">lacuna</p>
+      {#if linkSent}
+        <p class="auth-message">check your email</p>
+      {:else}
+        <form onsubmit={submitEmail} class="auth-form">
+          <input
+            type="email"
+            placeholder="your email"
+            bind:value={email}
+            autocomplete="email"
+            autocapitalize="none"
+            spellcheck={false}
+            class="auth-input"
+          />
+          <button type="submit" class="auth-submit" disabled={submitting}>enter</button>
+          {#if authError}
+            <p class="auth-error">{authError}</p>
+          {/if}
+          <p class="auth-privacy">entries are privately analyzed by ai to surface patterns in your story</p>
+        </form>
+      {/if}
+      <button class="what-is-this" onclick={() => (showInfo = true)}>what is this</button>
     </div>
-    <InfoOverlay bind:show={showInfo} />
-    {#if showRecovery}
-      <RecoveryOverlay
-        onSuccess={handleRecoverySuccess}
-        onClose={() => (showRecovery = false)}
-      />
-    {/if}
-  {/if}
+  </div>
+  <InfoOverlay bind:show={showInfo} />
 {:else}
   {@render children()}
 {/if}
@@ -157,84 +127,105 @@
   }
 
   .app-name {
-    color: var(--void-text);
-    font-family: var(--font-serif);
-    font-size: var(--text-xl);
-    letter-spacing: var(--ls-display);
-    font-weight: 400;
-    margin: 0 0 var(--space-7);
-  }
-
-  .auth-enter {
-    background: transparent;
-    border: none;
     color: var(--void-text-dim);
     font-family: var(--font-serif);
-    font-size: var(--text-md);
-    letter-spacing: var(--ls-display);
-    cursor: pointer;
-    padding: var(--space-2) var(--space-4);
-    transition: color var(--dur-base) var(--ease-soft), letter-spacing var(--dur-base) var(--ease-soft);
-    margin-bottom: var(--space-5);
-  }
-
-  .auth-enter:hover,
-  .auth-enter:focus {
-    color: var(--void-text);
-    outline: none;
-  }
-
-  .auth-enter:disabled {
-    color: var(--void-text-hint);
-    cursor: default;
-    letter-spacing: 0.35em;
-  }
-
-  .auth-privacy {
-    color: var(--void-text-hint);
-    font-family: var(--font-serif);
-    font-size: var(--text-xs);
-    letter-spacing: var(--ls-ui);
-    text-align: center;
-    max-width: 30ch;
-    line-height: var(--lh-prose);
-    margin: 0 0 var(--space-2);
-  }
-
-  .auth-links {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    margin-top: var(--space-5);
-  }
-
-  .auth-sep {
-    color: var(--void-text-faint);
-    font-size: var(--text-xs);
+    font-size: 1.6rem;
+    letter-spacing: 0.18em;
+    font-weight: 400;
+    margin: 0 0 2.5rem;
+    opacity: 0.7;
   }
 
   .what-is-this {
     background: transparent;
     border: none;
-    color: var(--void-text-hint);
+    color: var(--void-text-faint);
     font-family: var(--font-serif);
-    font-size: var(--text-xs);
-    letter-spacing: var(--ls-label);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
     cursor: pointer;
-    padding: var(--space-2) var(--space-3);
-    transition: color var(--dur-base) var(--ease-soft);
+    padding: 0.4rem 0;
+    margin-top: 1.5rem;
+    opacity: 0.6;
+    transition: opacity 0.3s ease, color 0.3s ease;
   }
 
   .what-is-this:hover,
   .what-is-this:focus {
-    color: var(--void-text);
+    opacity: 1;
+    color: var(--void-text-dim);
     outline: none;
   }
 
-  .auth-error {
-    color: var(--void-danger);
-    font-size: var(--text-sm);
+  .auth-form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .auth-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--void-text-dim);
+    color: var(--void-text);
     font-family: var(--font-serif);
-    margin: 0 0 var(--space-3);
+    font-size: 1.1rem;
+    padding: 0.5rem 0;
+    text-align: center;
+    width: 240px;
+    outline: none;
+    letter-spacing: 0.03em;
+  }
+
+  .auth-input::placeholder {
+    color: var(--void-text-hint);
+  }
+
+  .auth-message {
+    color: var(--void-text-dim);
+    font-family: var(--font-serif);
+    font-size: 1rem;
+    letter-spacing: 0.05em;
+  }
+
+  .auth-submit {
+    background: transparent;
+    border: none;
+    color: var(--void-text-dim);
+    font-family: var(--font-serif);
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    padding: 0.4rem 0;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+
+  .auth-submit:hover {
+    opacity: 1;
+  }
+
+  .auth-submit:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  .auth-error {
+    color: rgba(220, 110, 100, 0.75);
+    font-size: 0.8rem;
+    font-family: var(--font-serif);
+  }
+
+  .auth-privacy {
+    color: var(--void-text-faint);
+    font-family: var(--font-serif);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-align: center;
+    max-width: 26ch;
+    line-height: 1.5;
+    margin: 0;
+    opacity: 0.5;
   }
 </style>
