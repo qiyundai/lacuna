@@ -3,28 +3,27 @@
   import Void from '$lib/components/Void.svelte';
   import DownSpace from '$lib/components/DownSpace.svelte';
 
-  // 0 = void, -100 = down space (in dvh units)
-  let spaceOffset = $state(0);
+  let inDownSpace = $state(false);
   let transitioning = $state(false);
 
   function goDown() {
-    if (transitioning || spaceOffset !== 0) return;
+    if (transitioning || inDownSpace) return;
     transitioning = true;
-    spaceOffset = -100;
+    inDownSpace = true;
     setTimeout(() => (transitioning = false), 650);
   }
 
   function goUp() {
-    if (transitioning || spaceOffset !== -100) return;
+    if (transitioning || !inDownSpace) return;
     transitioning = true;
-    spaceOffset = 0;
+    inDownSpace = false;
     setTimeout(() => (transitioning = false), 650);
   }
 </script>
 
 <div
   class="space-container"
-  style="transform: translateY({spaceOffset}dvh)"
+  class:down={inDownSpace}
   use:swipeDetector={{ onSwipeDown: goDown, onSwipeUp: goUp }}
 >
   <div class="space-panel void-panel">
@@ -39,9 +38,14 @@
   .space-container {
     position: fixed;
     inset: 0;
+    height: 200vh;
     height: 200dvh;
     transition: transform 0.65s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     will-change: transform;
+  }
+
+  .space-container.down {
+    transform: translateY(-50%);
   }
 
   .space-panel {
