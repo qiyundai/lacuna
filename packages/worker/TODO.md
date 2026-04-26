@@ -55,14 +55,3 @@ Enables "find entries most similar to what I'm writing now" (useful for soul map
 Graph nodes are already abstracted from raw text, which makes them safe to compare across users without exposing entry content. Could enable "others who return to similar themes" or aggregate pattern insights.
 **Explicitly Phase 2+** per spec. No action until then.
 
-### Privacy policy update
-The memory graph introduces two new categories of stored personal data that aren't covered by a current privacy policy:
-1. Concept nodes (psychological labels derived from entries)
-2. Range summaries (AI-generated prose about emotional arcs)
-
-Each entry now also triggers one additional Anthropic API call (concept extraction) beyond what existed before. The privacy policy should disclose:
-- That entries are processed by Anthropic to generate a concept graph (in addition to pattern analysis and memoir)
-- What data is retained (raw entries, concept graph, range summaries, memoir snapshots)
-- Right to erasure (already handled by CASCADE deletes)
-
-**Do before launch.**
