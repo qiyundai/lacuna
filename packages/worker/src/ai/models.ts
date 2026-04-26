@@ -20,8 +20,7 @@ export const MODELS: ModelDefinition[] = [
       return (
         /part of me/.test(text) ||
         /i don'?t know why i/.test(text) ||
-        /i should but/.test(text) ||
-        /part of me/.test(text)
+        /i should but/.test(text)
       );
     },
   },

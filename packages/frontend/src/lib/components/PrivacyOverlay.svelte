@@ -2,17 +2,24 @@
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
 
-  let { show = $bindable(false) }: { show: boolean } = $props();
+  let {
+    show = $bindable(false),
+    consentMode = false,
+    onConsent,
+  }: { show: boolean; consentMode?: boolean; onConsent?: () => void } = $props();
 
   function portal(node: HTMLElement) {
     document.body.appendChild(node);
     return { destroy() { node.remove(); } };
   }
 
-  function dismiss() { show = false; }
+  function dismiss() {
+    show = false;
+    if (consentMode) onConsent?.();
+  }
 </script>
 
-<svelte:window onkeydown={(e) => { if (e.key === 'Escape') dismiss(); }} />
+<svelte:window onkeydown={(e) => { if (!consentMode && e.key === 'Escape') dismiss(); }} />
 
 {#if show}
   <div
@@ -26,9 +33,9 @@
   >
     <div class="privacy-content">
       <p>your entries are private to you. no one else can read them.</p>
-      <p>to surface patterns in your story, entries are sent to anthropic's api for analysis. anthropic may retain data per their usage policy.</p>
-      <p>deleting your account permanently removes all your entries and data from our servers.</p>
-      <p class="hint">anywhere to close</p>
+      <p>to surface patterns in your story, entries are processed by anthropic's api. each entry also builds a private concept map — themes, emotions, recurring ideas — stored here to make the memoir richer over time. anthropic does not use api data to train their models.</p>
+      <p>deleting your account permanently removes everything — entries, your concept map, and all generated text — from our servers.</p>
+      <p class="hint">{consentMode ? 'tap to acknowledge and continue' : 'anywhere to close'}</p>
     </div>
   </div>
 {/if}
