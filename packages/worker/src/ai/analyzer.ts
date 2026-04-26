@@ -1,9 +1,15 @@
-import type { Env } from '../types.js';
+import type { Env, RangeSummaryRow } from '../types.js';
 import {
   getAllEntriesForUser,
   getPatterns,
   upsertPatterns,
   createMemoirSnapshot,
+  getMemoryGraph,
+  upsertMemoryGraph,
+  getRecentEntries,
+  getRangeSummaries,
+  createRangeSummary,
+  getLatestMemoir,
 } from '../db.js';
 import { MODELS, type ModelWeights } from './models.js';
 import {
@@ -11,9 +17,16 @@ import {
   buildTier1Prompt,
   buildTier2Prompt,
   buildMemoirPrompt,
+  buildConceptExtractionPrompt,
+  buildRangeSummaryPrompt,
 } from './prompts.js';
+import { mergeConceptsIntoGraph } from './graph.js';
+import type { ConceptExtraction, MemoryGraph, RangeSummaryResult } from './types.js';
 
-const MEMOIR_INTERVAL = 5; // regenerate every N new entries
+const MEMOIR_INTERVAL = 5;
+const RECENT_ENTRIES_WINDOW = 20;
+const RANGE_SUMMARY_BATCH_SIZE = 15;
+const MAX_EXTRACTION_PER_INVOCATION = 10;
 
 export async function analyzeEntriesAsync(env: Env, userId: string): Promise<void> {
   const entries = await getAllEntriesForUser(env.DB, userId);
@@ -21,8 +34,8 @@ export async function analyzeEntriesAsync(env: Env, userId: string): Promise<voi
 
   if (count === 0) return;
 
-  let modelWeights: ModelWeights = {};
   const existingPatterns = await getPatterns(env.DB, userId);
+  let modelWeights: ModelWeights = {};
   if (existingPatterns) {
     try {
       modelWeights = JSON.parse(existingPatterns.model_weights) as ModelWeights;
@@ -31,7 +44,64 @@ export async function analyzeEntriesAsync(env: Env, userId: string): Promise<voi
     }
   }
 
-  // Determine tier
+  // Step 1: Incremental graph extraction for any unprocessed entries
+  let graph = await getMemoryGraph(env.DB, userId);
+  const lastExtracted = existingPatterns?.graph_extracted_through ?? 0;
+  const pendingEntries = entries.slice(lastExtracted);
+  const toProcess = pendingEntries.slice(0, MAX_EXTRACTION_PER_INVOCATION);
+  const newExtractedThrough = lastExtracted + toProcess.length;
+
+  for (const entry of toProcess) {
+    const extraction = await callAnthropic<ConceptExtraction>(
+      env.ANTHROPIC_API_KEY,
+      'claude-haiku-4-5-20251001',
+      buildConceptExtractionPrompt(entry),
+      150
+    );
+    if (extraction) {
+      graph = mergeConceptsIntoGraph(graph, extraction);
+    } else {
+      // Still advance processed_count even if extraction fails
+      graph = { ...graph, processed_count: graph.processed_count + 1 };
+    }
+  }
+
+  if (toProcess.length > 0) {
+    await upsertMemoryGraph(env.DB, userId, graph);
+  }
+
+  // Step 2: Range summary — compress oldest unsummarized batch if enough entries accumulated
+  const rangeSummaries = await getRangeSummaries(env.DB, userId);
+  const highestSummarized =
+    rangeSummaries.length > 0
+      ? rangeSummaries[rangeSummaries.length - 1]!.to_entry_num
+      : 0;
+
+  if (count - highestSummarized >= RANGE_SUMMARY_BATCH_SIZE * 2) {
+    // At least one full batch ready to summarize
+    const batchStart = highestSummarized + 1;
+    const batchEnd = batchStart + RANGE_SUMMARY_BATCH_SIZE - 1;
+    const batchEntries = entries.slice(batchStart - 1, batchEnd);
+    const result = await callAnthropic<RangeSummaryResult>(
+      env.ANTHROPIC_API_KEY,
+      'claude-haiku-4-5-20251001',
+      buildRangeSummaryPrompt(batchEntries, batchStart, batchEnd),
+      200
+    );
+    if (result?.summary) {
+      await createRangeSummary(env.DB, userId, batchStart, batchEnd, result.summary);
+      rangeSummaries.push({
+        id: '',
+        user_id: userId,
+        from_entry_num: batchStart,
+        to_entry_num: batchEnd,
+        summary_text: result.summary,
+        generated_at: Math.floor(Date.now() / 1000),
+      });
+    }
+  }
+
+  // Step 3: Tier-based pattern analysis
   if (count === 1) {
     const result = await callAnthropic<{ acknowledgment: string }>(
       env.ANTHROPIC_API_KEY,
@@ -52,7 +122,8 @@ export async function analyzeEntriesAsync(env: Env, userId: string): Promise<voi
       modelWeights.acknowledgment = result.acknowledgment;
     }
   } else {
-    const activeModels = MODELS.filter((m) => m.activationCheck(entries));
+    const recentEntries = await getRecentEntries(env.DB, userId, RECENT_ENTRIES_WINDOW);
+    const activeModels = MODELS.filter((m) => m.activationCheck(recentEntries));
     const result = await callAnthropic<{
       weights: Record<string, number>;
       summaries: Record<string, string>;
@@ -60,7 +131,7 @@ export async function analyzeEntriesAsync(env: Env, userId: string): Promise<voi
     }>(
       env.ANTHROPIC_API_KEY,
       'claude-sonnet-4-6',
-      buildTier2Prompt(entries, activeModels),
+      buildTier2Prompt(recentEntries, activeModels, graph, rangeSummaries),
       500
     );
     if (result) {
@@ -73,7 +144,7 @@ export async function analyzeEntriesAsync(env: Env, userId: string): Promise<voi
     }
   }
 
-  // Determine if memoir should regenerate
+  // Step 4: Persist patterns (with updated extraction cursor)
   const entryCountAtLastMemoir = existingPatterns?.entry_count_at_last_memoir ?? 0;
   const shouldGenerateMemoir =
     count >= 20 && count - entryCountAtLastMemoir >= MEMOIR_INTERVAL;
@@ -82,11 +153,25 @@ export async function analyzeEntriesAsync(env: Env, userId: string): Promise<voi
     env.DB,
     userId,
     modelWeights,
-    shouldGenerateMemoir ? count : undefined
+    shouldGenerateMemoir ? count : undefined,
+    toProcess.length > 0 ? newExtractedThrough : undefined
   );
 
+  // Step 5: Memoir generation
   if (shouldGenerateMemoir) {
-    const prose = await generateMemoir(env.ANTHROPIC_API_KEY, entries, modelWeights);
+    const previousMemoir = await getLatestMemoir(env.DB, userId);
+    // Only send entries that are new since the last memoir generation
+    const newEntriesSinceMemoir = entries.slice(entryCountAtLastMemoir);
+    const recentForMemoir = newEntriesSinceMemoir.slice(-RECENT_ENTRIES_WINDOW);
+
+    const prose = await generateMemoir(
+      env.ANTHROPIC_API_KEY,
+      recentForMemoir,
+      modelWeights,
+      graph,
+      rangeSummaries,
+      previousMemoir?.prose
+    );
     if (prose) {
       await createMemoirSnapshot(env.DB, userId, prose);
     }
@@ -95,12 +180,14 @@ export async function analyzeEntriesAsync(env: Env, userId: string): Promise<voi
 
 async function generateMemoir(
   apiKey: string,
-  entries: Parameters<typeof buildMemoirPrompt>[0],
-  modelWeights: ModelWeights
+  newEntries: Parameters<typeof buildMemoirPrompt>[0],
+  modelWeights: ModelWeights,
+  graph: MemoryGraph,
+  rangeSummaries: RangeSummaryRow[],
+  previousMemoir?: string
 ): Promise<string | null> {
-  const prompt = buildMemoirPrompt(entries, modelWeights);
-  const response = await callAnthropicRaw(apiKey, 'claude-sonnet-4-6', prompt, 800);
-  return response;
+  const prompt = buildMemoirPrompt(newEntries, modelWeights, graph, rangeSummaries, previousMemoir);
+  return callAnthropicRaw(apiKey, 'claude-sonnet-4-6', prompt, 1000);
 }
 
 async function callAnthropic<T>(

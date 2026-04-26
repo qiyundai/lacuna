@@ -27,7 +27,23 @@ export interface PatternRow {
   user_id: string;
   model_weights: string;
   entry_count_at_last_memoir: number;
+  graph_extracted_through: number;
   last_updated: number;
+}
+
+export interface MemoryGraphRow {
+  user_id: string;
+  graph_json: string;
+  last_updated: number;
+}
+
+export interface RangeSummaryRow {
+  id: string;
+  user_id: string;
+  from_entry_num: number;
+  to_entry_num: number;
+  summary_text: string;
+  generated_at: number;
 }
 
 export interface MemoirSnapshotRow {
