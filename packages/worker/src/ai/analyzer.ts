@@ -123,7 +123,7 @@ export async function analyzeEntriesAsync(env: Env, userId: string): Promise<voi
     }
   } else {
     const recentEntries = await getRecentEntries(env.DB, userId, RECENT_ENTRIES_WINDOW);
-    const activeModels = MODELS.filter((m) => m.activationCheck(recentEntries));
+    const activeModels = MODELS.filter((m) => m.activationCheck(entries));
     const result = await callAnthropic<{
       weights: Record<string, number>;
       summaries: Record<string, string>;
