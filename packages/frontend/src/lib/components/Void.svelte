@@ -23,11 +23,39 @@
   let introVisible = $state(false);
   let introTimer: ReturnType<typeof setTimeout> | null = null;
 
+  let hintArmed = $state(false);
+  let showHoldHint = $state(false);
+  let holdHintVisible = $state(false);
+  let holdHintTimer: ReturnType<typeof setTimeout> | null = null;
+  let holdHintRevealTimer: ReturnType<typeof setTimeout> | null = null;
+
   function dismissIntro() {
     if (introTimer) clearTimeout(introTimer);
     introTimer = null;
     introVisible = false;
     setTimeout(() => { showIntro = false; }, 800);
+  }
+
+  function dismissHoldHint() {
+    if (holdHintTimer) clearTimeout(holdHintTimer);
+    if (holdHintRevealTimer) clearTimeout(holdHintRevealTimer);
+    holdHintTimer = null;
+    holdHintRevealTimer = null;
+    holdHintVisible = false;
+    setTimeout(() => { showHoldHint = false; }, 600);
+  }
+
+  function scheduleHoldHint() {
+    if (holdHintTimer) clearTimeout(holdHintTimer);
+    holdHintTimer = setTimeout(() => {
+      if (!draft.isDirty) return;
+      showHoldHint = true;
+      holdHintRevealTimer = setTimeout(() => {
+        holdHintVisible = true;
+        holdHintRevealTimer = null;
+      }, 30);
+      holdHintTimer = null;
+    }, 3000);
   }
 
   let gestureCleanup: (() => void) | null = null;
@@ -36,6 +64,8 @@
   let cursorPos = $state(0);
   let cursorVisible = $state(false);
   let cursorTimer: ReturnType<typeof setTimeout> | null = null;
+  let focused = $state(false);
+  const showCursor = $derived(focused || cursorVisible);
   let selStart = $state(0);
   let selEnd = $state(0);
   const hasSelection = $derived(selStart < selEnd);
@@ -127,6 +157,7 @@
       selEnd = 0;
       cursorPos = 0;
       cursorVisible = false;
+      dismissHoldHint();
     }
   });
 
@@ -203,6 +234,7 @@
         durationMs: 600,
         onHoldStart: () => {
           if (!draft.isDirty) return;
+          if (holdHintVisible) dismissHoldHint();
           solidifying = true;
           const start = Date.now();
           const tickProgress = () => {
@@ -241,6 +273,10 @@
       introTimer = setTimeout(dismissIntro, 5500);
     }
 
+    if (!localStorage.getItem('lacuna_hint_learned')) {
+      hintArmed = true;
+    }
+
     window.visualViewport?.addEventListener('resize', handleViewportResize);
     handleViewportResize();
   });
@@ -249,6 +285,9 @@
     gestureCleanup?.();
     if (rafId) cancelAnimationFrame(rafId);
     if (refractRafId) cancelAnimationFrame(refractRafId);
+    if (cursorTimer) clearTimeout(cursorTimer);
+    if (holdHintTimer) clearTimeout(holdHintTimer);
+    if (holdHintRevealTimer) clearTimeout(holdHintRevealTimer);
     if (container) container.removeEventListener('pointermove', handlePointerMove);
     window.removeEventListener('keydown', onEscapeKey);
     window.removeEventListener('visibilitychange', focusInput);
@@ -300,12 +339,20 @@
     dissolving = true;
     justSolidified = true;
     startRefract();
+    if (isMobile) inputEl?.blur();
+
+    if (hintArmed) {
+      hintArmed = false;
+      localStorage.setItem('lacuna_hint_learned', '1');
+      dismissHoldHint();
+    }
 
     setTimeout(() => {
       clearDraft();
       dissolving = false;
       solidifying = false;
       solidifyProgress = 0;
+      if (isMobile) focusInput();
     }, DISSOLVE_MS + 400);
 
     setTimeout(() => (justSolidified = false), RIPPLE_MS);
@@ -348,6 +395,11 @@
     target.value = draft.text;
     target.setSelectionRange(newCursorPos, newCursorPos);
     cursorPos = newCursorPos;
+
+    if (hintArmed && draft.isDirty) {
+      if (showHoldHint) dismissHoldHint();
+      scheduleHoldHint();
+    }
   }
 
   function handleKeyDown(e: KeyboardEvent) {
@@ -412,6 +464,7 @@
     --bg: {weather.palette.base};
     --void-text: {weather.palette.text};
     --void-text-faint: {weather.palette.textFaint};
+    --void-text-hint: {weather.palette.textFaint};
     --glow-0: {weather.palette.glows[0]};
     --glow-1: {weather.palette.glows[1]};
     --glow-2: {weather.palette.glows[2]};
@@ -469,7 +522,7 @@
       {#each words as word (word.id)}
         {#if word.isSpace}
           {#each word.chars as entry (entry.char.id)}
-            {#if cursorVisible && !hasSelection && entry.idx === cursorPos}
+            {#if showCursor && !hasSelection && entry.idx === cursorPos}
               <span class="cursor" aria-hidden="true"></span>
             {/if}
             <span
@@ -485,7 +538,7 @@
             style="--drift-x: {drift.dx}px; --drift-y: {drift.dy}px; --drift-dur: {drift.dur}s; --drift-delay: {drift.delay}s; --scatter-x: {drift.sx}px; --scatter-y: {drift.sy}px;"
           >
             {#each word.chars as entry (entry.char.id)}
-              {#if cursorVisible && !hasSelection && entry.idx === cursorPos}
+              {#if showCursor && !hasSelection && entry.idx === cursorPos}
                 <span class="cursor" aria-hidden="true"></span>
               {/if}
               <span
@@ -497,7 +550,7 @@
           </span>
         {/if}
       {/each}
-      {#if cursorVisible && !hasSelection && cursorPos >= draft.chars.length}
+      {#if showCursor && !hasSelection && cursorPos >= draft.chars.length}
         <span class="cursor" aria-hidden="true"></span>
       {/if}
     </div>
@@ -520,16 +573,44 @@
     </div>
   {/if}
 
+  {#if showHoldHint}
+    <div
+      class="hold-hint"
+      class:visible={holdHintVisible && !solidifying}
+      aria-hidden="true"
+    >
+      <svg class="hold-hint-ring" viewBox="0 0 100 100" width="80" height="80" aria-hidden="true">
+        <circle cx="50" cy="50" r="40" fill="none" stroke="var(--void-text)" stroke-width="1.5" opacity="0.15" />
+        <circle
+          class="hold-hint-arc"
+          cx="50"
+          cy="50"
+          r="40"
+          fill="none"
+          stroke="var(--void-text)"
+          stroke-width="1.5"
+          stroke-dasharray="251"
+          stroke-dashoffset="251"
+          stroke-linecap="round"
+          transform="rotate(-90 50 50)"
+        />
+      </svg>
+      <span class="hold-hint-label">hold to solidify</span>
+    </div>
+  {/if}
+
   <textarea
     bind:this={inputEl}
     class="hidden-input"
     autocomplete="off"
-    autocorrect="off"
     autocapitalize="off"
     spellcheck={false}
+    {...{ autocorrect: 'off' }}
     maxlength={MAX_CHARS}
     oninput={handleInput}
     onkeydown={handleKeyDown}
+    onfocus={() => { focused = true; }}
+    onblur={() => { focused = false; }}
     onclick={focusInput}
     ontouchend={handleTouchEnd}
     onselectstart={(e) => e.preventDefault()}
@@ -688,6 +769,8 @@
   @media (prefers-reduced-motion: reduce) {
     .word { animation: none; }
     .char { animation: charSpaceIn 140ms ease-out both; }
+    .cursor { animation: none; }
+    .hold-hint-arc { animation: none; stroke-dashoffset: 0; }
     .draft-prose.condensing { filter: none; }
     .draft-prose.dissolving { animation: proseFade 400ms ease-out forwards; }
     .draft-prose.scattering .word { animation: scatterFade 300ms ease-out forwards; }
@@ -788,6 +871,12 @@
     opacity: 0.5;
     margin-left: 1px;
     vertical-align: middle;
+    animation: cursorBlink 1.1s step-end infinite;
+  }
+
+  @keyframes cursorBlink {
+    0%, 100% { opacity: 0.5; }
+    50%       { opacity: 0; }
   }
 
   .char.selected,
@@ -829,6 +918,50 @@
     display: block;
   }
 
+  .hold-hint {
+    position: absolute;
+    bottom: 22%;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-3);
+    pointer-events: none;
+    user-select: none;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity var(--dur-slow) var(--ease-soft);
+  }
+
+  .hold-hint.visible {
+    opacity: 1;
+  }
+
+  .hold-hint-ring {
+    display: block;
+    overflow: visible;
+  }
+
+  .hold-hint-arc {
+    animation: ringDraw 1.8s linear infinite;
+  }
+
+  @keyframes ringDraw {
+    0%   { stroke-dashoffset: 251; }
+    85%  { stroke-dashoffset: 0; }
+    100% { stroke-dashoffset: 0; }
+  }
+
+  .hold-hint-label {
+    display: block;
+    color: var(--void-text-hint);
+    font-family: var(--font-serif);
+    font-size: var(--text-xs);
+    letter-spacing: var(--ls-label);
+    text-align: center;
+  }
+
   .char-limit {
     position: absolute;
     bottom: var(--space-6);
@@ -847,5 +980,10 @@
   @keyframes fadeIn {
     from { opacity: 0; }
     to   { opacity: 1; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cursor { animation: none; }
+    .hold-hint-arc { animation: none; stroke-dashoffset: 0; }
   }
 </style>
