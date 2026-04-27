@@ -531,7 +531,6 @@
     oninput={handleInput}
     onkeydown={handleKeyDown}
     onclick={focusInput}
-    ontouchstart={(e) => e.preventDefault()}
     ontouchend={handleTouchEnd}
     onselectstart={(e) => e.preventDefault()}
     value={draft.text}
