@@ -511,46 +511,51 @@
     {/each}
   </div>
 
-  {#if draft.isDirty}
+  {#if draft.isDirty || showCursor}
     <div
       class="draft-prose"
+      class:empty={!draft.isDirty}
       class:condensing={solidifying}
       class:dissolving
       class:scattering
       style="--condense-progress: {solidifyProgress}"
     >
-      {#each words as word (word.id)}
-        {#if word.isSpace}
-          {#each word.chars as entry (entry.char.id)}
-            {#if showCursor && !hasSelection && entry.idx === cursorPos}
-              <span class="cursor" aria-hidden="true"></span>
-            {/if}
-            <span
-              class="char char-space"
-              class:selected={hasSelection && entry.idx >= selStart && entry.idx < selEnd}
-              style="--char-index: {entry.idx}"
-            >{entry.char.ch}</span>
-          {/each}
-        {:else}
-          {@const drift = driftFor(word.id)}
-          <span
-            class="word"
-            style="--drift-x: {drift.dx}px; --drift-y: {drift.dy}px; --drift-dur: {drift.dur}s; --drift-delay: {drift.delay}s; --scatter-x: {drift.sx}px; --scatter-y: {drift.sy}px;"
-          >
+      {#if draft.isDirty}
+        {#each words as word (word.id)}
+          {#if word.isSpace}
             {#each word.chars as entry (entry.char.id)}
               {#if showCursor && !hasSelection && entry.idx === cursorPos}
                 <span class="cursor" aria-hidden="true"></span>
               {/if}
               <span
-                class="char"
+                class="char char-space"
                 class:selected={hasSelection && entry.idx >= selStart && entry.idx < selEnd}
                 style="--char-index: {entry.idx}"
               >{entry.char.ch}</span>
             {/each}
-          </span>
+          {:else}
+            {@const drift = driftFor(word.id)}
+            <span
+              class="word"
+              style="--drift-x: {drift.dx}px; --drift-y: {drift.dy}px; --drift-dur: {drift.dur}s; --drift-delay: {drift.delay}s; --scatter-x: {drift.sx}px; --scatter-y: {drift.sy}px;"
+            >
+              {#each word.chars as entry (entry.char.id)}
+                {#if showCursor && !hasSelection && entry.idx === cursorPos}
+                  <span class="cursor" aria-hidden="true"></span>
+                {/if}
+                <span
+                  class="char"
+                  class:selected={hasSelection && entry.idx >= selStart && entry.idx < selEnd}
+                  style="--char-index: {entry.idx}"
+                >{entry.char.ch}</span>
+              {/each}
+            </span>
+          {/if}
+        {/each}
+        {#if showCursor && !hasSelection && cursorPos >= draft.chars.length}
+          <span class="cursor" aria-hidden="true"></span>
         {/if}
-      {/each}
-      {#if showCursor && !hasSelection && cursorPos >= draft.chars.length}
+      {:else}
         <span class="cursor" aria-hidden="true"></span>
       {/if}
     </div>
@@ -565,6 +570,7 @@
     <div
       class="intro-hint"
       class:visible={introVisible && !draft.isDirty}
+      class:with-empty-cursor={showCursor && !draft.isDirty}
       aria-hidden="true"
     >
       <span>type anything</span>
@@ -712,6 +718,10 @@
     transform: translate(-50%, -50%) scale(calc(1 - var(--condense-progress) * 0.15));
     opacity: calc(1 - var(--condense-progress) * 0.3);
     filter: blur(calc(var(--condense-progress) * 6px));
+  }
+
+  .draft-prose.empty {
+    line-height: 1;
   }
 
   .word {
@@ -912,6 +922,10 @@
 
   .intro-hint.visible {
     opacity: 1;
+  }
+
+  .intro-hint.with-empty-cursor {
+    top: calc(50% + 4.5rem);
   }
 
   .intro-hint span {
