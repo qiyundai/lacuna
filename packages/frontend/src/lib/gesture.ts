@@ -18,7 +18,12 @@ export function holdDetector(
 
   function start(e: PointerEvent) {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
-    if (e.pointerType !== 'mouse') e.preventDefault();
+    if (e.pointerType !== 'mouse') {
+      e.preventDefault();
+      // Claim exclusive pointer ownership so Android can't interpret the
+      // ongoing contact as a text-selection gesture.
+      try { node.setPointerCapture(e.pointerId); } catch {}
+    }
     holding = false;
     onHoldStart?.();
     timer = setTimeout(() => {
@@ -45,11 +50,16 @@ export function holdDetector(
     e.preventDefault();
   }
 
+  function preventSelect(e: Event) {
+    e.preventDefault();
+  }
+
   node.addEventListener('pointerdown', start);
   node.addEventListener('pointerup', cancel);
   node.addEventListener('pointercancel', cancel);
   node.addEventListener('pointermove', move);
   node.addEventListener('contextmenu', preventContextMenu);
+  node.addEventListener('selectstart', preventSelect);
 
   return {
     destroy() {
@@ -58,6 +68,7 @@ export function holdDetector(
       node.removeEventListener('pointercancel', cancel);
       node.removeEventListener('pointermove', move);
       node.removeEventListener('contextmenu', preventContextMenu);
+      node.removeEventListener('selectstart', preventSelect);
       if (timer) clearTimeout(timer);
     },
   };

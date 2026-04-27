@@ -31,6 +31,7 @@
   }
 
   let gestureCleanup: (() => void) | null = null;
+  let isMobile = false;
 
   let cursorPos = $state(0);
   let cursorVisible = $state(false);
@@ -192,6 +193,7 @@
   onMount(() => {
     if (typeof window !== 'undefined') {
       reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     }
 
     focusInput();
@@ -259,9 +261,12 @@
   }
 
   function startRefract() {
+    // Skip on mobile — animating the SVG displacement filter on the glow-field
+    // every frame for 2.8s is too expensive on mobile GPUs.
+    if (isMobile || reducedMotion) return;
     if (refractRafId) cancelAnimationFrame(refractRafId);
     const start = performance.now();
-    const peak = reducedMotion ? REFRACT_PEAK * 0.3 : REFRACT_PEAK;
+    const peak = REFRACT_PEAK;
     const step = () => {
       const t = (performance.now() - start) / RIPPLE_MS;
       if (!displaceEl) return;
@@ -526,7 +531,9 @@
     oninput={handleInput}
     onkeydown={handleKeyDown}
     onclick={focusInput}
+    ontouchstart={(e) => e.preventDefault()}
     ontouchend={handleTouchEnd}
+    onselectstart={(e) => e.preventDefault()}
     value={draft.text}
     aria-label="Write here"
   ></textarea>
@@ -707,7 +714,9 @@
     transform: translate(-50%, -50%) scale(0);
     pointer-events: none;
     mix-blend-mode: screen;
-    filter: blur(8px);
+    /* No blur filter — softness is encoded in the gradient stops. Blurring a
+       260vmax element on mobile is extremely expensive on the GPU. */
+    will-change: transform, opacity;
     z-index: 1;
   }
 
@@ -715,13 +724,13 @@
     background: radial-gradient(
       circle,
       transparent 0%,
-      transparent 32%,
-      color-mix(in srgb, var(--glow-0) 6%, transparent) 37%,
-      color-mix(in srgb, var(--glow-0) 24%, transparent) 42%,
-      color-mix(in srgb, var(--glow-0) 48%, transparent) 46%,
-      color-mix(in srgb, var(--glow-0) 24%, transparent) 50%,
-      color-mix(in srgb, var(--glow-0) 6%, transparent) 55%,
-      transparent 60%,
+      transparent 30%,
+      color-mix(in srgb, var(--glow-0) 4%, transparent) 35%,
+      color-mix(in srgb, var(--glow-0) 22%, transparent) 41%,
+      color-mix(in srgb, var(--glow-0) 46%, transparent) 46%,
+      color-mix(in srgb, var(--glow-0) 22%, transparent) 51%,
+      color-mix(in srgb, var(--glow-0) 4%, transparent) 57%,
+      transparent 63%,
       transparent 100%
     );
     animation: rippleOut 2.8s cubic-bezier(0.33, 0, 0.25, 1) forwards;
@@ -731,15 +740,16 @@
     background: radial-gradient(
       circle,
       transparent 0%,
-      transparent 38%,
-      color-mix(in srgb, var(--glow-1) 4%, transparent) 42%,
-      color-mix(in srgb, var(--glow-1) 14%, transparent) 45%,
-      color-mix(in srgb, var(--glow-1) 4%, transparent) 48%,
-      transparent 52%,
+      transparent 36%,
+      color-mix(in srgb, var(--glow-1) 3%, transparent) 40%,
+      color-mix(in srgb, var(--glow-1) 13%, transparent) 44%,
+      color-mix(in srgb, var(--glow-1) 26%, transparent) 47%,
+      color-mix(in srgb, var(--glow-1) 13%, transparent) 50%,
+      color-mix(in srgb, var(--glow-1) 3%, transparent) 54%,
+      transparent 59%,
       transparent 100%
     );
     animation: rippleOut 2.8s cubic-bezier(0.33, 0, 0.25, 1) 320ms forwards;
-    filter: blur(16px);
   }
 
   @keyframes rippleOut {
