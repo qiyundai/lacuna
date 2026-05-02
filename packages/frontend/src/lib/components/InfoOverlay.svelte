@@ -100,6 +100,14 @@
     text-align: center;
   }
 
+  @media (max-width: 640px) {
+    .info-content {
+      width: 100%;
+      max-width: 100%;
+      padding: var(--space-6) var(--space-5);
+    }
+  }
+
   .info-content p {
     color: var(--void-text);
     font-family: var(--font-serif);

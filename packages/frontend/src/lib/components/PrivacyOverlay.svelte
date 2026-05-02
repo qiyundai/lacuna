@@ -69,6 +69,14 @@
     text-align: center;
   }
 
+  @media (max-width: 640px) {
+    .privacy-content {
+      width: 100%;
+      max-width: 100%;
+      padding: var(--space-6) var(--space-5);
+    }
+  }
+
   .privacy-content p {
     color: var(--void-text);
     font-family: var(--font-serif);
