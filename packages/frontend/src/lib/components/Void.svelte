@@ -13,7 +13,6 @@
   let inputEl = $state<HTMLTextAreaElement | undefined>(undefined);
   let container = $state<HTMLDivElement | undefined>(undefined);
   let solidifying = $state(false);
-  let solidifyProgress = $state(0);
   let justSolidified = $state(false);
   let dissolving = $state(false);
   let scattering = $state(false);
@@ -170,7 +169,7 @@
     smoothPy += (pointerY - smoothPy) * 0.06;
 
     if (solidifying) {
-      glowBoost = solidifyProgress;
+      glowBoost = Math.min(glowBoost + dt / 0.6, 1);
     } else if (glowBoost > 0.001) {
       glowBoost *= Math.exp(-GLOW_DECAY_PER_SEC * dt);
     } else {
@@ -185,7 +184,7 @@
       let dx = 0;
       let dy = 0;
       let sizeMod = 0;
-      if (!reducedMotion) {
+      if (!reducedMotion && !isMobile) {
         dx = Math.sin(t * orb.freqX + orb.phaseX) * orb.ampX
            + Math.cos(t * orb.freqX * 0.3) * orb.ampX * 0.4;
         dy = Math.cos(t * orb.freqY + orb.phaseY) * orb.ampY
@@ -236,12 +235,6 @@
           if (!draft.isDirty) return;
           if (holdHintVisible) dismissHoldHint();
           solidifying = true;
-          const start = Date.now();
-          const tickProgress = () => {
-            solidifyProgress = Math.min((Date.now() - start) / 600, 1);
-            if (solidifyProgress < 1 && solidifying) requestAnimationFrame(tickProgress);
-          };
-          requestAnimationFrame(tickProgress);
         },
         onHold: () => {
           if (!draft.isDirty) {
@@ -253,7 +246,6 @@
         },
         onHoldCancel: () => {
           solidifying = false;
-          solidifyProgress = 0;
         },
       });
       gestureCleanup = hold.destroy;
@@ -326,7 +318,6 @@
     const text = draft.text.trim();
     if (!text) {
       solidifying = false;
-      solidifyProgress = 0;
       return;
     }
 
@@ -351,7 +342,6 @@
       clearDraft();
       dissolving = false;
       solidifying = false;
-      solidifyProgress = 0;
       if (isMobile) focusInput();
     }, DISSOLVE_MS + 400);
 
@@ -411,17 +401,7 @@
       e.preventDefault();
       if (!draft.isDirty) return;
       solidifying = true;
-      const start = performance.now();
-      const CONDENSE_MS = 220;
-      const animateCondense = () => {
-        solidifyProgress = Math.min((performance.now() - start) / CONDENSE_MS, 1);
-        if (solidifyProgress < 1) {
-          requestAnimationFrame(animateCondense);
-        } else {
-          solidifyEntry();
-        }
-      };
-      requestAnimationFrame(animateCondense);
+      setTimeout(solidifyEntry, 220);
       return;
     }
     if (e.key === 'Enter') {
@@ -445,8 +425,16 @@
     }
   }
 
-  function handleTouchEnd() {
-    setTimeout(() => inputEl?.focus(), 0);
+  let touchStartY = 0;
+
+  function handleTouchStart(e: TouchEvent) {
+    touchStartY = e.touches[0]?.clientY ?? 0;
+  }
+
+  function handleTouchEnd(e: TouchEvent) {
+    const dy = Math.abs((e.changedTouches[0]?.clientY ?? touchStartY) - touchStartY);
+    if (dy > 20 || dissolving) return;
+    inputEl?.focus();
   }
 
   function handleViewportResize() {
@@ -460,6 +448,8 @@
   class:solidifying
   bind:this={container}
   role="main"
+  ontouchstart={handleTouchStart}
+  ontouchend={handleTouchEnd}
   style="
     --bg: {weather.palette.base};
     --void-text: {weather.palette.text};
@@ -518,7 +508,6 @@
       class:condensing={solidifying}
       class:dissolving
       class:scattering
-      style="--condense-progress: {solidifyProgress}"
     >
       {#if draft.isDirty}
         {#each words as word (word.id)}
@@ -711,13 +700,14 @@
     word-break: break-word;
     white-space: pre-wrap;
     z-index: 2;
-    transition: opacity 0.3s ease, top 0.25s ease;
+    transition: opacity 0.3s ease, top 0.25s ease, transform 0.2s ease, filter 0.2s ease;
   }
 
   .draft-prose.condensing {
-    transform: translate(-50%, -50%) scale(calc(1 - var(--condense-progress) * 0.15));
-    opacity: calc(1 - var(--condense-progress) * 0.3);
-    filter: blur(calc(var(--condense-progress) * 6px));
+    transform: translate(-50%, -50%) scale(0.85);
+    opacity: 0.7;
+    filter: blur(6px);
+    transition: transform 0.6s ease, opacity 0.6s ease, filter 0.6s ease;
   }
 
   .draft-prose.empty {
@@ -767,8 +757,7 @@
   }
 
   @keyframes proseDissolve {
-    from { opacity: 0.7; filter: blur(6px);  transform: translate(-50%, -50%) scale(0.85); }
-    to   { opacity: 0;   filter: blur(20px); transform: translate(-50%, calc(-50% - 16px)) scale(0.75); }
+    to { opacity: 0; filter: blur(20px); transform: translate(-50%, calc(-50% - 16px)) scale(0.75); }
   }
 
   @keyframes drift {
@@ -999,5 +988,18 @@
   @media (prefers-reduced-motion: reduce) {
     .cursor { animation: none; }
     .hold-hint-arc { animation: none; stroke-dashoffset: 0; }
+  }
+
+  @media (hover: none) and (pointer: coarse) {
+    .hidden-input {
+      pointer-events: none;
+    }
+    .draft-prose.condensing {
+      filter: none;
+      transition: transform 0.6s ease, opacity 0.6s ease;
+    }
+    @keyframes proseDissolve {
+      to { opacity: 0; transform: translate(-50%, calc(-50% - 16px)) scale(0.75); }
+    }
   }
 </style>
