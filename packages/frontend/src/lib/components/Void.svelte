@@ -13,7 +13,6 @@
   let inputEl = $state<HTMLTextAreaElement | undefined>(undefined);
   let container = $state<HTMLDivElement | undefined>(undefined);
   let solidifying = $state(false);
-  let solidifyProgress = $state(0);
   let justSolidified = $state(false);
   let dissolving = $state(false);
   let scattering = $state(false);
@@ -236,7 +235,6 @@
           if (!draft.isDirty) return;
           if (holdHintVisible) dismissHoldHint();
           solidifying = true;
-          solidifyProgress = 1;
         },
         onHold: () => {
           if (!draft.isDirty) {
@@ -248,7 +246,6 @@
         },
         onHoldCancel: () => {
           solidifying = false;
-          solidifyProgress = 0;
         },
       });
       gestureCleanup = hold.destroy;
@@ -321,7 +318,6 @@
     const text = draft.text.trim();
     if (!text) {
       solidifying = false;
-      solidifyProgress = 0;
       return;
     }
 
@@ -346,7 +342,6 @@
       clearDraft();
       dissolving = false;
       solidifying = false;
-      solidifyProgress = 0;
       if (isMobile) focusInput();
     }, DISSOLVE_MS + 400);
 
@@ -406,17 +401,7 @@
       e.preventDefault();
       if (!draft.isDirty) return;
       solidifying = true;
-      const start = performance.now();
-      const CONDENSE_MS = 220;
-      const animateCondense = () => {
-        solidifyProgress = Math.min((performance.now() - start) / CONDENSE_MS, 1);
-        if (solidifyProgress < 1) {
-          requestAnimationFrame(animateCondense);
-        } else {
-          solidifyEntry();
-        }
-      };
-      requestAnimationFrame(animateCondense);
+      setTimeout(solidifyEntry, 220);
       return;
     }
     if (e.key === 'Enter') {
@@ -440,8 +425,16 @@
     }
   }
 
-  function handleTouchEnd() {
-    setTimeout(() => inputEl?.focus(), 0);
+  let touchStartY = 0;
+
+  function handleTouchStart(e: TouchEvent) {
+    touchStartY = e.touches[0]?.clientY ?? 0;
+  }
+
+  function handleTouchEnd(e: TouchEvent) {
+    const dy = Math.abs((e.changedTouches[0]?.clientY ?? touchStartY) - touchStartY);
+    if (dy > 20 || dissolving) return;
+    inputEl?.focus();
   }
 
   function handleViewportResize() {
@@ -455,6 +448,7 @@
   class:solidifying
   bind:this={container}
   role="main"
+  ontouchstart={handleTouchStart}
   ontouchend={handleTouchEnd}
   style="
     --bg: {weather.palette.base};
@@ -763,8 +757,7 @@
   }
 
   @keyframes proseDissolve {
-    from { opacity: 0.7; filter: blur(6px);  transform: translate(-50%, -50%) scale(0.85); }
-    to   { opacity: 0;   filter: blur(20px); transform: translate(-50%, calc(-50% - 16px)) scale(0.75); }
+    to { opacity: 0; filter: blur(20px); transform: translate(-50%, calc(-50% - 16px)) scale(0.75); }
   }
 
   @keyframes drift {
@@ -1006,8 +999,7 @@
       transition: transform 0.6s ease, opacity 0.6s ease;
     }
     @keyframes proseDissolve {
-      from { opacity: 0.7; transform: translate(-50%, -50%) scale(0.85); }
-      to   { opacity: 0;   transform: translate(-50%, calc(-50% - 16px)) scale(0.75); }
+      to { opacity: 0; transform: translate(-50%, calc(-50% - 16px)) scale(0.75); }
     }
   }
 </style>
