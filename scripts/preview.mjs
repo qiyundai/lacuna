@@ -1,0 +1,11 @@
+import { build } from 'esbuild';
+import { spawn } from 'node:child_process';
+import { resolve } from 'node:path';
+const buildDir = resolve('.test-output/preview-app');
+if (!process.env.npm_execpath) throw new Error('Start the sample story with pnpm preview:story');
+const buildProcess = spawn(process.execPath, [process.env.npm_execpath, 'build:frontend'], { stdio: 'inherit', windowsHide: true, env: { ...process.env, LACUNA_BUILD_DIR: buildDir } });
+const code = await new Promise(resolve => buildProcess.once('exit', resolve));
+if (code !== 0) process.exit(code ?? 1);
+await build({ entryPoints: ['tests/preview.mjs'], outfile: '.test-output/story-preview.mjs', bundle: true, platform: 'node', target: 'node22', format: 'esm', nodePaths: ['packages/worker/node_modules'] });
+const child = spawn(process.execPath, ['.test-output/story-preview.mjs'], { stdio: 'inherit', windowsHide: true });
+child.once('exit', code => { process.exitCode = code ?? 1; });

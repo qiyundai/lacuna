@@ -10,7 +10,8 @@
     "check": "pnpm -F frontend check && pnpm build:worker",
     "build:companion": "node scripts/build-companion.mjs",
     "companion": "pnpm build:frontend && pnpm build:companion && node packages/companion/dist/server.mjs",
-    "test": "node scripts/test.mjs"
+    "test": "node scripts/test.mjs",
+    "preview:story": "node scripts/preview.mjs"
   },
   "engines": {
     "pnpm": ">=9",

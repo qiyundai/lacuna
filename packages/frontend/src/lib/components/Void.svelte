@@ -175,6 +175,8 @@
   });
 
   function tick() {
+    rafId = 0;
+    if (!active || document.hidden) return;
     const t = performance.now();
     const dt = lastTickTime ? Math.min((t - lastTickTime) / 1000, 0.05) : 0.016;
     lastTickTime = t;
@@ -217,7 +219,7 @@
       el.style.opacity = String(opacity);
     }
 
-    rafId = requestAnimationFrame(tick);
+    if (!reducedMotion) rafId = requestAnimationFrame(tick);
   }
 
   function handlePointerMove(e: PointerEvent) {
@@ -270,7 +272,7 @@
     document.addEventListener('visibilitychange', focusInput);
     document.addEventListener('selectionchange', handleSelectionChange);
 
-    rafId = requestAnimationFrame(tick);
+    if (!rafId) rafId = requestAnimationFrame(tick);
 
     if (!readLocal('lacuna_intro_shown')) {
       writeLocal('lacuna_intro_shown', '1');
@@ -304,6 +306,7 @@
   });
 
   function focusInput() {
+    if (active && !document.hidden && !rafId) { lastTickTime = 0; rafId = requestAnimationFrame(tick); }
     if (active && !overlayStore.open && !document.hidden) inputEl?.focus({ preventScroll: true });
   }
   $effect(() => {
@@ -652,7 +655,9 @@
     onselectstart={(e) => e.preventDefault()}
     value={draft.text}
     aria-label="Write here"
+    aria-describedby="writing-keys"
   ></textarea>
+  <p class="visually-hidden" id="writing-keys">Hold to save your thought, or press Control or Command and Enter. Escape clears your unsaved draft.</p>
   {#if saveError}<p class="save-error" role="alert">{saveError}</p>{/if}
 
   {#if nearLimit}
@@ -888,6 +893,8 @@
   }
 
   .down-hint {
+    min-width: 44px;
+    min-height: 44px;
     position: absolute;
     bottom: var(--space-6);
     left: 50%;
@@ -897,7 +904,6 @@
     color: var(--void-text-faint);
     font-size: var(--text-md);
     cursor: pointer;
-    animation: bob 2s ease-in-out infinite;
     user-select: none;
     z-index: 3;
     padding: var(--space-2);

@@ -26,6 +26,8 @@
       <p>a private space, just yours. you type, words float, nothing goes anywhere unless you hold a thought long enough to mean it.</p>
       <p>if you keep coming back, those fragments start to find each other. something like a shape of you begins to appear.</p>
       <p>swipe down whenever you're ready to see what's gathered — the things you've written, the patterns within them, and in time, a kind of living story woven from all of it.</p>
+      <p>open a thought to keep it close. find a word from any time in your story. your memoir keeps its earlier tellings, and you can take your words with you from the menu.</p>
+      <p class="hint">hold to save. Control or Command + Enter works too. Escape lets an unsaved thought go.</p>
 
       <p class="music-nudge">before you begin — put on something you love. let the walls crack a little.</p>
 

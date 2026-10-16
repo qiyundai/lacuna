@@ -67,3 +67,13 @@ Checks for this rebuild: 26 regression tests passed; Svelte diagnostics and Work
 - Generated psychological reflections are interpretive; this audit does not establish clinical validity.
 
 This is a source audit and repair pass with targeted verification, not a claim that every possible defect has been eliminated.
+
+## Story expansion — 2026-10-16
+
+Verified live `main` at `963d1501ed2a56b424c4a51af2b674efa4e4f830` before implementation and again before release builds. Added a month-grouped archive with full-history search, kept thoughts, a full-screen thought reader with explicit deletion confirmation, a concept constellation with type filters and the existing six lenses, memoir edition history and reading size, and Markdown/JSON export. Migration 0005 adds the private kept marker and an index for kept thoughts.
+
+New APIs are authenticated and account scoped. Search uses bound literal matching and the existing compound cursor. Kept markers leave analysis versions unchanged. Same-second memoir editions paginate by timestamp and insertion order. Export excludes authentication and credentials and is throttled. Graph validation now rejects malformed persisted shapes; inconsistent extraction checkpoints rebuild from original entries. Sign-out clears the new story state and rejects late responses from the previous account.
+
+Verification: 29 regression tests passed, including filtered pagination, foreign cursors, kept-marker ownership/validation, export content/privacy/rate limits, memoir ordering, corrupt graph recovery, and story-state isolation. Svelte diagnostics report zero errors/warnings; Worker types pass. Browser QA used 32 synthetic thoughts and three memoir editions in a separate local database. Verified full-history search, kept-marker persistence, thought reading, constellation selection, earlier memoir reading, a 390px phone viewport, and an actual Markdown download containing sample thoughts and memoirs. The browser download-event observer stalled, but the downloaded file was independently confirmed on disk. No production entries were used for those checks.
+
+Release build and deployment results are reported in the release conversation. The earlier ChatGPT-only release already passed human-account sign-in and live inference; this expansion does not change OAuth scopes or introduce another AI provider. Existing large-history and cross-device identity limitations still apply.

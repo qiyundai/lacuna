@@ -1,226 +1,98 @@
 <script lang="ts">
+  import { fade } from 'svelte/transition';
+  import { storyStore, loadStory } from '$lib/stores/story.svelte.js';
   import { patternsStore } from '$lib/stores/patterns.svelte.js';
-  import { weather } from '$lib/stores/weather.svelte.js';
-
-  function glowRgba(hex: string, alpha: number): string {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-
-  const MODELS = [
-    { id: 'story_thread', label: 'Story / Through-line' },
-    { id: 'voices',       label: 'Voices' },
-    { id: 'blind_spots',  label: 'Blind Spots' },
-    { id: 'unsaid',       label: "What's Unsaid" },
-    { id: 'story_loop',   label: 'The Story You Keep Telling' },
-    { id: 'where_you_are', label: 'Where You Are' },
-  ] as const;
-
-  const TOTAL = MODELS.length;
-  const RADIUS = 80;
-  const CX = 120;
-  const CY = 120;
-  const ARC_WIDTH = 10;
-  const GAP_ANGLE = 4; // degrees between arcs
-
-  function polarToXY(cx: number, cy: number, r: number, angleDeg: number) {
-    const rad = ((angleDeg - 90) * Math.PI) / 180;
-    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-  }
-
-  function describeArc(
-    cx: number,
-    cy: number,
-    r: number,
-    startAngle: number,
-    endAngle: number
-  ): string {
-    const start = polarToXY(cx, cy, r, startAngle);
-    const end = polarToXY(cx, cy, r, endAngle);
-    const largeArc = endAngle - startAngle > 180 ? 1 : 0;
-    return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`;
-  }
-
-  const segmentAngle = (360 - TOTAL * GAP_ANGLE) / TOTAL;
-
-  function getSegment(index: number) {
-    const startAngle = index * (segmentAngle + GAP_ANGLE);
-    const endAngle = startAngle + segmentAngle;
-    return { startAngle, endAngle };
-  }
-
-  function getWeight(id: string): number {
-    if (!patternsStore.model_weights) return 0;
-    const w = (patternsStore.model_weights as Record<string, number | undefined>)[id];
-    return typeof w === 'number' && Number.isFinite(w) ? Math.max(0, Math.min(1, w)) : 0;
-  }
-
-  function getSummary(id: string): string {
-    return patternsStore.model_weights?.summaries?.[id] ?? '';
-  }
-
-  type ModelId = typeof MODELS[number]['id'];
-  let hoveredModel = $state<ModelId | null>(null);
+  import type { MemoryNode } from '$lib/api.js';
+  import ReflectionLenses from './ReflectionLenses.svelte';
+  let kind = $state<'theme' | 'emotion' | 'entity'>('theme');
+  let selected = $state<MemoryNode | null>(null), lenses = $state(false);
+  const nodes = $derived((storyStore.data?.graph.nodes ?? []).filter(n => n.type === kind).sort((a, b) => b.count - a.count || a.concept.localeCompare(b.concept)).slice(0, 12));
+  const positions = [[48,45],[23,23],[76,71],[77,21],[22,73],[49,12],[48,83],[15,47],[84,46],[34,59],[64,32],[64,60]];
+  const tone = $derived(patternsStore.model_weights?.overall_tone ?? patternsStore.model_weights?.emerging_theme ?? patternsStore.model_weights?.narrative_tone);
+  function choose(value: typeof kind) { kind = value; selected = null; }
 </script>
 
-<div class="soul-map">
-  {#if patternsStore.status === 'loading'}
-    <div class="state-message">...</div>
-  {:else if !patternsStore.model_weights || Object.keys(patternsStore.model_weights).length === 0}
-    <div class="state-message">
-      <p>your map forms as you write</p>
-      <p class="sub">patterns emerge after 10 entries</p>
+<section class="story-page map-page" aria-label="Soul map">
+  <header class="story-heading centered">
+    <p class="whisper">what keeps returning</p>
+    <h1>A sky made of your words.</h1>
+    <p class="quiet">{tone || 'Small recurrences, gradually becoming visible.'}</p>
+  </header>
+  <div class="map-modes" aria-label="Explore your map">
+    <button class:chosen={!lenses} aria-pressed={!lenses} onclick={() => lenses = false}>constellation</button>
+    <button class:chosen={lenses} aria-pressed={lenses} onclick={() => lenses = true}>six lenses</button>
+  </div>
+  {#if lenses}
+    <div class="lens-room" transition:fade={{ duration: 350 }}>
+      <p class="quiet">Ways of reading what you’ve written. Select a lens to hear its reflection.</p>
+      <ReflectionLenses />
+      <p class="quiet">These are interpretations. You decide what feels true.</p>
     </div>
   {:else}
-    <svg viewBox="0 0 240 240" class="map-svg" aria-label="Soul map">
-      {#each MODELS as model, i}
-        {@const { startAngle, endAngle } = getSegment(i)}
-        {@const weight = getWeight(model.id)}
-        {@const fillEnd = startAngle + (endAngle - startAngle) * weight}
-
-        <!-- Track (empty arc) -->
-        <path
-          d={describeArc(CX, CY, RADIUS, startAngle, endAngle)}
-          stroke={glowRgba(weather.palette.glows[0], 0.12)}
-          stroke-width={ARC_WIDTH}
-          fill="none"
-          stroke-linecap="round"
-        />
-
-        <!-- Fill arc -->
-        {#if weight > 0}
-          <path
-            d={describeArc(CX, CY, RADIUS, startAngle, fillEnd)}
-            stroke={weight > 0.5
-              ? glowRgba(weather.palette.glows[0], 0.75)
-              : glowRgba(weather.palette.glows[1], 0.40)}
-            stroke-width={ARC_WIDTH}
-            fill="none"
-            stroke-linecap="round"
-            class:breathing={weight > 0.3}
-          />
-        {/if}
-
-        <!-- Hit area for hover -->
-        <path
-          d={describeArc(CX, CY, RADIUS, startAngle, endAngle)}
-          stroke="transparent"
-          stroke-width={ARC_WIDTH + 12}
-          fill="none"
-          class="hit-area"
-          onmouseenter={() => (hoveredModel = model.id)}
-          onmouseleave={() => (hoveredModel = null)}
-          onfocus={() => (hoveredModel = model.id)}
-          onblur={() => (hoveredModel = null)}
-          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); hoveredModel = hoveredModel === model.id ? null : model.id; } }}
-          onclick={() => (hoveredModel = model.id)}
-          role="button"
-          tabindex={0}
-          aria-label={`${model.label}: ${Math.round(weight * 100)}%. ${getSummary(model.id)}`}
-        />
+    <div class="kinds" aria-label="Concept types">
+      <button class:chosen={kind === 'theme'} aria-pressed={kind === 'theme'} onclick={() => choose('theme')}>threads</button>
+      <button class:chosen={kind === 'emotion'} aria-pressed={kind === 'emotion'} onclick={() => choose('emotion')}>feelings</button>
+      <button class:chosen={kind === 'entity'} aria-pressed={kind === 'entity'} onclick={() => choose('entity')}>people & places</button>
+    </div>
+    <div class="constellation" class:feelings={kind === 'emotion'} class:places={kind === 'entity'}>
+      <svg viewBox="0 0 800 480" preserveAspectRatio="none" aria-hidden="true" class="sky">
+        <ellipse cx="400" cy="240" rx="287" ry="173" /><ellipse cx="400" cy="240" rx="177" ry="108" />
+        {#each [[40,135],[140,370],[313,34],[590,408],[720,190],[610,57],[290,390],[490,132],[183,80],[640,320],[320,220],[550,255]] as star}
+          <circle cx={star[0]} cy={star[1]} r="1" />
+        {/each}
+      </svg>
+      {#each nodes as node, i (`${node.type}:${node.concept}`)}
+        <button class="star" class:selected={selected?.concept === node.concept && selected?.type === node.type} style={`--x:${positions[i][0]}%;--y:${positions[i][1]}%;--size:${Math.min(12, 5 + Math.sqrt(node.count) * 1.5)}px;`} aria-pressed={selected?.concept === node.concept && selected?.type === node.type} aria-label={`${node.concept}, noticed ${node.count} times`} onclick={() => selected = selected?.concept === node.concept ? null : node}>
+          <span class="point" aria-hidden="true"></span><span class="concept" title={node.concept}>{node.concept}</span>
+        </button>
       {/each}
-    </svg>
-
-    <!-- Labels -->
-    <div class="labels">
-      {#each MODELS as model}
-        {@const weight = getWeight(model.id)}
-        <div
-          class="label"
-          class:active={weight > 0}
-          class:hovered={hoveredModel === model.id}
-        >
-          <span class="label-text">{model.label}</span>
-          {#if hoveredModel === model.id && getSummary(model.id)}
-            <span class="label-summary">{getSummary(model.id)}</span>
-          {/if}
+      {#if !nodes.length}
+        <div class="unformed">
+          <span aria-hidden="true">✧</span>
+          <p>{storyStore.status === 'error' ? 'Your map couldn’t be reached.' : 'Let a few words find each other.'}</p>
+          <p class="quiet">{storyStore.status === 'error' ? 'Your saved thoughts are still here.' : 'Save a thought and let ChatGPT reflect. The first threads can appear right away.'}</p>
+          {#if storyStore.status === 'error'}<button onclick={loadStory}>try again</button>{/if}
         </div>
-      {/each}
+      {/if}
+    </div>
+    <div class="constellation-note" aria-live="polite">
+      {#if selected}
+        <p class="selected-name">{selected.concept}</p>
+        <p class="quiet">noticed in {selected.count} {selected.count === 1 ? 'thought' : 'thoughts'}</p>
+      {:else if nodes.length}<p class="quiet">Choose a word and notice what it brings back.</p>{/if}
+      {#if storyStore.data?.graph.processed_count}<p class="map-footnote">drawn from {storyStore.data.graph.processed_count} reflected {storyStore.data.graph.processed_count === 1 ? 'thought' : 'thoughts'}. size follows recurrence.</p>{/if}
     </div>
   {/if}
-</div>
+</section>
 
 <style>
-  .soul-map {
-    padding: var(--space-8) var(--space-6) var(--space-9);
-    min-height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-6);
-  }
-
-  .state-message {
-    color: var(--void-text-hint);
-    font-family: var(--font-serif);
-    font-size: var(--text-sm);
-    text-align: center;
-    padding-top: var(--space-7);
-    letter-spacing: var(--ls-ui);
-    line-height: var(--lh-prose);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .sub {
-    font-size: var(--text-xs);
-    color: var(--void-text-faint);
-  }
-
-  .map-svg {
-    width: min(240px, 60vw);
-    height: min(240px, 60vw);
-  }
-
-  .hit-area {
-    cursor: pointer;
-  }
-
-  .breathing {
-    animation: breathe 3s ease-in-out infinite;
-  }
-
-  @keyframes breathe {
-    0%, 100% { opacity: 0.8; }
-    50%       { opacity: 1; }
-  }
-
-  .labels {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    width: 100%;
-    max-width: 280px;
-  }
-
-  .label {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    transition: opacity var(--dur-base) var(--ease-soft);
-    opacity: 0.5;
-  }
-
-  .label.active,
-  .label.hovered {
-    opacity: 1;
-  }
-
-  .label-text {
-    color: var(--void-text-dim);
-    font-family: var(--font-serif);
-    font-size: var(--text-xs);
-    letter-spacing: var(--ls-ui);
-  }
-
-  .label-summary {
-    color: var(--void-text-hint);
-    font-family: var(--font-serif);
-    font-size: var(--text-xs);
-    line-height: var(--lh-ui);
-    font-style: italic;
-  }
+  .map-page { max-width: 68rem; }
+  .centered { text-align: center; }
+  button { border: 0; background: none; color: var(--void-text-hint); font: inherit; cursor: pointer; transition: color .35s ease, opacity .35s ease; }
+  button:hover, button.chosen { color: var(--void-text); }
+  .map-modes, .kinds { display: flex; justify-content: center; gap: 2.4rem; }
+  .map-modes { margin: 2.8rem 0 1.5rem; }
+  .kinds { gap: 1.8rem; font-size: .85rem; }
+  .map-modes button, .kinds button { padding: .5rem 0; }
+  .constellation { height: clamp(26rem, 48vw, 35rem); position: relative; --star-color: var(--lavender); margin: .5rem -1rem 0; }
+  .constellation.feelings { --star-color: var(--rose); }
+  .constellation.places { --star-color: var(--moss); }
+  .sky { position: absolute; width: 100%; height: 100%; pointer-events: none; }
+  .sky ellipse { stroke: var(--hairline); stroke-width: .6; fill: none; opacity: .45; }
+  .sky circle { fill: var(--void-text-faint); opacity: .35; }
+  .star { position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: .75rem; width: 8rem; min-height: 44px; padding: .4rem; }
+  .point { width: var(--size); height: var(--size); border-radius: 50%; background: var(--star-color); box-shadow: 0 0 18px color-mix(in srgb, var(--star-color) 24%, transparent); transition: box-shadow .5s ease, transform .5s ease; }
+  .concept { font-size: clamp(.8rem, 1.5vw, 1.05rem); line-height: 1.5; overflow-wrap: anywhere; max-width: 100%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .star.selected { color: var(--void-text); }
+  .star.selected .point, .star:hover .point { transform: scale(1.3); box-shadow: 0 0 30px color-mix(in srgb, var(--star-color) 50%, transparent); }
+  .constellation-note { text-align: center; min-height: 7rem; }
+  .selected-name { font: 1.6rem/1.8 var(--font-reading); overflow-wrap: anywhere; }
+  .map-footnote { margin-top: 1.8rem; color: var(--void-text-faint); font-size: .8rem; }
+  .unformed { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; text-align: center; padding: 2rem; }
+  .unformed > span { color: var(--lavender); font-size: 2rem; margin-bottom: 1rem; }
+  .unformed > p { max-width: 30ch; }
+  .lens-room { text-align: center; margin-top: 2rem; }
+  .lens-room :global(.soul-map) { padding: 2rem 0; min-height: auto; }
+  .lens-room :global(.labels) { max-width: 34rem; text-align: left; display: grid; grid-template-columns: 1fr 1fr; gap: 1.4rem 2rem; }
+  @media(max-width: 600px) { .star { width: 5.7rem; } .constellation { margin-left: -.6rem; margin-right: -.6rem; } .kinds { gap: 1.2rem; } .lens-room :global(.labels) { grid-template-columns: 1fr; } }
 </style>

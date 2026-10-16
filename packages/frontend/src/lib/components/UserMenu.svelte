@@ -7,6 +7,7 @@
   import PrivacyOverlay from './PrivacyOverlay.svelte';
   import { overlayStore } from '$lib/stores/overlay.svelte.js';
   import ChatGPTSettings from './ChatGPTSettings.svelte';
+  import ArchiveExport from './ArchiveExport.svelte';
   import { modal } from '$lib/modal.js';
   import { companionRequest } from '$lib/stores/ai.svelte.js';
   import { aiStore, loadAI } from '$lib/stores/ai.svelte.js';
@@ -18,6 +19,7 @@
   let showInfo = $state(false);
   let showPrivacy = $state(false);
   let showPlan = $state(false);
+  let showExport = $state(false);
   let error = $state('');
   let deleting = $state(false);
   let showWelcome = $state(false);
@@ -69,12 +71,13 @@
       if (showInfo) { showInfo = false; return; }
       if (showPrivacy) { showPrivacy = false; return; }
       if (showPlan) { showPlan = false; return; }
+      if (showExport) { showExport = false; return; }
       if (open) { close(); return; }
     }
   }
 
   $effect(() => {
-    overlayStore.open = open || showInfo || showPrivacy || showPlan || showWelcome;
+    overlayStore.open = open || showInfo || showPrivacy || showPlan || showWelcome || showExport;
     return () => { overlayStore.open = false; };
   });
 
@@ -109,6 +112,7 @@
         <button class="menu-item" onclick={() => { open = false; confirming = false; showInfo = true; }}>what is this</button>
         <button class="menu-item" onclick={() => { open = false; confirming = false; showPrivacy = true; }}>data & privacy</button>
         <button class="menu-item" onclick={() => { open = false; showPlan = true; }}>AI & ChatGPT plan</button>
+        <button class="menu-item" onclick={() => { open = false; showExport = true; }}>take your words with you</button>
         <button class="menu-item" onclick={handleSignOut}>sign out</button>
         <button class="menu-item danger" disabled={deleting} onclick={handleDelete}>
           {confirming ? 'sure?' : 'delete account'}
@@ -122,6 +126,7 @@
 <InfoOverlay bind:show={showInfo} />
 <PrivacyOverlay bind:show={showPrivacy} />
 <ChatGPTSettings bind:show={showPlan} />
+<ArchiveExport bind:show={showExport} />
 {#if showWelcome}
   <div use:modal={{ dismiss: welcomeDone }} class="screen-overlay" role="dialog" aria-modal="true" aria-label="You’re using your ChatGPT plan" tabindex="-1"
     onclick={(e) => { if (e.target === e.currentTarget) welcomeDone(); }} onkeydown={(e) => { if (e.key === 'Escape') welcomeDone(); }} transition:fade={{ duration: 500, easing: cubicOut }}>

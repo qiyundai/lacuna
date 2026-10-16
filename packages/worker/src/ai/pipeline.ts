@@ -3,7 +3,7 @@ import { MODELS, type ModelWeights } from './models.js';
 import type { MemoryGraph } from './types.js';
 import { mergeConceptsIntoGraph } from './graph.js';
 import { buildTier0Prompt, buildTier1Prompt, buildTier2Prompt, buildMemoirPrompt, buildConceptExtractionPrompt, buildRangeSummaryPrompt } from './prompts.js';
-import { parseObject, validExtraction, validWeights, isRecord } from './validation.js';
+import { parseObject, validExtraction, validWeights, validGraph, isRecord } from './validation.js';
 
 const EXTRACTION_BATCH_SIZE = 10;
 const RECENT_ENTRIES_WINDOW = 20;
@@ -69,8 +69,7 @@ export async function analyzeSnapshot(snapshot: AnalysisSnapshot, generate: Gene
 }
 
 export function validResult(value: unknown): value is AnalysisResult {
-  if (!isRecord(value) || !validWeights(value.weights) || !isRecord(value.graph) || !Array.isArray(value.graph.nodes) || value.graph.nodes.length > 50) return false;
-  if (!value.graph.nodes.every(n => isRecord(n) && typeof n.concept === 'string' && n.concept.length <= 200 && ['theme', 'emotion', 'entity'].includes(n.type as string) && typeof n.weight === 'number' && Number.isFinite(n.weight) && n.weight >= 0 && n.weight <= 1 && Number.isSafeInteger(n.count) && (n.count as number) > 0)) return false;
+  if (!isRecord(value) || !validWeights(value.weights) || !validGraph(value.graph)) return false;
   if (!Number.isSafeInteger(value.extracted) || (value.extracted as number) < 0 || value.graph.processed_count !== value.extracted || !Number.isSafeInteger(value.memoirCount) || (value.memoirCount as number) < 0) return false;
   return (value.memoir === null || (typeof value.memoir === 'string' && value.memoir.length > 0 && value.memoir.length <= 30000)) && Array.isArray(value.summaries) && value.summaries.length <= 1 && value.summaries.every(s => isRecord(s) && Number.isSafeInteger(s.from) && (s.from as number) >= 1 && Number.isSafeInteger(s.to) && s.to === (s.from as number) + 14 && typeof s.text === 'string' && s.text.length > 0 && s.text.length <= 8000);
 }

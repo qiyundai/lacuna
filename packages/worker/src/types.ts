@@ -22,6 +22,7 @@ export interface EntryRow {
   body: string;
   created_at: number;
   solidified_at: number | null;
+  kept_at: number | null;
 }
 
 export interface PatternRow {

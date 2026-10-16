@@ -76,6 +76,7 @@ pnpm build:worker    # tsc --noEmit (wrangler bundles at deploy time)
 pnpm check          # frontend diagnostics + worker type check
 pnpm test           # regression suite (no real AI requests)
 pnpm companion      # build and serve the app locally with ChatGPT plan support
+pnpm preview:story  # isolated, populated sample story on 127.0.0.1:1456
 
 # Deploy
 pnpm deploy:worker   # wrangler deploy
@@ -140,7 +141,7 @@ User types in Void
 
 ```sql
 users         (id, email, magic_token, magic_token_expires_at, created_at)
-entries       (id, user_id, body, created_at, solidified_at)
+entries       (id, user_id, body, created_at, solidified_at, kept_at)
 patterns      (id, user_id, model_weights JSON, entry_count_at_last_memoir, last_updated)
 memoir_snapshots (id, user_id, prose, generated_at)
 ```
@@ -188,7 +189,13 @@ All stores live in `packages/frontend/src/lib/stores/`. They are plain module-le
 
 ### Soul Map
 
-SVG radial gauge. 6 arc segments (one per model). Arc fill = weight (0–1). Empty arcs render at 8% opacity — present but unfilled, never hidden. Active segments pulse with a `breathe` animation.
+The default view is a constellation of actual stored concepts, grouped as threads, feelings, or people/places. Point size follows recurrence. Do not infer relationship edges from aggregate counts. `ReflectionLenses.svelte` retains the six-segment radial interpretation as an optional view.
+
+### Private archive
+
+`GET /entries` accepts literal `q` search and `kept=1`, with compound pagination and account-scoped cursors. `PATCH /entries/:id/keep` changes only `kept_at`; it must not invalidate AI versions. `GET /story` returns counts and a validated graph; malformed old graphs rebuild from source entries. `GET /memoir/history` paginates stable editions, including same-second snapshots. `GET /story/export` is authenticated and throttled; never include credentials or other accounts. Deletion still clears all derived text, including memoir history.
+
+The populated browser fixture uses synthetic content and a disposable SQLite database. `pnpm preview:story` builds the interface into `.test-output/preview-app` and serves it on 1456, independent of the real companion on 1455. Its local session is for QA only.
 
 ---
 

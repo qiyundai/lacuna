@@ -8,6 +8,7 @@ import { entriesRoute } from './routes/entries.js';
 import { patternsRoute } from './routes/patterns.js';
 import { memoirRoute } from './routes/memoir.js';
 import { aiRoute } from './routes/ai.js';
+import { storyRoute } from './routes/story.js';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -32,13 +33,14 @@ app.use('*', async (c, next) => {
   c.header('Cache-Control', 'no-store');
 });
 
-app.get('/health', (c) => c.json({ ok: true, version: '0.1.0' }));
+app.get('/health', (c) => c.json({ ok: true, version: '0.2.0' }));
 
 app.route('/auth', authRoute);
 app.route('/entries', entriesRoute);
 app.route('/patterns', patternsRoute);
 app.route('/memoir', memoirRoute);
 app.route('/ai', aiRoute);
+app.route('/story', storyRoute);
 
 app.onError((err, c) => {
   if (err instanceof SyntaxError) return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid JSON' } }, 400);

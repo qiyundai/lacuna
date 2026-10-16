@@ -24,8 +24,8 @@ A low UI, self-memoir social space. Not a journal app. Not a chat app. A **refle
 | Hosting | Cloudflare Pages | |
 | API | Cloudflare Workers | AI synthesis, entry persistence |
 | Database | Cloudflare D1 | Entries, user state, pattern accumulation |
-| AI | Anthropic API via Workers | McAdams-backbone, multi-model dynamic |
-| Auth | Magic link | Zero friction |
+| AI | ChatGPT plan through a local companion | Shared reflection pipeline; access and refresh tokens remain local |
+| Auth | ChatGPT OIDC + Lacuna JWT | Verified identity, no email link |
 
 ---
 
@@ -73,6 +73,16 @@ Three views of the same underlying data — the user can move between them:
 1. **Timeline** — chronological entries, sparse, readable
 2. **Soul Map** — AI model weights and pattern dimensions visualized. Gauges/dimensions only render when they have sufficient data to be honest. Empty dimensions shown as unfilled — an invitation, not a failure.
 3. **Living Memoir** — AI-synthesized narrative prose from entries over time. Rewritten periodically as new entries accumulate.
+
+### The private story, refined
+
+- **Your words:** month-grouped fragments with a full-history word search. Open a thought into a full-screen reader; mark it **kept close** to give important words a place to return to. No streaks or productivity scoring.
+- **Constellation:** recurring threads, feelings, and people/places drawn from the stored concept graph. Point size follows recurrence. Decorative orbits establish space; no relationship edges are invented. The original six-lens reflection remains a separate, optional view inside the map.
+- **Earlier tellings:** every retained memoir edition can be read again, in order. Larger reading type is optional; an individual edition can be downloaded as Markdown.
+- **Take your words with you:** a readable Markdown collection or a complete JSON archive. JSON includes thoughts, memoirs, concepts, patterns, and range summaries; it excludes authentication data and credentials.
+- **Let this go:** thought deletion requires an explicit second action and explains that generated material containing it will be cleared. Keeping a thought close does not change analysis checkpoints.
+
+The visual language is a nocturnal reading room: the existing dark surface, ivory prose, muted lavender concepts, moss for kept words, and rose for feelings. Long reading uses a literary serif with generous line height. The constellation is the expressive visual; all surrounding controls remain quiet and text-based. Full-screen layers, keyboard focus, reduced motion, and phone layouts are part of the core experience.
 
 ---
 
@@ -123,7 +133,7 @@ The AI reads the nature of each entry and weights mental models dynamically. The
 
 ```sql
 users (id, email, magic_token, created_at)
-entries (id, user_id, body, created_at, solidified_at)
+entries (id, user_id, body, created_at, solidified_at, kept_at)
 patterns (id, user_id, model_weights JSON, last_updated)
 memoir_snapshots (id, user_id, prose, generated_at)
 ```

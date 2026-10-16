@@ -40,9 +40,9 @@ export const api = {
       request<{ ok: boolean }>('/auth/account', { method: 'DELETE' }),
   },
   entries: {
-    list: (cursor?: string) =>
+    list: (cursor?: string, filter: { query?: string; kept?: boolean } = {}) =>
       request<{ entries: EntryData[]; nextCursor: string | null }>(
-        `/entries${cursor ? `?cursor=${cursor}` : ''}`
+        `/entries?${new URLSearchParams({ ...(cursor ? { cursor } : {}), ...(filter.query ? { q: filter.query } : {}), ...(filter.kept ? { kept: '1' } : {}) })}`
       ),
     create: (body: string, solidified_at: number, entry_id: string) =>
       request<{ entry: EntryData }>('/entries', {
@@ -51,6 +51,7 @@ export const api = {
       }),
     delete: (id: string) =>
       request<{ ok: boolean }>(`/entries/${id}`, { method: 'DELETE' }),
+    keep: (id: string, kept: boolean) => request<{ entry: EntryData }>(`/entries/${id}/keep`, { method: 'PATCH', body: JSON.stringify({ kept }) }),
   },
   patterns: {
     get: () => request<{ model_weights: ModelWeights; last_updated: number | null }>('/patterns'),
@@ -61,7 +62,12 @@ export const api = {
       }),
   },
   memoir: {
-    get: () => request<{ prose: string; generated_at: number } | null>('/memoir'),
+    get: () => request<MemoirEdition | null>('/memoir'),
+    history: (cursor?: string) => request<{ editions: MemoirEdition[]; nextCursor: string | null }>(`/memoir/history${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+  },
+  story: {
+    get: () => request<StoryData>('/story'),
+    export: () => request<ArchiveData>('/story/export'),
   },
   ai: {
     status: () => request<{ provider: 'chatgpt'; pending: number; entryCount: number }>('/ai/status'),
@@ -75,7 +81,16 @@ export interface EntryData {
   body: string;
   created_at: number;
   solidified_at: number | null;
+  kept_at: number | null;
 }
+
+export interface MemoryNode { concept: string; type: 'theme' | 'emotion' | 'entity'; weight: number; count: number }
+export interface MemoirEdition { id: string; prose: string; generated_at: number }
+export interface StoryData {
+  summary: { total: number; kept: number; first_at: number | null; last_at: number | null };
+  graph: { nodes: MemoryNode[]; processed_count: number };
+}
+export interface ArchiveData { format: string; exported_at: string; entries: EntryData[]; memoirs: MemoirEdition[]; [key: string]: unknown }
 
 export interface ModelWeights {
   story_thread?: number;

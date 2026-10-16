@@ -7,6 +7,8 @@ const config = {
 	},
 	kit: {
 		adapter: adapter({
+			pages: process.env.LACUNA_BUILD_DIR || 'build',
+			assets: process.env.LACUNA_BUILD_DIR || 'build',
 			fallback: 'index.html'
 		})
 	}

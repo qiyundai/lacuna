@@ -2,6 +2,8 @@
 
 A quiet reflection space. Type into the void, hold to save a thought, and move down into your timeline, soul map, and living memoir. Svelte 5/SvelteKit serves the interface; Cloudflare Workers and D1 store private account data. A local Node companion handles ChatGPT sign-in and inference.
 
+Find a word across your whole story, keep important thoughts close, explore recurring concepts as a constellation, and return to earlier memoir editions. The menu can export your private story as a readable Markdown collection or a complete JSON archive. These features require migration `0005_story_archive.sql` and the matching Worker/companion update.
+
 ## ChatGPT plan companion
 
 Use Node.js 22.16+ and pnpm 9+:
@@ -58,9 +60,12 @@ pnpm test
 pnpm build:frontend
 pnpm build:companion
 pnpm audit
+pnpm preview:story     # Disposable sample story at http://127.0.0.1:1456
 ```
 
 Tests use disposable SQLite data and simulated OpenAI responses. Real OAuth consent and model inference require acceptance testing with an eligible account. See [AUDIT.md](./AUDIT.md), [CLAUDE.md](./CLAUDE.md), and [SPEC.md](./SPEC.md) for verification scope, contributor guidance, and product conventions.
+
+The sample-story preview builds into `.test-output/preview-app`, uses an in-memory database and synthetic entries, and never loads production data or OAuth credentials. It uses ports 1456 and 8788 so your real companion on 1455 can remain open. Stop the preview before starting another instance.
 
 ## License
 

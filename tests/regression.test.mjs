@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
-import { readFile, readdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createTestDatabase } from './database.mjs';
+import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { SignJWT, generateKeyPair, createLocalJWKSet, exportJWK } from 'jose';
@@ -19,26 +19,11 @@ import { holdDetector, swipeDetector } from '../packages/frontend/src/lib/gestur
 import { session, setAuthed, signOut } from '../packages/frontend/src/lib/stores/session.svelte.ts';
 import { entriesStore, loadEntries } from '../packages/frontend/src/lib/stores/entries.svelte.ts';
 import { draft, insertAt, deleteRange, clearDraft } from '../packages/frontend/src/lib/stores/draft.svelte.ts';
+import { storyStore, loadStory } from '../packages/frontend/src/lib/stores/story.svelte.ts';
+import { archiveMarkdown, groupThoughts } from '../packages/frontend/src/lib/story.ts';
 
-// Execute the real migration SQL and route queries against SQLite, with D1's transactional batch contract.
-class D1 {
-  constructor() { this.sqlite = new DatabaseSync(':memory:'); this.sqlite.exec('PRAGMA foreign_keys = ON'); }
-  prepare(sql) {
-    const db = this;
-    return { args: [], bind(...args) { this.args = args; return this; },
-      async first() { return db.sqlite.prepare(sql).get(...this.args) ?? null; },
-      async all() { return { results: db.sqlite.prepare(sql).all(...this.args) }; },
-      async run() { const meta = db.sqlite.prepare(sql).run(...this.args); return { meta: { changes: Number(meta.changes) } }; } };
-  }
-  async batch(statements) {
-    this.sqlite.exec('BEGIN');
-    try { const results = []; for (const statement of statements) results.push(await statement.run()); this.sqlite.exec('COMMIT'); return results; }
-    catch (err) { this.sqlite.exec('ROLLBACK'); throw err; }
-  }
-}
 async function fixture(t) {
-  const DB = new D1(); t.after(() => DB.sqlite.close());
-  for (const file of (await readdir('packages/worker/migrations')).sort()) DB.sqlite.exec(await readFile(`packages/worker/migrations/${file}`, 'utf8'));
+  const DB = await createTestDatabase(); t.after(() => DB.sqlite.close());
   const user = await upsertUser(DB, 'one@example.com');
   const env = { DB, JWT_SECRET: 'test-secret-only', FRONTEND_ORIGIN: 'https://lacuna.example',  };
   const jwt = await new SignJWT({ sub: user.id, email: user.email }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(env.JWT_SECRET));
@@ -248,13 +233,20 @@ test('sign-out clears private state and late responses cannot populate the next 
   let finish;
   globalThis.fetch = () => new Promise(resolve => { finish = resolve; });
   const loading = loadEntries();
+  const finishEntries = finish;
+  storyStore.data = { summary: { total: 4 }, graph: { nodes: [{ concept: 'private theme' }] } };
+  const loadingStory = loadStory();
+  const finishStory = finish;
   signOut();
   assert.equal(draft.text, '');
   assert.equal(session.user, null);
+  assert.equal(storyStore.data, null);
   setAuthed({ id: 'new', email: 'new@example.com' });
-  finish(Response.json({ entries: [{ id: 'private-old-entry' }], nextCursor: null }));
-  await loading;
+  finishEntries(Response.json({ entries: [{ id: 'private-old-entry' }], nextCursor: null }));
+  finishStory(Response.json({ summary: { total: 4 }, graph: { nodes: [{ concept: 'private theme' }] } }));
+  await Promise.all([loading, loadingStory]);
   assert.deepEqual(entriesStore.entries, []);
+  assert.equal(storyStore.data, null);
   assert.equal(session.user.id, 'new');
   signOut();
 });
@@ -388,4 +380,68 @@ test('ChatGPT sign-in verifies identity, isolates browsers, rejects replay and p
     assert.equal((await f.request('/auth/account', 'DELETE', undefined, result.session.jwt)).status, 200);
     assert.equal(f.DB.sqlite.prepare('SELECT count(*) AS n FROM openai_identities').get().n, 0);
   } finally { await companion.close(); await new Promise(resolve => cloud.close(resolve)); await rm(directory, { recursive: true, force: true }); }
+});
+
+test('corrupt stored concepts render safely and rebuild from the original thoughts', async t => {
+  const f = await fixture(t);
+  await createEntry(f.DB, f.user.id, 'a thought to rebuild', 123);
+  await f.DB.prepare('INSERT INTO memory_graph (user_id, graph_json) VALUES (?, ?)').bind(f.user.id, '{"nodes":[null],"processed_count":1}').run();
+  await f.DB.prepare('INSERT INTO patterns (user_id, graph_extracted_through) VALUES (?, ?)').bind(f.user.id, 1).run();
+  assert.deepEqual((await (await f.request('/story')).json()).graph, { nodes: [], processed_count: 0 });
+  const job = await acquireSnapshot(f.DB, f.user.id, 'chatgpt');
+  assert.equal(job.snapshot.extracted, 0);
+  assert.equal(job.snapshot.entries.length, 1);
+});
+
+test('archive search and kept thoughts paginate across all history without crossing accounts', async t => {
+  const f = await fixture(t);
+  const other = await upsertUser(f.DB, 'other@example.com');
+  const ids = [];
+  for (let i = 0; i < 25; i++) ids.push((await createEntry(f.DB, f.user.id, `Home ${i} 100%_literal`, 123)).id);
+  const foreign = await createEntry(f.DB, other.id, 'Home private', 123);
+  const originalVersion = (await f.request('/ai/status').then(r => r.json())).pending;
+  for (const id of ids.slice(0, 3)) assert.equal((await f.request(`/entries/${id}/keep`, 'PATCH', { kept: true })).status, 200);
+  assert.equal((await f.request('/ai/status').then(r => r.json())).pending, originalVersion);
+  assert.equal((await f.request(`/entries/${foreign.id}/keep`, 'PATCH', { kept: true })).status, 404);
+  assert.equal((await f.request(`/entries/${ids[0]}/keep`, 'PATCH', { kept: 'yes' })).status, 400);
+  const kept = await (await f.request('/entries?kept=1&q=home')).json();
+  assert.equal(kept.entries.length, 3);
+  const first = await (await f.request('/entries?q=HOME&limit=20')).json();
+  const second = await (await f.request(`/entries?q=HOME&limit=20&cursor=${first.nextCursor}`)).json();
+  assert.equal(new Set([...first.entries, ...second.entries].map(e => e.id)).size, 25);
+  assert.equal((await (await f.request('/entries?q=100%25_literal')).json()).entries.length, 20);
+  assert.equal((await (await f.request(`/entries?q=home&cursor=${foreign.id}`)).json()).entries.length, 0);
+  assert.equal((await f.request('/entries?kept=anything')).status, 400);
+  const story = await (await f.request('/story')).json();
+  assert.equal(story.summary.total, 25); assert.equal(story.summary.kept, 3);
+  assert.deepEqual(story.graph.nodes, []);
+  await f.request(`/entries/${ids[0]}/keep`, 'PATCH', { kept: false });
+  assert.equal((await (await f.request('/entries?kept=1')).json()).entries.length, 2);
+});
+
+test('memoir history has stable same-second pagination and account isolation; export excludes credentials', async t => {
+  const f = await fixture(t);
+  const other = await upsertUser(f.DB, 'other@example.com');
+  await createEntry(f.DB, f.user.id, 'my own words', 123);
+  await createEntry(f.DB, other.id, 'foreign-secret-words', 123);
+  for (let i = 0; i < 13; i++) await f.DB.prepare('INSERT INTO memoir_snapshots (user_id, prose, generated_at) VALUES (?, ?, ?)').bind(f.user.id, `edition ${i}`, 123).run();
+  const foreign = await f.DB.prepare('INSERT INTO memoir_snapshots (user_id, prose, generated_at) VALUES (?, ?, ?) RETURNING id').bind(other.id, 'foreign-secret-memoir', 123).first();
+  const latest = await (await f.request('/memoir')).json();
+  const first = await (await f.request('/memoir/history')).json();
+  const second = await (await f.request(`/memoir/history?cursor=${first.nextCursor}`)).json();
+  assert.equal(first.editions[0].id, latest.id);
+  assert.equal(first.editions.length, 10); assert.equal(second.editions.length, 3);
+  assert.equal(new Set([...first.editions, ...second.editions].map(e => e.id)).size, 13);
+  assert.equal(second.nextCursor, null);
+  assert.equal((await (await f.request(`/memoir/history?cursor=${foreign.id}`)).json()).editions.length, 0);
+  assert.equal((await f.request('/story/export', 'GET', undefined, 'invalid')).status, 401);
+  const archive = await (await f.request('/story/export')).json();
+  assert.equal(archive.entries.length, 1); assert.equal(archive.memoirs.length, 13);
+  const serialized = JSON.stringify(archive);
+  for (const forbidden of ['foreign-secret', 'test-secret-only', 'magic_token', 'access_token', 'refresh_token', f.jwt]) assert.equal(serialized.includes(forbidden), false);
+  assert.match(archiveMarkdown(archive), /my own words/);
+  assert.match(archiveMarkdown(archive), /edition 12/);
+  assert.equal(groupThoughts(archive.entries).flatMap(g => g.entries).length, 1);
+  for (let i = 0; i < 5; i++) assert.equal((await f.request('/story/export')).status, 200);
+  assert.equal((await f.request('/story/export')).status, 429);
 });

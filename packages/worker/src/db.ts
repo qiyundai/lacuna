@@ -1,5 +1,6 @@
 import type { EntryRow, MemoryGraphRow, MemoirSnapshotRow, PatternRow, RangeSummaryRow, UserRow } from './types.js';
 import type { MemoryGraph } from './ai/types.js';
+import { validGraph } from './ai/validation.js';
 export class EntryConflictError extends Error {}
 
 export async function getUserByEmail(db: D1Database, email: string): Promise<UserRow | null> {
@@ -49,29 +50,25 @@ export async function getEntries(
   db: D1Database,
   userId: string,
   cursor: string | null,
-  limit: number
+  limit: number,
+  filter: { query?: string; kept?: boolean } = {}
 ): Promise<EntryRow[]> {
+  const clauses = ['user_id = ?'];
+  const args: (string | number)[] = [userId];
+  if (filter.query) { clauses.push('instr(lower(body), lower(?)) > 0'); args.push(filter.query); }
+  if (filter.kept) clauses.push('kept_at IS NOT NULL');
   if (cursor) {
     const cursorEntry = await db
       .prepare('SELECT created_at FROM entries WHERE id = ? AND user_id = ?')
       .bind(cursor, userId)
       .first<{ created_at: number }>();
     if (!cursorEntry) return [];
-    // Compound cursor: (created_at DESC, id DESC) avoids skipping rows with identical timestamps
-    const result = await db
-      .prepare(
-        `SELECT * FROM entries
-         WHERE user_id = ? AND (created_at < ? OR (created_at = ? AND id < ?))
-         ORDER BY created_at DESC, id DESC
-         LIMIT ?`
-      )
-      .bind(userId, cursorEntry.created_at, cursorEntry.created_at, cursor, limit)
-      .all<EntryRow>();
-    return result.results;
+    clauses.push('(created_at < ? OR (created_at = ? AND id < ?))');
+    args.push(cursorEntry.created_at, cursorEntry.created_at, cursor);
   }
   const result = await db
-    .prepare('SELECT * FROM entries WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?')
-    .bind(userId, limit)
+    .prepare(`SELECT * FROM entries WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC, id DESC LIMIT ?`)
+    .bind(...args, limit)
     .all<EntryRow>();
   return result.results;
 }
@@ -111,7 +108,8 @@ export async function getMemoryGraph(db: D1Database, userId: string): Promise<Me
     .first<Pick<MemoryGraphRow, 'graph_json'>>();
   if (!row) return { nodes: [], processed_count: 0 };
   try {
-    return JSON.parse(row.graph_json) as MemoryGraph;
+    const value: unknown = JSON.parse(row.graph_json);
+    return validGraph(value) ? value : { nodes: [], processed_count: 0 };
   } catch {
     return { nodes: [], processed_count: 0 };
   }

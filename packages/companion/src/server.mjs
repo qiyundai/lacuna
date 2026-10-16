@@ -179,7 +179,7 @@ export async function startCompanion(options = {}) {
       }
       if (url.pathname.startsWith('/api/')) {
         const path = url.pathname.slice(4);
-        if (!/^\/(auth|entries|patterns|memoir|ai|health)(\/|$)/.test(path)) return json(res, { error: { code: 'NOT_FOUND', message: 'Not found' } }, 404);
+        if (!/^\/(auth|entries|patterns|memoir|ai|story|health)(\/|$)/.test(path)) return json(res, { error: { code: 'NOT_FOUND', message: 'Not found' } }, 404);
         if (path === '/ai/refresh' && req.method === 'POST') {
           const { user, token } = await identity(req);
           if ((await cloud('/ai/status', token)).provider === 'chatgpt') { queueJob(user.id, token); return json(res, { ok: true }, 202); }

@@ -10,6 +10,7 @@
   import { overlayStore } from '$lib/stores/overlay.svelte.js';
   import { api } from '$lib/api.js';
   import { loadAI } from '$lib/stores/ai.svelte.js';
+  import { loadStory } from '$lib/stores/story.svelte.js';
 
   let { onSwipeUp, active = false }: { onSwipeUp: () => void; active?: boolean } = $props();
 
@@ -21,12 +22,12 @@
 
   $effect(() => {
     if (!active) return;
-    untrack(() => { loadPatterns(); loadMemoir(); loadAI().catch(() => {}); });
+    untrack(() => { loadPatterns(); loadMemoir(); loadStory(); loadAI().catch(() => {}); });
     let polling = false;
     const timer = setInterval(async () => {
       if (polling) return;
       polling = true;
-      try { if (!(await api.ai.status()).pending) { loadPatterns(); loadMemoir(); clearInterval(timer); } await loadAI(); } catch { clearInterval(timer); }
+      try { if (!(await api.ai.status()).pending) { loadPatterns(); loadMemoir(); loadStory(); clearInterval(timer); } await loadAI(); } catch { clearInterval(timer); }
       finally { polling = false; }
     }, 5000);
     return () => clearInterval(timer);
@@ -36,14 +37,17 @@
     loadEntries();
     loadPatterns();
     loadMemoir();
+    loadStory();
   });
 
   function touchStart(e: TouchEvent) {
+    if ((e.target as Element).closest('button, input, textarea, a') || e.touches.length !== 1) { touchStartX = NaN; return; }
     touchStartX = e.touches[0]!.clientX;
     touchStartY = e.touches[0]!.clientY;
   }
 
   function touchEnd(e: TouchEvent) {
+    if (!Number.isFinite(touchStartX) || !e.changedTouches[0]) return;
     const deltaX = touchStartX - e.changedTouches[0]!.clientX;
     if (Math.abs(touchStartY - e.changedTouches[0]!.clientY) >= Math.abs(deltaX)) return;
     if (Math.abs(deltaX) < 50) return;
@@ -73,7 +77,7 @@
   <div class="views" style="transform: translateX(-{currentView * 100}vw)">
     <div class="view" inert={currentView !== 0}><Timeline /></div>
     <div class="view" inert={currentView !== 1}><SoulMap /></div>
-    <div class="view" inert={currentView !== 2}><LivingMemoir /></div>
+    <div class="view" inert={currentView !== 2}><LivingMemoir active={active && currentView === 2} /></div>
   </div>
 
   <!-- Dot indicators -->
@@ -84,7 +88,8 @@
         class:active={currentView === i}
         onclick={() => (currentView = i as View)}
         aria-label={labels[i]}
-      ></button>
+        aria-current={currentView === i ? 'page' : undefined}
+      >{i === 0 ? 'your words' : labels[i]}</button>
     {/each}
   </div>
 </div>
@@ -130,7 +135,6 @@
     cursor: pointer;
     z-index: 10;
     padding: var(--space-2);
-    animation: bob-up 2s ease-in-out infinite;
   }
 
   @keyframes bob-up {
@@ -144,12 +148,15 @@
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: var(--space-2);
+    gap: 2rem;
     z-index: 10;
+    padding: .6rem 1.5rem;
+    white-space: nowrap;
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
   }
 
   .dot {
-    width: 28px;
+    min-width: 44px;
     height: 44px;
     display: grid;
     place-items: center;
@@ -157,19 +164,11 @@
     border: none;
     cursor: pointer;
     padding: 0;
+    color: var(--void-text-hint);
+    font: .8rem/1.8 var(--font-serif);
     transition: background var(--dur-base) var(--ease-soft);
   }
 
-  .dot::after {
-    content: '';
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--void-text-faint);
-    transition: background var(--dur-base) var(--ease-soft);
-  }
-
-  .dot.active::after {
-    background: var(--void-text-dim);
-  }
+  .dot.active { color: var(--void-text); }
+  .dot:hover { color: var(--void-text); }
 </style>

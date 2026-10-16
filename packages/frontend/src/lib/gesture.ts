@@ -129,7 +129,7 @@ export function swipeDetector(
   }
 
   function consumesScroll(element: Element, delta: number, starts?: Map<HTMLElement, number>): boolean {
-    if (element.closest('button, a, [role="dialog"]')) return true;
+    if (element.closest('button, a, input, textarea, [role="dialog"]')) return true;
     for (let el: Element | null = element; el && el !== node; el = el.parentElement) {
       if (el instanceof HTMLElement && /auto|scroll/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight) {
         const top = starts?.get(el) ?? el.scrollTop;

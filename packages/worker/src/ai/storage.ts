@@ -14,13 +14,15 @@ export async function acquireSnapshot(db: D1Database, userId: string, provider: 
     if (!user) throw new Error('Account no longer exists');
     const entries = await getAllEntriesForUser(db, userId);
     const patterns = await getPatterns(db, userId);
-    const graph = await getMemoryGraph(db, userId);
+    let graph = await getMemoryGraph(db, userId);
     const summaries = await getRangeSummaries(db, userId);
     const memoir = await getLatestMemoir(db, userId);
     let weights: unknown = {};
     try { weights = JSON.parse(patterns?.model_weights ?? '{}'); } catch { /* rebuild */ }
+    let extracted = patterns?.graph_extracted_through ?? 0;
+    if (graph.processed_count !== extracted || extracted > entries.length) { graph = { nodes: [], processed_count: 0 }; extracted = 0; }
     return { lease, snapshot: { version: user.entries_version, entries, weights: validWeights(weights) ? weights : {}, graph, summaries,
-      memoir: memoir?.prose ?? null, memoirCount: patterns?.entry_count_at_last_memoir ?? 0, extracted: patterns?.graph_extracted_through ?? 0 } };
+      memoir: memoir?.prose ?? null, memoirCount: patterns?.entry_count_at_last_memoir ?? 0, extracted } };
   } catch (err) {
     await releaseAnalysis(db, userId, lease);
     throw err;

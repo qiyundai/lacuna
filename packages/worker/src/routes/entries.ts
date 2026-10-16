@@ -20,8 +20,10 @@ entriesRoute.get('/', async (c) => {
     return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid page size' } }, 400);
   }
   const limit = Math.min(requested, 50);
-
-  const entries = await getEntries(c.env.DB, user.sub, cursor, limit);
+  const query = c.req.query('q')?.trim() ?? '';
+  const kept = c.req.query('kept');
+  if (query.length > 200 || (kept !== undefined && kept !== '1')) return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid search.' } }, 400);
+  const entries = await getEntries(c.env.DB, user.sub, cursor, limit, { query, kept: kept === '1' });
   const nextCursor = entries.length === limit ? (entries[entries.length - 1]?.id ?? null) : null;
 
   return c.json({ entries, nextCursor });
@@ -67,4 +69,12 @@ entriesRoute.delete('/:id', async (c) => {
     return c.json({ error: { code: 'NOT_FOUND', message: 'Entry not found' } }, 404);
   }
   return c.json({ ok: true });
+});
+
+entriesRoute.patch('/:id/keep', async c => {
+  const body = await c.req.json<{ kept?: unknown }>();
+  if (typeof body?.kept !== 'boolean') return c.json({ error: { code: 'BAD_REQUEST', message: 'Choose whether to keep this thought.' } }, 400);
+  const entry = await c.env.DB.prepare(`UPDATE entries SET kept_at = CASE WHEN ? THEN coalesce(kept_at, unixepoch()) ELSE NULL END
+    WHERE id = ? AND user_id = ? RETURNING *`).bind(body.kept ? 1 : 0, c.req.param('id'), c.get('user').sub).first();
+  return entry ? c.json({ entry }) : c.json({ error: { code: 'NOT_FOUND', message: 'Thought not found.' } }, 404);
 });
