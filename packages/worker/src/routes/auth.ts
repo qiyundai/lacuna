@@ -2,115 +2,57 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import type { Env, JwtPayload } from '../types.js';
 import { authMiddleware } from '../middleware/auth.js';
-import {
-  deleteUser,
-  consumeMagicToken,
-  setMagicToken,
-  upsertUser,
-} from '../db.js';
+import { deleteUser } from '../db.js';
 import { checkRateLimit } from '../ratelimit.js';
+import { OPENAI_ISSUER, verifyOpenAIIdentity } from '../openai-identity.js';
 
 export async function hashToken(token: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
   return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
 }
 
-type Variables = { user: JwtPayload };
-export const authRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
-
-authRoute.post('/request', async (c) => {
-  const body = await c.req.json<{ email?: unknown; consent?: unknown; companionOrigin?: unknown }>();
-  const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
-  if (!email || email.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email) || body?.consent !== true) {
-    return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid email' } }, 400);
-  }
+export const authRoute = new Hono<{ Bindings: Env; Variables: { user: JwtPayload } }>();
+authRoute.post('/openai/start', async c => {
+  const body = await c.req.json<{ consent?: unknown }>();
+  if (body?.consent !== true) return c.json({ error: { code: 'CONSENT_REQUIRED', message: 'Acknowledge data and privacy first.' } }, 400);
   const ip = c.req.header('CF-Connecting-IP') ?? 'local';
-  if (!await checkRateLimit(c.env.DB, `auth-ip:${ip}`, 20, 900) ||
-      !await checkRateLimit(c.env.DB, `auth-email:${await hashToken(email)}`, 3, 900)) {
-    return c.json({ error: { code: 'RATE_LIMITED', message: 'Please wait before requesting another link' } }, 429);
-  }
-  if (!c.env.RESEND_API_KEY && c.env.ALLOW_DEV_AUTH !== 'true') {
-    return c.json({ error: { code: 'UNAVAILABLE', message: 'Email sign-in is not configured' } }, 503);
-  }
-
-  const user = await upsertUser(c.env.DB, email);
-  const token = crypto.randomUUID();
-  const expiresAt = Math.floor(Date.now() / 1000) + 15 * 60; // 15 minutes
-  await setMagicToken(c.env.DB, user.id, await hashToken(token), expiresAt);
-
-  let returnOrigin = c.env.FRONTEND_ORIGIN;
-  if (body.companionOrigin !== undefined) {
-    try {
-      const origin = new URL(String(body.companionOrigin));
-      if (origin.protocol !== 'http:' || origin.hostname !== '127.0.0.1' || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash) throw new Error('Invalid origin');
-      returnOrigin = origin.origin;
-    } catch { return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid companion address' } }, 400); }
-  }
-  await sendMagicLinkEmail(c.env.RESEND_API_KEY, returnOrigin, email, token);
-
+  if (!await checkRateLimit(c.env.DB, `openai-login:${ip}`, 20, 900)) return c.json({ error: { code: 'RATE_LIMITED', message: 'Please wait before signing in again.' } }, 429);
+  const id = crypto.randomUUID(), nonce = crypto.randomUUID() + crypto.randomUUID();
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM openai_login_challenges WHERE expires_at <= unixepoch()'),
+    c.env.DB.prepare('INSERT INTO openai_login_challenges (id, nonce, expires_at) VALUES (?, ?, unixepoch() + 600)').bind(id, nonce),
+  ]);
+  return c.json({ id, nonce });
+});
+authRoute.post('/openai/complete', async c => {
+  const body = await c.req.json<{ challenge?: unknown; clientId?: unknown; idToken?: unknown }>();
+  if (typeof body?.challenge !== 'string' || typeof body.clientId !== 'string' || !body.clientId || body.clientId.length > 256 || body.clientId === 'dynamic_agent_client' || typeof body.idToken !== 'string' || body.idToken.length > 32000) return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid sign-in response.' } }, 400);
+  const ip = c.req.header('CF-Connecting-IP') ?? 'local';
+  if (!await checkRateLimit(c.env.DB, `openai-verify:${ip}`, 40, 900)) return c.json({ error: { code: 'RATE_LIMITED', message: 'Please wait before signing in again.' } }, 429);
+  const challenge = await c.env.DB.prepare('SELECT nonce FROM openai_login_challenges WHERE id = ? AND expires_at > unixepoch()').bind(body.challenge).first<{ nonce: string }>();
+  if (!challenge) return c.json({ error: { code: 'INVALID_IDENTITY', message: 'Sign-in expired. Continue with ChatGPT again.' } }, 401);
+  let identity;
+  try { identity = await verifyOpenAIIdentity(body.idToken, body.clientId, challenge.nonce); }
+  catch { return c.json({ error: { code: 'INVALID_IDENTITY', message: 'ChatGPT identity could not be verified. Sign in again.' } }, 401); }
+  const consumed = await c.env.DB.prepare('DELETE FROM openai_login_challenges WHERE id = ? AND nonce = ? AND expires_at > unixepoch() RETURNING id').bind(body.challenge, challenge.nonce).first();
+  if (!consumed) return c.json({ error: { code: 'INVALID_IDENTITY', message: 'This sign-in was already used. Sign in again.' } }, 401);
+  const key = await hashToken(JSON.stringify([OPENAI_ISSUER, body.clientId, identity.subject]));
+  const userId = key.slice(0, 32);
+  await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT INTO users (id, email, consent_given_at, ai_provider) VALUES (?, ?, unixepoch(), 'chatgpt') ON CONFLICT DO NOTHING`).bind(userId, `${key}@chatgpt.invalid`),
+    c.env.DB.prepare(`INSERT INTO openai_identities (identity_key, user_id, display_email) VALUES (?, ?, ?) ON CONFLICT(identity_key) DO UPDATE SET display_email = excluded.display_email`).bind(key, userId, identity.email),
+  ]);
+  const row = await c.env.DB.prepare('SELECT user_id FROM openai_identities WHERE identity_key = ?').bind(key).first<{ user_id: string }>();
+  if (!row || row.user_id !== userId) throw new Error('Identity mapping failed');
+  const jwt = await new SignJWT({ sub: userId, email: identity.email }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('7d').sign(new TextEncoder().encode(c.env.JWT_SECRET));
+  return c.json({ jwt, user: { id: userId, email: identity.email } });
+});
+// Retired email links cannot create sessions, including links issued before migration.
+authRoute.post('/request', c => c.json({ error: { code: 'CHATGPT_REQUIRED', message: 'Continue with ChatGPT in the local companion.' } }, 410));
+authRoute.get('/verify', c => c.json({ error: { code: 'CHATGPT_REQUIRED', message: 'Continue with ChatGPT in the local companion.' } }, 410));
+authRoute.delete('/account', authMiddleware, async c => {
+  await deleteUser(c.env.DB, c.get('user').sub);
   return c.json({ ok: true });
 });
-
-authRoute.get('/verify', async (c) => {
-  const token = c.req.query('token');
-  if (!token) {
-    return c.json({ error: { code: 'BAD_REQUEST', message: 'Missing token' } }, 400);
-  }
-
-  const user = await consumeMagicToken(c.env.DB, await hashToken(token));
-  if (!user) {
-    return c.json({ error: { code: 'INVALID_TOKEN', message: 'Invalid or expired link' } }, 401);
-  }
-
-  const secret = new TextEncoder().encode(c.env.JWT_SECRET);
-  const jwt = await new SignJWT({ sub: user.id, email: user.email })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('7d')
-    .sign(secret);
-
-  return c.json({ jwt, user: { id: user.id, email: user.email } });
-});
-
-authRoute.delete('/account', authMiddleware, async (c) => {
-  const user = c.get('user');
-  await deleteUser(c.env.DB, user.sub);
-  return c.json({ ok: true });
-});
-
 authRoute.get('/me', authMiddleware, c => c.json({ id: c.get('user').sub, email: c.get('user').email }));
-
-async function sendMagicLinkEmail(
-  resendApiKey: string,
-  frontendOrigin: string,
-  to: string,
-  token: string
-): Promise<void> {
-  const link = `${frontendOrigin}/auth/verify?token=${encodeURIComponent(token)}`;
-
-  if (!resendApiKey) {
-    // Local dev fallback: no Resend key configured, so log the magic link
-    // to the worker console instead of sending an email.
-    console.log(`[auth] magic link for ${to}: ${link}`);
-    return;
-  }
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${resendApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: 'Lacuna <noreply@quietatlas.io>',
-      to,
-      subject: 'Open Lacuna',
-      html: `<p>Your link to enter Lacuna:</p><p><a href="${link}">${link}</a></p><p>Valid for 15 minutes.</p>`,
-      text: `Open Lacuna: ${link}\n\nValid for 15 minutes.`,
-    }),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Email delivery failed (${res.status})`);
-  }
-}

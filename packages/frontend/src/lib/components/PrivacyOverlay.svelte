@@ -32,8 +32,8 @@
     onkeydown={(e) => { if (!consentMode && e.key === 'Escape') dismiss(); }}
   >
     <div class="privacy-content">
-      <p>your entries are stored in your private Lacuna account. they are sent to your selected AI provider to create reflections, a concept map, and your memoir.</p>
-      <p>hosted reflections use Anthropic. when you choose your ChatGPT plan, the local companion sends reflection context to OpenAI. OpenAI credentials stay on your computer; generated reflections are saved to Lacuna.</p>
+      <p>your entries are stored in your private Lacuna account. the local companion sends reflection context to OpenAI to create reflections, a concept map, and your memoir using your ChatGPT plan.</p>
+      <p>ChatGPT signs you in. Lacuna verifies an identity token to create your account; access and refresh tokens stay on your computer. generated reflections are saved to Lacuna. eligible requests use your plan allowance or credits.</p>
       <p>deleting your account permanently removes everything — entries, your concept map, and all generated text — from our servers.</p>
       {#if isCompanion}<p class="hint">disconnecting ChatGPT removes credentials here. manage app access and usage in ChatGPT settings.</p>{/if}
       {#if consentMode}<button class="hint" onclick={dismiss}>acknowledge and continue</button>{:else}<p class="hint">anywhere to close</p>{/if}

@@ -2,13 +2,14 @@
   import { onMount, untrack } from 'svelte';
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
-  import { api, isCompanion } from '$lib/api.js';
+  import { isCompanion } from '$lib/api.js';
   import { aiStore, loadAI, companionRequest } from '$lib/stores/ai.svelte.js';
   import { modal } from '$lib/modal.js';
   import { loadPatterns } from '$lib/stores/patterns.svelte.js';
   import { loadMemoir } from '$lib/stores/memoir.svelte.js';
   let { show = $bindable(false) }: { show: boolean } = $props();
   let error = $state(''), busy = $state(false);
+  let testResult = $state('');
   let models = $state<{ slug: string; name: string }[]>([]);
   async function run(action: () => Promise<unknown>) {
     if (busy) return;
@@ -16,7 +17,7 @@
     try { await action(); await loadAI(); } catch (err) { error = err instanceof Error ? err.message : 'Try again.'; } finally { busy = false; }
   }
   async function connect() {
-    const { url } = await companionRequest<{ url: string }>('connect', 'POST');
+    const { url } = await companionRequest<{ url: string }>('connect', 'POST', { consent: true });
     location.assign(url);
   }
   async function disconnect() {
@@ -40,14 +41,13 @@
     onclick={(event) => { if (event.target === event.currentTarget) show = false; }} onkeydown={(event) => { if (event.key === 'Escape') show = false; }} transition:fade={{ duration: 500, easing: cubicOut }}>
     <div class="plan-content">
       <p>your reflections</p>
-      {#if aiStore.provider === 'chatgpt'}
         <p>using your ChatGPT plan. eligible requests use your plan allowance or credits.</p>
         {#if !isCompanion}<p>open the local companion on your computer to generate new reflections. your saved entries are still available here.</p>{/if}
-      {:else}<p>reflections currently use Lacuna’s hosted Anthropic integration.</p>{/if}
       {#if isCompanion}
         {#if aiStore.companion?.connected}
           <p>{aiStore.companion.email}</p>
-          {#if aiStore.provider !== 'chatgpt'}<button disabled={busy} onclick={() => run(() => api.ai.provider('chatgpt'))}>use your ChatGPT plan</button>{/if}
+          {#if !aiStore.companion.planEnabled}<p>you’re signed in. reconnect and allow ChatGPT plan use to generate reflections.</p>{/if}
+          <button disabled={busy || aiStore.companion.state === 'running'} onclick={() => run(connect)}>reconnect ChatGPT</button>
           <p class="small">choose a model</p>
           <div class="models">
             {#each models as model}
@@ -56,9 +56,11 @@
             {/each}
           </div>
           <button disabled={busy || aiStore.companion.state === 'running'} onclick={() => run(() => companionRequest('reflect', 'POST'))}>{aiStore.companion.state === 'running' ? 'reflecting…' : 'refresh reflections'}</button>
+          <button disabled={busy} onclick={() => run(async () => { testResult = ''; const result = await companionRequest<{ text: string }>('test', 'POST'); testResult = result.text; })}>test ChatGPT connection</button>
+          {#if testResult}<p role="status">{testResult}</p>{/if}
           <button disabled={busy} onclick={() => run(disconnect)}>disconnect ChatGPT</button>
         {:else}
-          <p>use your ChatGPT plan for reflections. your entries stay in your Lacuna account; OpenAI credentials stay on this computer.</p>
+          <p>use your ChatGPT plan for reflections. your entries stay in your Lacuna account; access and refresh tokens stay on this computer.</p>
           <button disabled={busy} onclick={() => run(connect)}>Continue with ChatGPT</button>
         {/if}
         {#if aiStore.companion?.message}<p role="status">{aiStore.companion.message}</p>{/if}
@@ -67,7 +69,6 @@
         <a href="https://github.com/qiyundai/lacuna#chatgpt-plan-companion" target="_blank" rel="noreferrer">set up the companion</a>
       {/if}
       <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">Manage usage</a>
-      {#if aiStore.provider === 'chatgpt'}<button disabled={busy} onclick={() => run(() => api.ai.provider('anthropic'))}>use hosted reflections instead</button>{/if}
       {#if error}<p role="alert">{error}</p>{/if}
       <button onclick={() => show = false}>return</button>
     </div>

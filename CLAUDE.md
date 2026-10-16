@@ -22,8 +22,8 @@ Core experience: the user types into **the void**, holds to solidify a thought, 
 | Hosting | Cloudflare Pages |
 | API | Cloudflare Workers (Hono router) |
 | Database | Cloudflare D1 (SQLite) |
-| AI | Hosted Anthropic or ChatGPT plan inference through the local companion |
-| Auth | Magic link (Resend for email, `jose` for JWT) |
+| AI | ChatGPT plan inference through the local companion |
+| Auth | ChatGPT OIDC identity and Lacuna JWT (`jose`) |
 
 ---
 
@@ -41,10 +41,9 @@ lacuna/
 │   │   │   │   ├── +layout.ts           ← ssr:false, prerender:false
 │   │   │   │   ├── +layout.svelte       ← auth gate overlay
 │   │   │   │   ├── +page.svelte         ← spatial container (Void + DownSpace)
-│   │   │   │   └── auth/verify/+page.svelte
 │   │   │   └── lib/
 │   │   │       ├── api.ts               ← typed fetch wrapper
-│   │   │       ├── auth.ts              ← magic link, localStorage helpers
+│   │   │       ├── auth.ts              ← local Lacuna session helpers
 │   │   │       ├── gesture.ts           ← holdDetector, swipeDetector, shakeDetector
 │   │   │       ├── stores/              ← Svelte 5 $state stores (session, draft, entries, patterns, memoir)
 │   │   │       ├── utils/wordcloud.ts   ← grid-jitter word placement
@@ -59,7 +58,7 @@ lacuna/
 │           ├── db.ts         ← D1 query helpers
 │           ├── middleware/auth.ts   ← JWT verification (jose)
 │           ├── routes/       ← auth, entries, patterns, memoir
-│           └── ai/           ← models, prompts, analyzer
+│           └── ai/           ← models, prompts, shared pipeline/storage
 ```
 
 ---
@@ -75,7 +74,7 @@ pnpm dev:worker      # Wrangler dev server  → http://localhost:8787
 pnpm build:frontend  # outputs to packages/frontend/build/
 pnpm build:worker    # tsc --noEmit (wrangler bundles at deploy time)
 pnpm check          # frontend diagnostics + worker type check
-pnpm test           # regression suite (no real AI or email requests)
+pnpm test           # regression suite (no real AI requests)
 pnpm companion      # build and serve the app locally with ChatGPT plan support
 
 # Deploy
@@ -98,10 +97,8 @@ wrangler d1 create lacuna-db
 # 3. Apply migrations locally (remote is applied automatically by CI on deploy)
 pnpm -F worker db:migrate:local
 
-# 4. Set secrets (required for auth and AI)
+# 4. Set the session-signing secret
 wrangler secret put JWT_SECRET         # any strong random string
-wrangler secret put RESEND_API_KEY     # from resend.com
-wrangler secret put ANTHROPIC_API_KEY  # from console.anthropic.com
 
 # 5. Set FRONTEND_ORIGIN in wrangler.toml [vars] for production
 #    (already set to http://localhost:5173 for local dev)
@@ -127,15 +124,17 @@ Commit the new migration file with the code that depends on it. CI applies it to
 ```
 User types in Void
   → hold 600ms to solidify → POST /entries → D1 (entries)
-  → async: AI analysis (Anthropic) → D1 (patterns)
+  → local companion: ChatGPT analysis → guarded D1 commit (patterns)
   → async: memoir regeneration every 5 entries → D1 (memoir_snapshots)
 ```
 
 ### Auth Flow
 
-1. After consent, user enters email → `POST /auth/request` → throttle, upsert user, generate UUID token, store its SHA-256 digest with 15-min expiry, send Resend email
-2. User clicks link → `/auth/verify?token=…` → `GET /auth/verify` → atomically consume an unexpired digest, issue 7-day HS256 JWT
-3. Frontend stores JWT in `localStorage` as `lacuna_token`; `+layout.svelte` hydrates session on every load
+1. After consent, the local companion requests a single-use challenge from `POST /auth/openai/start`.
+2. OpenAI loopback OAuth uses PKCE/state and the server nonce. The companion verifies the identity and sends the ID token and issued client ID to `POST /auth/openai/complete`.
+3. The Worker independently checks signature/issuer/audience/nonce/expiry, atomically consumes the challenge, maps issuer/client/subject to an account, and issues a seven-day Lacuna JWT.
+4. A browser-specific HttpOnly cookie binds the callback and one-time Lacuna session delivery. Frontend stores only the Lacuna JWT/user.
+5. Preserve old email accounts/data. Never merge by email. Access/refresh tokens remain local. ID tokens may reach the verification endpoint, where they must never be logged or stored. Email sign-in is retired.
 
 ### D1 Schema
 
@@ -148,16 +147,16 @@ memoir_snapshots (id, user_id, prose, generated_at)
 
 ### AI System
 
-The shared pipeline is `ai/pipeline.ts`; `ai/storage.ts` acquires an expiring per-user lease and commits derived data in one transaction guarded by the entry version, provider, and lease owner. Entry deletion clears generated content and invalidates running jobs. Failed extraction/memoir generation does not advance checkpoints. The companion obtains a snapshot through `/ai/context`, executes the same pipeline locally, and returns validated output through `/ai/results`. ChatGPT OAuth tokens never belong in the Worker, frontend storage, logs, or URLs other than an ID-token hint sent to OpenAI's authorization endpoint. See README for companion setup and AUDIT.md for verification scope.
+The shared pipeline is `ai/pipeline.ts`; `ai/storage.ts` acquires an expiring per-user lease and commits derived data in one transaction guarded by the entry version, provider, and lease owner. Entry deletion clears generated content and invalidates running jobs. Failed extraction/memoir generation does not advance checkpoints. The companion obtains a snapshot through `/ai/context`, executes the same pipeline locally, and returns validated output through `/ai/results`. Access and refresh tokens never belong in the Worker, frontend storage, logs, or URLs. The Worker accepts an ID token only for identity verification; a retained local ID token can also be an OpenAI authorization hint. See README for companion setup and AUDIT.md for verification scope.
 
-Runs asynchronously via `ctx.waitUntil()` after every solidified entry. Entry-count tiers:
+Runs in the companion after every solidified entry, using the selected model from the account's ChatGPT catalog. Entry-count tiers:
 
 | Entries | Model | Output |
 |---|---|---|
-| 1 | claude-haiku-4-5 | `acknowledgment` string only |
-| 2–9 | claude-haiku-4-5 | `narrative_tone`, `emerging_theme`, `acknowledgment` |
-| 10+ | claude-sonnet-4-6 | Full `weights` (0–1 per model) + `summaries` |
-| 20+, every 5 | claude-sonnet-4-6 | Living Memoir prose (via `waitUntil`) |
+| 1 | selected ChatGPT model | `acknowledgment` string only |
+| 2–9 | selected ChatGPT model | `narrative_tone`, `emerging_theme`, `acknowledgment` |
+| 10+ | selected ChatGPT model | Full `weights` (0–1 per model) + `summaries` |
+| 20+, every 5 | selected ChatGPT model | Living Memoir prose (local companion) |
 
 Six models with plain-language labels and activation checks in `packages/worker/src/ai/models.ts`:
 

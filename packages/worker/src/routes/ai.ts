@@ -3,7 +3,6 @@ import type { Env, JwtPayload } from '../types.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { acquireSnapshot, commitAnalysis, releaseAnalysis } from '../ai/storage.js';
 import { validResult } from '../ai/pipeline.js';
-import { analyzeEntriesAsync } from '../ai/analyzer.js';
 import { checkRateLimit } from '../ratelimit.js';
 
 export const aiRoute = new Hono<{ Bindings: Env; Variables: { user: JwtPayload } }>();
@@ -15,7 +14,7 @@ aiRoute.get('/status', async c => {
 });
 aiRoute.patch('/provider', async c => {
   const body = await c.req.json<{ provider?: unknown }>();
-  if (!body || !['anthropic', 'chatgpt'].includes(body.provider as string)) return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid provider' } }, 400);
+  if (!body || body.provider !== 'chatgpt') return c.json({ error: { code: 'BAD_REQUEST', message: 'Lacuna uses ChatGPT.' } }, 400);
   const id = c.get('user').sub;
   await c.env.DB.batch([
     c.env.DB.prepare('DELETE FROM analysis_jobs WHERE user_id = ? AND EXISTS (SELECT 1 FROM users WHERE id = ? AND ai_provider != ?)').bind(id, id, body.provider),
@@ -24,9 +23,7 @@ aiRoute.patch('/provider', async c => {
   return c.json({ ok: true });
 });
 aiRoute.post('/refresh', async c => {
-  if (!await checkRateLimit(c.env.DB, `analysis:${c.get('user').sub}`, 30, 3600)) return c.json({ error: { code: 'RATE_LIMITED', message: 'Please wait before refreshing again' } }, 429);
-  c.executionCtx.waitUntil(analyzeEntriesAsync(c.env, c.get('user').sub).catch(err => console.error('Analysis failed:', err.name)));
-  return c.json({ ok: true }, 202);
+  return c.json({ error: { code: 'COMPANION_REQUIRED', message: 'Open the local companion to generate reflections with ChatGPT.' } }, 409);
 });
 aiRoute.post('/context', async c => {
   if (!await checkRateLimit(c.env.DB, `analysis:${c.get('user').sub}`, 30, 3600)) return c.json({ error: { code: 'RATE_LIMITED', message: 'Please wait before refreshing again' } }, 429);

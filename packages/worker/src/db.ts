@@ -10,35 +10,16 @@ export async function getUserById(db: D1Database, id: string): Promise<UserRow |
   return db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first<UserRow>();
 }
 
-export async function consumeMagicToken(db: D1Database, token: string): Promise<UserRow | null> {
-  return db
-    .prepare('UPDATE users SET magic_token = NULL, magic_token_expires_at = NULL WHERE magic_token = ? AND magic_token_expires_at > unixepoch() RETURNING *')
-    .bind(token)
-    .first<UserRow>();
-}
-
 export async function upsertUser(db: D1Database, email: string): Promise<UserRow> {
   await db
     .prepare(
-      'INSERT INTO users (email, consent_given_at) VALUES (?, unixepoch()) ON CONFLICT(email) DO UPDATE SET consent_given_at = coalesce(users.consent_given_at, excluded.consent_given_at)'
+      "INSERT INTO users (email, consent_given_at, ai_provider) VALUES (?, unixepoch(), 'chatgpt') ON CONFLICT(email) DO UPDATE SET consent_given_at = coalesce(users.consent_given_at, excluded.consent_given_at)"
     )
     .bind(email)
     .run();
   const user = await getUserByEmail(db, email);
   if (!user) throw new Error('Failed to upsert user');
   return user;
-}
-
-export async function setMagicToken(
-  db: D1Database,
-  userId: string,
-  token: string,
-  expiresAt: number
-): Promise<void> {
-  await db
-    .prepare('UPDATE users SET magic_token = ?, magic_token_expires_at = ? WHERE id = ?')
-    .bind(token, expiresAt, userId)
-    .run();
 }
 
 export async function createEntry(

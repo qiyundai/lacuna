@@ -1,22 +1,17 @@
 <script lang="ts">
   import '../app.css';
   import { onMount } from 'svelte';
-  import { page } from '$app/state';
-  import { session, hydrateSession, signOut } from '$lib/stores/session.svelte.js';
+  import { session, hydrateSession, setAuthed, signOut } from '$lib/stores/session.svelte.js';
   import { initWeather } from '$lib/stores/weather.svelte.js';
-  import { requestMagicLink } from '$lib/auth.js';
+  import { storeSession } from '$lib/auth.js';
+  import { isCompanion } from '$lib/api.js';
+  import { companionRequest } from '$lib/stores/ai.svelte.js';
   import { readLocal, writeLocal } from '$lib/storage.js';
   import InfoOverlay from '$lib/components/InfoOverlay.svelte';
   import PrivacyOverlay from '$lib/components/PrivacyOverlay.svelte';
 
   let { children } = $props();
 
-  // The verify route must always render so it can exchange the token for a JWT,
-  // even before the session is authed.
-  let isAuthRoute = $derived(page.url.pathname.startsWith('/auth/'));
-
-  let email = $state('');
-  let linkSent = $state(false);
   let authError = $state('');
   let submitting = $state(false);
   let showInfo = $state(false);
@@ -36,18 +31,26 @@
     const stored = readLocal('lacuna_consented');
     consentGiven = !!stored;
     if (!stored) showConsentOverlay = true;
+    if (isCompanion) {
+      companionRequest<{ session: { jwt: string; user: { id: string; email: string } } | null; error: string | null }>('session').then(result => {
+        if (result.session) {
+          storeSession(result.session.jwt, result.session.user);
+          setAuthed(result.session.user);
+        }
+        if (result.error) authError = result.error;
+      }).catch(err => { authError = err instanceof Error ? err.message : 'Reopen the companion to sign in.'; });
+    }
     window.addEventListener('lacuna:unauthorized', signOut);
     return () => window.removeEventListener('lacuna:unauthorized', signOut);
   });
 
-  async function submitEmail(e: SubmitEvent) {
-    e.preventDefault();
-    if (!email.trim() || submitting) return;
+  async function connect() {
+    if (submitting || !consentGiven) return;
     submitting = true;
     authError = '';
     try {
-      await requestMagicLink(email.trim().toLowerCase());
-      linkSent = true;
+      const { url } = await companionRequest<{ url: string }>('connect', 'POST', { consent: true });
+      location.assign(url);
     } catch (err) {
       authError = err instanceof Error ? err.message : 'Something went wrong. Try again.';
     } finally {
@@ -58,32 +61,22 @@
 
 {#if session.status === 'loading'}
   <!-- Silent loading — void background shows through -->
-{:else if session.status === 'unauthed' && !isAuthRoute}
+{:else if session.status === 'unauthed'}
   <div class="auth-overlay" class:blurred={showInfo || showPrivacy}>
     <div class="auth-glow auth-glow-a" aria-hidden="true"></div>
     <div class="auth-glow auth-glow-b" aria-hidden="true"></div>
     {#if consentGiven}
       <div class="auth-content">
         <p class="app-name">lacuna</p>
-        {#if linkSent}
-          <p class="auth-message">check your email</p>
+        {#if isCompanion}
+          <button class="auth-submit" disabled={submitting} onclick={connect}>{submitting ? 'connecting…' : 'Continue with ChatGPT'}</button>
+          <p class="auth-message">your account and reflections, through ChatGPT</p>
         {:else}
-          <form onsubmit={submitEmail} class="auth-form">
-            <input
-              type="email"
-              placeholder="your email"
-              bind:value={email}
-              autocomplete="email"
-              autocapitalize="none"
-              spellcheck={false}
-              class="auth-input"
-            />
-            <button type="submit" class="auth-submit" disabled={submitting}>enter</button>
-            {#if authError}
-              <p class="auth-error">{authError}</p>
-            {/if}
-          </form>
+          <a class="auth-submit" href="http://127.0.0.1:1455">Continue with ChatGPT</a>
+          <p class="auth-message">start the companion on this computer, then continue</p>
+          <a class="what-is-this" href="https://github.com/qiyundai/lacuna#chatgpt-plan-companion" target="_blank" rel="noreferrer">set up the companion</a>
         {/if}
+        {#if authError}<p class="auth-error" role="alert">{authError}</p>{/if}
         <div class="auth-links">
           <button class="what-is-this" onclick={() => (showInfo = true)}>what is this</button>
           <span class="auth-sep" aria-hidden="true">·</span>
@@ -201,31 +194,6 @@
     outline: none;
   }
 
-  .auth-form {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .auth-input {
-    background: transparent;
-    border: none;
-    border-bottom: 1px solid var(--void-text-dim);
-    color: var(--void-text);
-    font-family: var(--font-serif);
-    font-size: 1.1rem;
-    padding: 0.5rem 0;
-    text-align: center;
-    width: 240px;
-    outline: none;
-    letter-spacing: 0.03em;
-  }
-
-  .auth-input::placeholder {
-    color: var(--void-text-hint);
-  }
-
   .auth-message {
     color: var(--void-text-dim);
     font-family: var(--font-serif);
@@ -234,6 +202,7 @@
   }
 
   .auth-submit {
+    text-decoration: none;
     background: transparent;
     border: none;
     color: var(--void-text-dim);

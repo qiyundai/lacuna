@@ -10,7 +10,7 @@ Activation scans all retained entries. Range summaries do not replace or delete 
 
 The range-summary threshold is now 35 (15 summarized entries plus a 20-entry recent window). The graph query type now matches its selected fields. Concurrency, deletion consistency, checkpoint recovery and companion work are documented in the root `AUDIT.md`.
 
-Hosted background execution and loading all history remain scalability constraints. Introduce a durable queue and bounded historical reads before claiming reliable processing for large accounts; benchmark those changes against representative histories.
+Companion lifetime and loading all history remain scalability constraints. Introduce resumable jobs and bounded historical reads before claiming reliable processing for large accounts; benchmark those changes against representative histories.
 
 ---
 
@@ -34,7 +34,7 @@ The prompt normalization approach is cheaper and fits the current stack.
 
 ### Embeddings for semantic entry retrieval
 Enables "find entries most similar to what I'm writing now" (useful for soul map resonance), better concept clustering, and richer pattern detection.
-**Requires:** Cloudflare Vectorize binding, embedding call per entry (Anthropic or Workers AI), vector similarity queries.
+**Requires:** Cloudflare Vectorize binding, a separately authorized embedding integration, vector similarity queries.
 **Defer until:** private loop is stable and user testing shows this is needed.
 
 ### Community / cross-user pattern matching

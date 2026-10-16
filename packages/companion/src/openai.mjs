@@ -13,10 +13,10 @@ function failure(code) {
   if (['invalid_grant', 'invalid_token', 'token_expired'].includes(code)) return new PlanError('RECONNECT', 'Your ChatGPT session needs to be connected again.');
   return new PlanError('INFERENCE_FAILED', 'The ChatGPT request did not complete. Try again.');
 }
-export function createAuthorization(hostId, redirectUri, registration) {
+export function createAuthorization(hostId, redirectUri, registration, challengeNonce) {
   const verifier = randomBytes(32).toString('base64url');
   const state = randomBytes(32).toString('base64url');
-  const nonce = randomBytes(32).toString('base64url');
+  const nonce = challengeNonce ?? randomBytes(32).toString('base64url');
   const clientId = registration?.client_id ?? 'dynamic_agent_client';
   const params = new URLSearchParams({ client_id: clientId, ext_agent_host_id: hostId, response_type: 'code', redirect_uri: redirectUri,
     scope: 'openid profile email offline_access resource.invoke chatgpt.tokens.use.direct', resource: RESOURCE,
@@ -42,7 +42,6 @@ export async function exchangeCode(pending, params, { fetchImpl = fetch, keySet 
   const { payload } = await jwtVerify(token.id_token, keySet, { issuer: ISSUER, audience: clientId, requiredClaims: ['sub', 'exp', 'iat', 'nonce'], algorithms: ['RS256', 'ES256'] });
   if (payload.nonce !== pending.nonce || typeof payload.sub !== 'string' || (pending.subject && payload.sub !== pending.subject)) throw new PlanError('INVALID_IDENTITY', 'The returned ChatGPT account did not match this connection.');
   const scopes = typeof token.scope === 'string' ? token.scope.split(/\s+/) : [];
-  if (!scopes.includes('chatgpt.tokens.use.direct') || !scopes.includes('resource.invoke')) throw new PlanError('PLAN_DISABLED', 'ChatGPT plan usage was not granted. Connect again and allow plan use.');
   return { ...token, client_id: clientId, subject: payload.sub, email: typeof payload.email === 'string' ? payload.email : 'ChatGPT account', scopes, expiresAt: Date.now() + token.expires_in * 1000 };
 }
 export class OpenAIPlan {
@@ -51,6 +50,7 @@ export class OpenAIPlan {
     if (this.disconnecting.has(userId)) throw failure('invalid_grant');
     const profile = this.store.data.profiles[userId];
     if (!profile) throw new PlanError('RECONNECT', 'Continue with ChatGPT to connect your plan.');
+    if (!profile.scopes?.includes('chatgpt.tokens.use.direct') || !profile.scopes?.includes('resource.invoke')) throw new PlanError('PLAN_DISABLED', 'ChatGPT plan usage was not granted. Reconnect and allow plan use.');
     if (profile.expiresAt > Date.now() + 60000) return profile.access_token;
     if (this.refreshing.has(userId)) return this.refreshing.get(userId);
     const promise = this.refresh(userId, profile).finally(() => this.refreshing.delete(userId));
@@ -90,11 +90,16 @@ export class OpenAIPlan {
     const profile = this.store.data.profiles[userId];
     const registration = this.store.data.registrations[userId];
     delete this.store.data.profiles[userId];
-    delete this.store.data.registrations[userId];
+    // Retain the public client registration so signing in again reaches the same
+    // issuer/client/subject account. Remove the retained ID-token hint.
+    if (registration) this.store.data.registrations[userId] = { client_id: registration.client_id, subject: registration.subject };
+    const signin = this.store.data.registrations.signin;
+    if (signin && signin.client_id === profile?.client_id) this.store.data.registrations.signin = { client_id: signin.client_id, subject: signin.subject };
     try { await this.store.save(); }
     catch {
       if (profile) this.store.data.profiles[userId] = profile;
       if (registration) this.store.data.registrations[userId] = registration;
+      if (signin) this.store.data.registrations.signin = signin;
       this.disconnecting.delete(userId);
       throw new PlanError('DISCONNECT_FAILED', 'Could not clear the protected credentials. Try disconnecting again.');
     }

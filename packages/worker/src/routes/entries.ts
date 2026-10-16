@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import type { Env, JwtPayload } from '../types.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { createEntry, deleteEntry, getEntries, EntryConflictError } from '../db.js';
-import { analyzeEntriesAsync } from '../ai/analyzer.js';
 import { checkRateLimit } from '../ratelimit.js';
 
 const MAX_ENTRY_LENGTH = 500;
@@ -56,11 +55,6 @@ entriesRoute.post('/', async (c) => {
     if (err instanceof EntryConflictError) return c.json({ error: { code: 'CONFLICT', message: 'Entry ID already used' } }, 409);
     throw err;
   }
-
-  // Fire AI analysis asynchronously — does not block the response
-  c.executionCtx.waitUntil(
-    analyzeEntriesAsync(c.env, user.sub).catch((err) => console.error('AI analysis failed:', err))
-  );
 
   return c.json({ entry }, 201);
 });

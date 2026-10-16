@@ -24,7 +24,7 @@
   onMount(() => {
     let mounted = true;
     loadAI().then(() => {
-      if (mounted && aiStore.provider === 'chatgpt' && aiStore.companion?.connected && !readLocal(`lacuna_plan_welcome:${session.user?.id}`)) showWelcome = true;
+      if (mounted && aiStore.companion?.planEnabled && !readLocal(`lacuna_plan_welcome:${session.user?.id}`)) showWelcome = true;
     }).catch(() => {});
     return () => { mounted = false; };
   });

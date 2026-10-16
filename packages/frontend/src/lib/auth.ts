@@ -1,4 +1,3 @@
-import { api } from './api.js';
 import { readLocal, writeLocal, removeLocal } from './storage.js';
 
 const TOKEN_KEY = 'lacuna_token';
@@ -26,14 +25,4 @@ export function storeSession(jwt: string, user: { id: string; email: string }): 
 export function clearSession(): void {
   removeLocal(TOKEN_KEY);
   removeLocal(USER_KEY);
-}
-
-export async function requestMagicLink(email: string): Promise<void> {
-  await api.auth.request(email);
-}
-
-export async function verifyMagicToken(token: string): Promise<{ id: string; email: string }> {
-  const { jwt, user } = await api.auth.verify(token);
-  storeSession(jwt, user);
-  return user;
 }

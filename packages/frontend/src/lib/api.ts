@@ -36,17 +36,6 @@ async function request<T>(
 
 export const api = {
   auth: {
-    request: (email: string) =>
-      request<{ ok: boolean }>('/auth/request', {
-        method: 'POST',
-        body: JSON.stringify({ email, consent: true, ...(isCompanion ? { companionOrigin: location.origin } : {}) }),
-      }, false),
-    verify: (token: string) =>
-      request<{ jwt: string; user: { id: string; email: string } }>(
-        `/auth/verify?token=${encodeURIComponent(token)}`,
-        {},
-        false
-      ),
     deleteAccount: () =>
       request<{ ok: boolean }>('/auth/account', { method: 'DELETE' }),
   },
@@ -75,8 +64,7 @@ export const api = {
     get: () => request<{ prose: string; generated_at: number } | null>('/memoir'),
   },
   ai: {
-    status: () => request<{ provider: 'anthropic' | 'chatgpt'; pending: number; entryCount: number }>('/ai/status'),
-    provider: (provider: 'anthropic' | 'chatgpt') => request('/ai/provider', { method: 'PATCH', body: JSON.stringify({ provider }) }),
+    status: () => request<{ provider: 'chatgpt'; pending: number; entryCount: number }>('/ai/status'),
     refresh: () => request('/ai/refresh', { method: 'POST' }),
   },
 };

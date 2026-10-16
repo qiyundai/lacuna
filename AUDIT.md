@@ -1,6 +1,6 @@
 # Project audit — 2026-10-16
 
-Base: `https://github.com/qiyundai/lacuna.git`, live default branch `main`, commit `23154f7f719f1d7081c0220d43782ef411e42971`. The original checkout was clean and already included that commit. No production data, secrets, or deployed resources were modified.
+Initial audit base: `https://github.com/qiyundai/lacuna.git`, live default branch `main`, commit `23154f7f719f1d7081c0220d43782ef411e42971`. The original checkout was clean and already included that commit. That source-audit phase preceded deployment. The resulting commit 05339abc was subsequently deployed with migration 0003.
 
 Reviewed the Worker routes, authentication, D1 helpers and migrations, AI prompts/graph/pipeline, Svelte routes/components/stores, gesture handling, static caching/service-worker cleanup, dependencies, and deployment workflow.
 
@@ -36,27 +36,34 @@ Reviewed the Worker routes, authentication, D1 helpers and migrations, AI prompt
 | Builds could mask Svelte setup errors and deployment omitted checks | Fail setup on errors; add type checks, regression tests, and companion bundling before deployment |
 | Setup docs referred to a nonexistent schema file | Document versioned migrations and companion deployment prerequisites |
 
-## ChatGPT plan integration
+## ChatGPT-only rebuild
 
-The hosted application remains the source of account and entry data. A loopback companion serves the same built UI, handles [OpenAI's open-source OAuth flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in), and runs [Responses API inference](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference) directly. Public OSS registration uses a loopback callback, PKCE, state, nonce, issued-client validation and signed OIDC identity validation. The app checks plan-use scopes independently of identity.
+The user could not receive email and requested ChatGPT-only authentication. The live authoritative default branch was rechecked at `05339abc898c5558fa31e3a775c1d225206c8f69` before this rebuild; the working branch included it.
 
-Credentials are protected locally and isolated per Lacuna account. Refresh is serialized within the process; a file lock prevents multiple processes using the same credential store. Disconnect waits for rotation before revoking the latest renewable session. Model choices come from the connected account's catalog. Requests include `store:false`, `stream:true`, an input array and instructions; unsupported API parameters are omitted. Failed/incomplete/limited/interrupted streams do not become successful reflections. Provider switches and disconnects cancel local work; the server rejects stale uploads. First-use confirmation, connected identity, usage settings, model selection, explicit provider switching, and recovery messages are available in the UI.
+- Removed the email form, email-token redemption, delivery integration, Anthropic analyzer, and provider fallback. Retired email endpoints return 410; old tokens are invalidated by migration 0004.
+- Added consent-gated, throttled, expiring login challenges. The companion supplies the server nonce to OpenAI's PKCE flow. The Worker independently verifies OpenAI signature, issuer, issued-client audience, nonce, and token age before atomically consuming a challenge and issuing a Lacuna JWT.
+- ChatGPT account identity uses issuer/client/subject. Matching emails cannot claim old accounts. Migration 0004 preserves old accounts, entries, and generated content while cancelling old analysis leases and selecting ChatGPT.
+- Bound OAuth attempts and one-time session delivery to separate browser HttpOnly cookies. Browser session responses contain only Lacuna's session, never OAuth credentials.
+- Access/refresh tokens remain in protected local storage. ID tokens reach the Worker only for verification and are not retained there. Disconnect retains a public client/subject registration so reconnecting can reach the same account.
+- Identity-only authorization remains signed in even without plan-use scopes; inference reports missing permission and offers reconnection. Account-available models and a small, explicit connection test are exposed in settings.
+- Hosted storage remains authoritative. New sign-ins and inference use the loopback companion; existing hosted sessions can still read/write. A hosted OpenAI callback is not registered.
+- Removed the obsolete email-based browser fixture. The earlier audit's fixture validation covered privacy acknowledgment, failed-save retention, retry, timeline, and overlays.
+
+The flow follows [OpenAI's OSS sign-in documentation](https://developers.openai.com/siwc/token-sharing-open-source/sign-in) and [model/inference contract](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference).
 
 ## Verification
 
-- Regression tests execute all migrations and production SQL against SQLite with D1-style atomic batches.
-- Tests cover request validation, magic-link replay/expiry, account deletion and JWT invalidation, pagination and account isolation, leases and stale commits, failed AI output, graph mutation, idempotent saves, OAuth/PKCE and identity checks, token rotation, fragmented SSE and usage limits, protected credential persistence, logout races, Unicode edits, hold cancellation, and a local companion-to-backend inference round trip using simulated model responses.
-- Browser checks use a disposable fixture: privacy acknowledgment, sign-in, failed save with retained emoji/text, successful retry in the timeline, account menu and ChatGPT settings. No real email or model requests are made by that fixture.
-- Validation results: 26 regression tests passed; `pnpm check` passed with zero Svelte errors/warnings and a successful Worker type check; frontend and companion production builds passed; Worker dry-run packaging passed; `pnpm audit` reported zero advisories across the dependency tree. `git diff --check` passed. Live remote HEAD was rechecked and remained at the recorded base commit.
+The regression suite executes actual migrations and route SQL against disposable SQLite with D1-style atomic batches. Coverage includes validation, retired email links, challenge consent/expiry, signed identity/audience/nonce/issuer checks, concurrent replay rejection, browser isolation, email-collision isolation, returning identity stability, deletion cascades, account/JWT isolation, idempotent entries, pagination, analysis leases/version guards, failure checkpoints, graph validation, PKCE, refresh rotation, SSE failures/limits, credential protection, logout races, Unicode, gestures, and complete companion-to-Worker sign-in/inference round trips with simulated OpenAI.
 
-## Limits and release prerequisites
+Checks for this rebuild: 26 regression tests passed; Svelte diagnostics and Worker type checks passed. Production build and deployment results are recorded in the release conversation.
 
-- Live OpenAI OAuth consent, account eligibility/model entitlements, real Responses API behavior, and remote revocation were not exercised against a human account. The implementation follows the current official documentation; run that acceptance test with your own eligible account after deployment.
-- Deploy the new migration and Worker before the new frontend/companion. Existing unredeemed magic links use the old plaintext representation and must be requested again. Existing JWT sessions remain valid for accounts that still exist.
-- Cloudflare production migrations/deployment and real email delivery were not executed. Local SQLite tests do not substitute for a production D1 acceptance test.
-- Hosted analysis remains best-effort background work within Cloudflare's execution lifecycle. A slow or interrupted run leaves checkpoints unchanged and can be retried. Large histories still load all entries for activation/extraction and have not been load-tested; extraction is capped at ten entries per job. A durable queue and large-history pagination are future production-scaling work.
-- Physical mobile devices, motion-permission behavior, every browser/assistive-technology combination, long-duration performance, and all offline/storage-failure scenarios were not exhaustively tested. Browser tests and static diagnostics do not establish those guarantees.
-- Framework activation is heuristic and generated reflections are interpretive; this audit does not establish psychological or clinical validity.
-- Raw OAuth tokens must never be added to tests, diagnostics, committed files, frontend storage, or the hosted backend. Unix permissions protect local files; Windows uses DPAPI. Losing the credential file requires reconnecting, not importing another application's session.
+## Remaining limits
+
+- Real OAuth consent, account eligibility, model entitlements, inference, and revocation require human-account acceptance testing. Simulated tests do not establish those results.
+- Public OSS registration is bound to a stable host/client registration. A fresh registration on another computer can yield a separate identity. Cross-device account transfer/linking and migration from inaccessible email accounts are not implemented; no automatic email linking is safe.
+- Remote migrations run through CI before Worker/Pages deployment. Keep the companion build aligned with the deployed Worker.
+- Companion lifetime and loading all retained entries remain scaling constraints. Extraction is bounded to ten entries per job; large histories have not been load-tested. Failed work leaves checkpoints unchanged and can be retried.
+- Physical mobile devices, every browser/assistive-technology combination, long-duration performance, and every offline/storage-failure scenario were not exhaustively tested.
+- Generated psychological reflections are interpretive; this audit does not establish clinical validity.
 
 This is a source audit and repair pass with targeted verification, not a claim that every possible defect has been eliminated.

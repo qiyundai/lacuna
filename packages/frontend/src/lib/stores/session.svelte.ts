@@ -13,7 +13,7 @@ function resetData() {
   patternsStore.model_weights = null; patternsStore.last_updated = null; patternsStore.status = 'idle';
   memoirStore.prose = null; memoirStore.generated_at = null; memoirStore.status = 'idle';
   clearDraft(); overlayStore.open = false;
-  aiStore.provider = 'anthropic'; aiStore.entryCount = 0; aiStore.pending = false; aiStore.companion = null;
+  aiStore.provider = 'chatgpt'; aiStore.entryCount = 0; aiStore.pending = false; aiStore.companion = null;
 }
 
 export type AuthStatus = 'loading' | 'authed' | 'unauthed';

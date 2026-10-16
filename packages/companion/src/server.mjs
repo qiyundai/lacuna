@@ -32,8 +32,7 @@ export async function startCompanion(options = {}) {
   let store;
   try { store = options.store ?? await new CredentialStore(directory).load(); } catch (err) { await cleanupLock(); throw err; }
   const plan = options.plan ?? new OpenAIPlan(store);
-  const cookie = randomBytes(32).toString('hex');
-  const pending = new Map(), jobs = new Map();
+  const pending = new Map(), jobs = new Map(), sessions = new Map();
   async function cloud(path, token, method = 'GET', body, signal) {
     const res = await fetch(new URL(path, upstream), { method, redirect: 'error', signal: signal ?? AbortSignal.timeout(30000),
       headers: { ...(token ? { Authorization: token } : {}), ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -100,51 +99,75 @@ export async function startCompanion(options = {}) {
       if (!allowedRequest(req, origin)) return json(res, { error: { code: 'FORBIDDEN', message: 'Open Lacuna on this computer to continue' } }, 403);
       const callback = url.pathname === '/auth/callback';
       const localApi = url.pathname.startsWith('/companion/') || url.pathname.startsWith('/api/');
-      if ((callback || localApi) && !req.headers.cookie?.split(';').some(c => c.trim() === `lacuna_companion=${cookie}`)) return json(res, { error: { code: 'FORBIDDEN', message: 'Open the companion home page first' } }, 403);
+      const sessionId = req.headers.cookie?.split(';').map(c => c.trim()).find(c => c.startsWith('lacuna_companion='))?.slice('lacuna_companion='.length);
+      const browserSession = sessions.get(sessionId);
+      if ((callback || localApi) && !browserSession) return json(res, { error: { code: 'FORBIDDEN', message: 'Open the companion home page first' } }, 403);
       if (callback) {
         const attempt = pending.get(url.searchParams.get('state'));
-        if (!attempt) throw new PlanError('INVALID_CALLBACK', 'Sign-in expired. Return to Lacuna and connect again.');
+        if (!attempt || attempt.sessionId !== sessionId) throw new PlanError('INVALID_CALLBACK', 'Sign-in expired. Return to Lacuna and connect again.');
         pending.delete(attempt.state);
         const issued = url.searchParams.get('client_id');
         if (attempt.expires <= Date.now()) throw new PlanError('INVALID_CALLBACK', 'Sign-in expired. Connect again.');
         // Keep an issued registration even if exchange fails; never exchange with dynamic_agent_client.
         if (issued && issued !== 'dynamic_agent_client' && attempt.clientId === 'dynamic_agent_client' && !url.searchParams.has('error')) {
-          store.data.registrations[attempt.userId] = { client_id: issued };
+          store.data.registrations.signin = { client_id: issued };
           await store.save();
         }
         try {
-          const profile = await exchangeCode(attempt, url.searchParams);
-          if (jobs.get(attempt.userId)?.running) throw new PlanError('BUSY', 'Wait for your current reflection before reconnecting.');
-          store.data.profiles[attempt.userId] = profile;
-          store.data.registrations[attempt.userId] = { client_id: profile.client_id, subject: profile.subject, id_token: profile.id_token };
+          const profile = await (options.exchangeCode ?? exchangeCode)(attempt, url.searchParams);
+          const result = await cloud('/auth/openai/complete', undefined, 'POST', { challenge: attempt.challenge, clientId: profile.client_id, idToken: profile.id_token });
+          if (jobs.get(result.user.id)?.running) throw new PlanError('BUSY', 'Wait for your current reflection before reconnecting.');
+          store.data.profiles[result.user.id] = profile;
+          const registration = { client_id: profile.client_id, subject: profile.subject, id_token: profile.id_token };
+          store.data.registrations[result.user.id] = registration;
+          store.data.registrations.signin = registration;
           await store.save();
-          await cloud('/ai/provider', attempt.token, 'PATCH', { provider: 'chatgpt' });
-        } catch (err) { jobs.set(attempt.userId, { state: 'error', code: err.code ?? 'RECONNECT', message: err instanceof PlanError ? err.message : 'ChatGPT identity could not be verified. Connect again.' }); }
+          browserSession.result = result;
+          browserSession.expires = Date.now() + 60000;
+          browserSession.error = null;
+        } catch (err) { browserSession.error = err instanceof PlanError ? err.message : 'ChatGPT identity could not be verified. Connect again.'; }
         res.writeHead(303, { Location: '/' }); return res.end();
       }
       if (url.pathname.startsWith('/companion/')) {
+        if (url.pathname === '/companion/session' && req.method === 'GET') {
+          const result = browserSession.expires > Date.now() ? browserSession.result : null;
+          const error = browserSession.error;
+          delete browserSession.result; delete browserSession.error;
+          return json(res, { session: result ?? null, error: error ?? null });
+        }
+        if (url.pathname === '/companion/connect' && req.method === 'POST') {
+          const value = await body(req);
+          if (value.consent !== true) throw new PlanError('CONSENT_REQUIRED', 'Acknowledge data and privacy first.');
+          for (const [key, attempt] of pending) if (attempt.sessionId === sessionId || attempt.expires < Date.now()) pending.delete(key);
+          const challenge = await cloud('/auth/openai/start', undefined, 'POST', { consent: true });
+          const attempt = { ...createAuthorization(store.data.hostId, `${origin}/auth/callback`, store.data.registrations.signin, challenge.nonce), challenge: challenge.id, sessionId };
+          pending.set(attempt.state, attempt);
+          browserSession.error = null; delete browserSession.result;
+          return json(res, { url: attempt.url });
+        }
         const { user, token } = await identity(req);
         const profile = store.data.profiles[user.id];
         if (url.pathname === '/companion/status' && req.method === 'GET') {
           const state = jobs.get(user.id);
-          return json(res, { connected: !!profile, email: profile?.email ?? null, model: profile?.model ?? null,
+          return json(res, { connected: !!profile, planEnabled: !!profile?.scopes?.includes('chatgpt.tokens.use.direct') && !!profile?.scopes?.includes('resource.invoke'), email: profile?.email ?? null, model: profile?.model ?? null,
             state: state?.state ?? 'idle', code: state?.code ?? null, message: state?.message ?? '' });
         }
-        if (url.pathname === '/companion/connect' && req.method === 'POST') {
-          if (jobs.get(user.id)?.running) throw new PlanError('BUSY', 'Wait for your current reflection before reconnecting.');
-          for (const [key, attempt] of pending) if (attempt.userId === user.id || attempt.expires < Date.now()) pending.delete(key);
-          const attempt = { ...createAuthorization(store.data.hostId, `${origin}/auth/callback`, store.data.registrations[user.id]), userId: user.id, token };
-          pending.set(attempt.state, attempt);
-          return json(res, { url: attempt.url });
-        }
         if (url.pathname === '/companion/disconnect' && req.method === 'POST') {
-          for (const [key, attempt] of pending) if (attempt.userId === user.id) pending.delete(key);
+          for (const [key, attempt] of pending) if (attempt.sessionId === sessionId) pending.delete(key);
+          delete browserSession.result;
           jobs.get(user.id)?.controller?.abort();
           const revoked = await plan.disconnect(user.id);
           jobs.delete(user.id);
           return json(res, { revoked });
         }
         if (url.pathname === '/companion/models' && req.method === 'GET') return json(res, await plan.models(user.id));
+        if (url.pathname === '/companion/test' && req.method === 'POST') {
+          const models = await plan.models(user.id);
+          const model = profile?.model ?? models[0]?.slug;
+          if (!models.some(m => m.slug === model)) throw new PlanError('MODEL_UNAVAILABLE', 'Choose an available model.');
+          const text = await plan.generate(user.id, model, { system: 'You are testing a connection. Reply with exactly: Lacuna is connected.', user: 'Confirm this connection.' });
+          return json(res, { ok: true, text });
+        }
         if (url.pathname === '/companion/model' && req.method === 'PATCH') {
           const value = await body(req);
           const models = await plan.models(user.id);
@@ -186,7 +209,11 @@ export async function startCompanion(options = {}) {
       let data = await readFile(file);
       if (extname(file) === '.html') {
         data = Buffer.from(data.toString().replace('<head>', '<head><meta name="lacuna-companion" content="1">'));
-        res.setHeader('Set-Cookie', `lacuna_companion=${cookie}; HttpOnly; SameSite=Lax; Path=/`);
+        if (!browserSession) {
+          if (sessions.size >= 200) sessions.delete(sessions.keys().next().value);
+          const id = randomBytes(32).toString('hex'); sessions.set(id, {});
+          res.setHeader('Set-Cookie', `lacuna_companion=${id}; HttpOnly; SameSite=Lax; Path=/`);
+        }
       }
       res.writeHead(200, { 'Content-Type': mime[extname(file)] ?? 'application/octet-stream' }); res.end(req.method === 'HEAD' ? undefined : data);
     } catch (err) {
