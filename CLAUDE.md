@@ -22,7 +22,7 @@ Core experience: the user types into **the void**, holds to solidify a thought, 
 | Hosting | Cloudflare Pages |
 | API | Cloudflare Workers (Hono router) |
 | Database | Cloudflare D1 (SQLite) |
-| AI | Anthropic API (claude models, via Worker) |
+| AI | Hosted Anthropic or ChatGPT plan inference through the local companion |
 | Auth | Magic link (Resend for email, `jose` for JWT) |
 
 ---
@@ -74,6 +74,9 @@ pnpm dev:worker      # Wrangler dev server  → http://localhost:8787
 # Production build (type-check + compile)
 pnpm build:frontend  # outputs to packages/frontend/build/
 pnpm build:worker    # tsc --noEmit (wrangler bundles at deploy time)
+pnpm check          # frontend diagnostics + worker type check
+pnpm test           # regression suite (no real AI or email requests)
+pnpm companion      # build and serve the app locally with ChatGPT plan support
 
 # Deploy
 pnpm deploy:worker   # wrangler deploy
@@ -130,8 +133,8 @@ User types in Void
 
 ### Auth Flow
 
-1. User enters email → `POST /auth/request` → upsert user, generate UUID token, store with 15-min expiry, send Resend email
-2. User clicks link → `/auth/verify?token=…` → `GET /auth/verify` → validate + clear token, issue 7-day HS256 JWT
+1. After consent, user enters email → `POST /auth/request` → throttle, upsert user, generate UUID token, store its SHA-256 digest with 15-min expiry, send Resend email
+2. User clicks link → `/auth/verify?token=…` → `GET /auth/verify` → atomically consume an unexpired digest, issue 7-day HS256 JWT
 3. Frontend stores JWT in `localStorage` as `lacuna_token`; `+layout.svelte` hydrates session on every load
 
 ### D1 Schema
@@ -144,6 +147,8 @@ memoir_snapshots (id, user_id, prose, generated_at)
 ```
 
 ### AI System
+
+The shared pipeline is `ai/pipeline.ts`; `ai/storage.ts` acquires an expiring per-user lease and commits derived data in one transaction guarded by the entry version, provider, and lease owner. Entry deletion clears generated content and invalidates running jobs. Failed extraction/memoir generation does not advance checkpoints. The companion obtains a snapshot through `/ai/context`, executes the same pipeline locally, and returns validated output through `/ai/results`. ChatGPT OAuth tokens never belong in the Worker, frontend storage, logs, or URLs other than an ID-token hint sent to OpenAI's authorization endpoint. See README for companion setup and AUDIT.md for verification scope.
 
 Runs asynchronously via `ctx.waitUntil()` after every solidified entry. Entry-count tiers:
 

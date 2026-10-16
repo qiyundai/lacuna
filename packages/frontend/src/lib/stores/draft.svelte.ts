@@ -12,29 +12,19 @@ export const draft = $state<{
 
 let nextId = 0;
 
-export function appendText(char: string): void {
-  draft.chars.push({ id: nextId++, ch: char, bornAt: performance.now() });
-  draft.text += char;
-  draft.isDirty = draft.text.length > 0;
-}
-
 export function insertAt(pos: number, text: string): void {
   const now = performance.now();
   const newChars = [...text].map(ch => ({ id: nextId++, ch, bornAt: now }));
-  draft.chars.splice(pos, 0, ...newChars);
+  const index = [...draft.text.slice(0, pos)].length;
+  draft.chars.splice(index, 0, ...newChars);
   draft.text = draft.chars.map(c => c.ch).join('');
   draft.isDirty = draft.text.length > 0;
 }
 
 export function deleteRange(start: number, end: number): void {
-  draft.chars.splice(start, end - start);
+  const index = [...draft.text.slice(0, start)].length;
+  draft.chars.splice(index, [...draft.text.slice(start, end)].length);
   draft.text = draft.chars.map(c => c.ch).join('');
-  draft.isDirty = draft.text.length > 0;
-}
-
-export function deleteChar(): void {
-  draft.chars.pop();
-  draft.text = draft.text.slice(0, -1);
   draft.isDirty = draft.text.length > 0;
 }
 

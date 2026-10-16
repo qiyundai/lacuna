@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { loadEntries } from '$lib/stores/entries.svelte.js';
   import { loadPatterns } from '$lib/stores/patterns.svelte.js';
   import { loadMemoir } from '$lib/stores/memoir.svelte.js';
@@ -8,13 +8,29 @@
   import LivingMemoir from './LivingMemoir.svelte';
   import UserMenu from './UserMenu.svelte';
   import { overlayStore } from '$lib/stores/overlay.svelte.js';
+  import { api } from '$lib/api.js';
+  import { loadAI } from '$lib/stores/ai.svelte.js';
 
-  let { onSwipeUp }: { onSwipeUp: () => void } = $props();
+  let { onSwipeUp, active = false }: { onSwipeUp: () => void; active?: boolean } = $props();
 
   type View = 0 | 1 | 2; // 0=Timeline, 1=SoulMap, 2=LivingMemoir
   let currentView = $state<View>(0);
 
   let touchStartX = $state(0);
+  let touchStartY = 0;
+
+  $effect(() => {
+    if (!active) return;
+    untrack(() => { loadPatterns(); loadMemoir(); loadAI().catch(() => {}); });
+    let polling = false;
+    const timer = setInterval(async () => {
+      if (polling) return;
+      polling = true;
+      try { if (!(await api.ai.status()).pending) { loadPatterns(); loadMemoir(); clearInterval(timer); } await loadAI(); } catch { clearInterval(timer); }
+      finally { polling = false; }
+    }, 5000);
+    return () => clearInterval(timer);
+  });
 
   onMount(() => {
     loadEntries();
@@ -24,10 +40,12 @@
 
   function touchStart(e: TouchEvent) {
     touchStartX = e.touches[0]!.clientX;
+    touchStartY = e.touches[0]!.clientY;
   }
 
   function touchEnd(e: TouchEvent) {
     const deltaX = touchStartX - e.changedTouches[0]!.clientX;
+    if (Math.abs(touchStartY - e.changedTouches[0]!.clientY) >= Math.abs(deltaX)) return;
     if (Math.abs(deltaX) < 50) return;
     if (deltaX > 0 && currentView < 2) currentView = (currentView + 1) as View;
     else if (deltaX < 0 && currentView > 0) currentView = (currentView - 1) as View;
@@ -53,9 +71,9 @@
 
   <!-- View container -->
   <div class="views" style="transform: translateX(-{currentView * 100}vw)">
-    <div class="view"><Timeline /></div>
-    <div class="view"><SoulMap /></div>
-    <div class="view"><LivingMemoir /></div>
+    <div class="view" inert={currentView !== 0}><Timeline /></div>
+    <div class="view" inert={currentView !== 1}><SoulMap /></div>
+    <div class="view" inert={currentView !== 2}><LivingMemoir /></div>
   </div>
 
   <!-- Dot indicators -->
@@ -131,17 +149,27 @@
   }
 
   .dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--void-text-faint);
+    width: 28px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    background: none;
     border: none;
     cursor: pointer;
     padding: 0;
     transition: background var(--dur-base) var(--ease-soft);
   }
 
-  .dot.active {
+  .dot::after {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--void-text-faint);
+    transition: background var(--dur-base) var(--ease-soft);
+  }
+
+  .dot.active::after {
     background: var(--void-text-dim);
   }
 </style>

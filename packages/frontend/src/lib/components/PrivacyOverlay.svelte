@@ -1,6 +1,8 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
+  import { modal } from '$lib/modal.js';
+  import { isCompanion } from '$lib/api.js';
 
   let {
     show = $bindable(false),
@@ -8,10 +10,6 @@
     onConsent,
   }: { show: boolean; consentMode?: boolean; onConsent?: () => void } = $props();
 
-  function portal(node: HTMLElement) {
-    document.body.appendChild(node);
-    return { destroy() { node.remove(); } };
-  }
 
   function dismiss() {
     show = false;
@@ -23,19 +21,22 @@
 
 {#if show}
   <div
-    use:portal
+    use:modal={{ dismiss: consentMode ? undefined : dismiss }}
     class="screen-overlay privacy-overlay"
     transition:fade={{ duration: 500, easing: cubicOut }}
     role="dialog"
+    tabindex="-1"
     aria-modal="true"
     aria-label="Data and privacy"
-    onclick={dismiss}
+    onclick={() => { if (!consentMode) dismiss(); }}
+    onkeydown={(e) => { if (!consentMode && e.key === 'Escape') dismiss(); }}
   >
     <div class="privacy-content">
-      <p>your entries are private to you. no one else can read them.</p>
-      <p>to surface patterns in your story, entries are processed by anthropic's api. each entry also builds a private concept map — themes, emotions, recurring ideas — stored here to make the memoir richer over time. anthropic does not use api data to train their models.</p>
+      <p>your entries are stored in your private Lacuna account. they are sent to your selected AI provider to create reflections, a concept map, and your memoir.</p>
+      <p>hosted reflections use Anthropic. when you choose your ChatGPT plan, the local companion sends reflection context to OpenAI. OpenAI credentials stay on your computer; generated reflections are saved to Lacuna.</p>
       <p>deleting your account permanently removes everything — entries, your concept map, and all generated text — from our servers.</p>
-      <p class="hint">{consentMode ? 'tap to acknowledge and continue' : 'anywhere to close'}</p>
+      {#if isCompanion}<p class="hint">disconnecting ChatGPT removes credentials here. manage app access and usage in ChatGPT settings.</p>{/if}
+      {#if consentMode}<button class="hint" onclick={dismiss}>acknowledge and continue</button>{:else}<p class="hint">anywhere to close</p>{/if}
     </div>
   </div>
 {/if}
@@ -51,6 +52,8 @@
   }
 
   .privacy-overlay {
+    overflow-y: auto;
+    padding: 2rem 0;
     background: rgba(19, 16, 16, 0.82);
     background: color-mix(in srgb, var(--bg) 82%, transparent);
     backdrop-filter: blur(18px);
@@ -59,6 +62,7 @@
   }
 
   .privacy-content {
+    max-height: 100%;
     position: relative;
     z-index: 1;
     max-width: 36ch;
@@ -92,4 +96,5 @@
     letter-spacing: var(--ls-label);
     margin-top: var(--space-3);
   }
+  button.hint { background: none; border: none; font: inherit; cursor: pointer; line-height: 1.8; }
 </style>

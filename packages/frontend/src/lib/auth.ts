@@ -1,29 +1,31 @@
 import { api } from './api.js';
+import { readLocal, writeLocal, removeLocal } from './storage.js';
 
 const TOKEN_KEY = 'lacuna_token';
 const USER_KEY = 'lacuna_user';
 
 export function getStoredToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  return readLocal(TOKEN_KEY);
 }
 
 export function getStoredUser(): { id: string; email: string } | null {
   try {
-    const raw = localStorage.getItem(USER_KEY);
-    return raw ? JSON.parse(raw) : null;
+    const raw = readLocal(USER_KEY);
+    const value = raw ? JSON.parse(raw) : null;
+    return value && typeof value.id === 'string' && typeof value.email === 'string' ? value : null;
   } catch {
     return null;
   }
 }
 
 export function storeSession(jwt: string, user: { id: string; email: string }): void {
-  localStorage.setItem(TOKEN_KEY, jwt);
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  writeLocal(TOKEN_KEY, jwt);
+  writeLocal(USER_KEY, JSON.stringify(user));
 }
 
 export function clearSession(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
+  removeLocal(TOKEN_KEY);
+  removeLocal(USER_KEY);
 }
 
 export async function requestMagicLink(email: string): Promise<void> {

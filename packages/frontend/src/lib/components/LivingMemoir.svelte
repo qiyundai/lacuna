@@ -1,6 +1,7 @@
 <script lang="ts">
   import { memoirStore } from '$lib/stores/memoir.svelte.js';
   import { entriesStore } from '$lib/stores/entries.svelte.js';
+  import { aiStore } from '$lib/stores/ai.svelte.js';
 
   function formatDate(unix: number): string {
     return new Date(unix * 1000).toLocaleDateString('en-US', {
@@ -9,7 +10,7 @@
     });
   }
 
-  const entryCount = $derived(entriesStore.entries.length);
+  const entryCount = $derived(Math.max(entriesStore.entries.length, aiStore.entryCount));
   const entriesNeeded = $derived(Math.max(0, 20 - entryCount));
 </script>
 

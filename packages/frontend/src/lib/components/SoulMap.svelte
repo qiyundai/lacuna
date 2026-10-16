@@ -54,7 +54,7 @@
   function getWeight(id: string): number {
     if (!patternsStore.model_weights) return 0;
     const w = (patternsStore.model_weights as Record<string, number | undefined>)[id];
-    return typeof w === 'number' ? w : 0;
+    return typeof w === 'number' && Number.isFinite(w) ? Math.max(0, Math.min(1, w)) : 0;
   }
 
   function getSummary(id: string): string {
@@ -112,11 +112,13 @@
           class="hit-area"
           onmouseenter={() => (hoveredModel = model.id)}
           onmouseleave={() => (hoveredModel = null)}
-          ontouchstart={() => (hoveredModel = model.id)}
-          ontouchend={() => (hoveredModel = null)}
+          onfocus={() => (hoveredModel = model.id)}
+          onblur={() => (hoveredModel = null)}
+          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); hoveredModel = hoveredModel === model.id ? null : model.id; } }}
+          onclick={() => (hoveredModel = model.id)}
           role="button"
           tabindex={0}
-          aria-label={model.label}
+          aria-label={`${model.label}: ${Math.round(weight * 100)}%. ${getSummary(model.id)}`}
         />
       {/each}
     </svg>

@@ -8,21 +8,14 @@ export async function checkRateLimit(
   const bucket = Math.floor(now / windowSeconds);
   const bucketKey = `${key}:${bucket}`;
   const windowEnd = (bucket + 1) * windowSeconds;
-
-  // Lazy expiry cleanup — fire and forget
-  db.prepare('DELETE FROM rate_limits WHERE window_end < ?').bind(now).run().catch(() => {});
-
-  await db
-    .prepare(
-      'INSERT INTO rate_limits (key, count, window_end) VALUES (?, 1, ?) ' +
-      'ON CONFLICT(key) DO UPDATE SET count = count + 1'
-    )
-    .bind(bucketKey, windowEnd)
-    .run();
+  if (Math.random() < 0.01) await db.prepare('DELETE FROM rate_limits WHERE window_end <= ?').bind(now).run();
 
   const result = await db
-    .prepare('SELECT count FROM rate_limits WHERE key = ?')
-    .bind(bucketKey)
+    .prepare(
+      'INSERT INTO rate_limits (key, count, window_end) VALUES (?, 1, ?) ' +
+      'ON CONFLICT(key) DO UPDATE SET count = count + 1 RETURNING count'
+    )
+    .bind(bucketKey, windowEnd)
     .first<{ count: number }>();
 
   return (result?.count ?? 1) <= maxRequests;

@@ -1,9 +1,11 @@
-const BASE = import.meta.env.VITE_API_URL ?? (
+import { readLocal } from './storage.js';
+export const isCompanion = typeof document !== 'undefined' && document.querySelector('meta[name="lacuna-companion"]') !== null;
+const BASE = isCompanion ? '/api' : import.meta.env.VITE_API_URL ?? (
   import.meta.env.DEV ? 'http://localhost:8787' : 'https://lacuna-api.pianoquin4126.workers.dev'
 );
 
 function getToken(): string | null {
-  return localStorage.getItem('lacuna_token');
+  return readLocal('lacuna_token');
 }
 
 async function request<T>(
@@ -19,8 +21,10 @@ async function request<T>(
     const token = getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
-  const res = await fetch(`${BASE}${path}`, { ...options, headers });
+  const tokenAtStart = getToken();
+  const res = await fetch(`${BASE}${path}`, { ...options, headers, signal: options.signal ?? AbortSignal.timeout(30000) });
   if (!res.ok) {
+    if (auth && res.status === 401 && tokenAtStart === getToken()) window.dispatchEvent(new Event('lacuna:unauthorized'));
     const body = await res.json().catch(() => ({}));
     throw Object.assign(new Error((body as { error?: { message?: string } }).error?.message ?? 'Request failed'), {
       status: res.status,
@@ -35,7 +39,7 @@ export const api = {
     request: (email: string) =>
       request<{ ok: boolean }>('/auth/request', {
         method: 'POST',
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, consent: true, ...(isCompanion ? { companionOrigin: location.origin } : {}) }),
       }, false),
     verify: (token: string) =>
       request<{ jwt: string; user: { id: string; email: string } }>(
@@ -51,10 +55,10 @@ export const api = {
       request<{ entries: EntryData[]; nextCursor: string | null }>(
         `/entries${cursor ? `?cursor=${cursor}` : ''}`
       ),
-    create: (body: string, solidified_at: number) =>
+    create: (body: string, solidified_at: number, entry_id: string) =>
       request<{ entry: EntryData }>('/entries', {
         method: 'POST',
-        body: JSON.stringify({ body, solidified_at }),
+        body: JSON.stringify({ body, solidified_at, entry_id }),
       }),
     delete: (id: string) =>
       request<{ ok: boolean }>(`/entries/${id}`, { method: 'DELETE' }),
@@ -69,6 +73,11 @@ export const api = {
   },
   memoir: {
     get: () => request<{ prose: string; generated_at: number } | null>('/memoir'),
+  },
+  ai: {
+    status: () => request<{ provider: 'anthropic' | 'chatgpt'; pending: number; entryCount: number }>('/ai/status'),
+    provider: (provider: 'anthropic' | 'chatgpt') => request('/ai/provider', { method: 'PATCH', body: JSON.stringify({ provider }) }),
+    refresh: () => request('/ai/refresh', { method: 'POST' }),
   },
 };
 

@@ -18,7 +18,7 @@
     try {
       const user = await verifyMagicToken(token);
       setAuthed(user);
-      await goto('/');
+      await goto('/', { replaceState: true });
     } catch (err: unknown) {
       status = 'error';
       errorMsg =

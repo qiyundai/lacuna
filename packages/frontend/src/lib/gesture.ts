@@ -15,9 +15,14 @@ export function holdDetector(
 ): { destroy: () => void } {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let holding = false;
+  let pointerId: number | null = null;
+  let startX = 0, startY = 0;
 
   function start(e: PointerEvent) {
+    if (pointerId !== null || (e.target as Element)?.closest('button, a')) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    pointerId = e.pointerId;
+    startX = e.clientX; startY = e.clientY;
     if (e.pointerType !== 'mouse') {
       e.preventDefault();
       // Claim exclusive pointer ownership so Android can't interpret the
@@ -39,11 +44,12 @@ export function holdDetector(
     }
     if (!holding) onHoldCancel?.();
     holding = false;
+    pointerId = null;
   }
 
   function move(e: PointerEvent) {
     // Cancel if pointer moved significantly (accidental drag)
-    if (Math.abs(e.movementX) > 8 || Math.abs(e.movementY) > 8) cancel();
+    if (e.pointerId === pointerId && (Math.abs(e.clientX - startX) > 8 || Math.abs(e.clientY - startY) > 8)) cancel();
   }
 
   function preventContextMenu(e: Event) {
@@ -55,8 +61,9 @@ export function holdDetector(
   }
 
   node.addEventListener('pointerdown', start);
-  node.addEventListener('pointerup', cancel);
-  node.addEventListener('pointercancel', cancel);
+  window.addEventListener('pointerup', cancel);
+  window.addEventListener('pointercancel', cancel);
+  node.addEventListener('lostpointercapture', cancel);
   node.addEventListener('pointermove', move);
   node.addEventListener('contextmenu', preventContextMenu);
   node.addEventListener('selectstart', preventSelect);
@@ -64,8 +71,9 @@ export function holdDetector(
   return {
     destroy() {
       node.removeEventListener('pointerdown', start);
-      node.removeEventListener('pointerup', cancel);
-      node.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('pointerup', cancel);
+      window.removeEventListener('pointercancel', cancel);
+      node.removeEventListener('lostpointercapture', cancel);
       node.removeEventListener('pointermove', move);
       node.removeEventListener('contextmenu', preventContextMenu);
       node.removeEventListener('selectstart', preventSelect);
@@ -88,24 +96,48 @@ export function swipeDetector(
   }
 ): { destroy: () => void } {
   let startY = 0;
+  let startX = 0;
+  let target: Element | null = null;
+  let scrollStarts = new Map<HTMLElement, number>();
   let lastWheelTime = 0;
 
   function touchStart(e: TouchEvent) {
+    if (e.touches.length !== 1) { target = null; return; }
+    target = e.target as Element;
     startY = e.touches[0]!.clientY;
+    startX = e.touches[0]!.clientX;
+    scrollStarts = new Map();
+    for (let el: Element | null = target; el && el !== node; el = el.parentElement) {
+      if (el instanceof HTMLElement) scrollStarts.set(el, el.scrollTop);
+    }
   }
 
   function touchEnd(e: TouchEvent) {
+    if (!target || !e.changedTouches[0]) return;
     const deltaY = startY - e.changedTouches[0]!.clientY;
+    if (Math.abs(startX - e.changedTouches[0].clientX) >= Math.abs(deltaY) || consumesScroll(target, deltaY, scrollStarts)) return;
     if (deltaY > threshold) onSwipeDown?.();
     else if (deltaY < -threshold) onSwipeUp?.();
   }
 
   function wheel(e: WheelEvent) {
+    if (consumesScroll(e.target as Element, e.deltaY) || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
     const now = Date.now();
     if (now - lastWheelTime < 800) return; // debounce
-    lastWheelTime = now;
-    if (e.deltaY > 80) onSwipeDown?.();
-    else if (e.deltaY < -80) onSwipeUp?.();
+    if (e.deltaY > 30) { lastWheelTime = now; onSwipeDown?.(); }
+    else if (e.deltaY < -30) { lastWheelTime = now; onSwipeUp?.(); }
+  }
+
+  function consumesScroll(element: Element, delta: number, starts?: Map<HTMLElement, number>): boolean {
+    if (element.closest('button, a, [role="dialog"]')) return true;
+    for (let el: Element | null = element; el && el !== node; el = el.parentElement) {
+      if (el instanceof HTMLElement && /auto|scroll/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight) {
+        const top = starts?.get(el) ?? el.scrollTop;
+        if (delta < 0 && top > 0) return true;
+        if (delta > 0 && top + el.clientHeight < el.scrollHeight - 1) return true;
+      }
+    }
+    return false;
   }
 
   node.addEventListener('touchstart', touchStart, { passive: true });

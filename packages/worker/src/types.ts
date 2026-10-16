@@ -4,6 +4,7 @@ export interface Env {
   JWT_SECRET: string;
   RESEND_API_KEY: string;
   ANTHROPIC_API_KEY: string;
+  ALLOW_DEV_AUTH?: string;
 }
 
 export interface UserRow {
@@ -13,6 +14,9 @@ export interface UserRow {
   magic_token_expires_at: number | null;
   consent_given_at: number | null;
   created_at: number;
+  ai_provider: 'anthropic' | 'chatgpt';
+  entries_version: number;
+  analyzed_version: number;
 }
 
 export interface EntryRow {

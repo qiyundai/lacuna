@@ -1,12 +1,16 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { draft, appendText, insertAt, deleteRange, deleteChar, clearDraft, type DraftChar } from '$lib/stores/draft.svelte.js';
+  import { onMount, onDestroy, tick as flushDom } from 'svelte';
+  import { draft, insertAt, deleteRange, clearDraft, type DraftChar } from '$lib/stores/draft.svelte.js';
   import { weather } from '$lib/stores/weather.svelte.js';
   import { holdDetector } from '$lib/gesture.js';
   import { api } from '$lib/api.js';
   import { prependEntry } from '$lib/stores/entries.svelte.js';
+  import { sessionVersion } from '$lib/session-version.js';
+  import { overlayStore } from '$lib/stores/overlay.svelte.js';
+  import { readLocal, writeLocal } from '$lib/storage.js';
+  import { aiStore, loadAI } from '$lib/stores/ai.svelte.js';
 
-  let { onSwipeDown }: { onSwipeDown: () => void } = $props();
+  let { onSwipeDown, active = true }: { onSwipeDown: () => void; active?: boolean } = $props();
 
   const MAX_CHARS = 500;
 
@@ -16,6 +20,15 @@
   let justSolidified = $state(false);
   let dissolving = $state(false);
   let scattering = $state(false);
+  let saving = $state(false);
+  let saveError = $state('');
+  let pendingSave: { text: string; id: string } | null = null;
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  function later(fn: () => void, ms: number) {
+    const timer = setTimeout(() => { timers.delete(timer); fn(); }, ms);
+    timers.add(timer);
+    return timer;
+  }
   let keyboardShift = $state(0);
 
   let showIntro = $state(false);
@@ -32,7 +45,7 @@
     if (introTimer) clearTimeout(introTimer);
     introTimer = null;
     introVisible = false;
-    setTimeout(() => { showIntro = false; }, 800);
+    later(() => { showIntro = false; }, 800);
   }
 
   function dismissHoldHint() {
@@ -41,15 +54,15 @@
     holdHintTimer = null;
     holdHintRevealTimer = null;
     holdHintVisible = false;
-    setTimeout(() => { showHoldHint = false; }, 600);
+    later(() => { showHoldHint = false; }, 600);
   }
 
   function scheduleHoldHint() {
     if (holdHintTimer) clearTimeout(holdHintTimer);
-    holdHintTimer = setTimeout(() => {
+    holdHintTimer = later(() => {
       if (!draft.isDirty) return;
       showHoldHint = true;
-      holdHintRevealTimer = setTimeout(() => {
+      holdHintRevealTimer = later(() => {
         holdHintVisible = true;
         holdHintRevealTimer = null;
       }, 30);
@@ -72,7 +85,7 @@
   function showCursorBriefly() {
     cursorVisible = true;
     if (cursorTimer) clearTimeout(cursorTimer);
-    cursorTimer = setTimeout(() => { cursorVisible = false; }, 1500);
+    cursorTimer = later(() => { cursorVisible = false; }, 1500);
   }
 
   function handleSelectionChange() {
@@ -138,7 +151,8 @@
     let idx = 0;
     for (const c of draft.chars) {
       const isSpace = /\s/.test(c.ch);
-      const entry: CharEntry = { char: c, idx: idx++ };
+      const entry: CharEntry = { char: c, idx };
+      idx += c.ch.length;
       if (current && current.isSpace === isSpace) {
         current.chars.push(entry);
       } else {
@@ -214,9 +228,9 @@
   }
 
   function onEscapeKey(e: KeyboardEvent) {
-    if (e.key === 'Escape' && draft.isDirty && !scattering) {
+    if (e.key === 'Escape' && active && !overlayStore.open && draft.isDirty && !scattering && !saving && !dissolving) {
       scattering = true;
-      setTimeout(() => { clearDraft(); scattering = false; }, SCATTER_MS);
+      later(() => { clearDraft(); scattering = false; }, SCATTER_MS);
     }
   }
 
@@ -227,19 +241,19 @@
     }
 
     focusInput();
+    loadAI().catch(() => {});
 
     if (container) {
       const hold = holdDetector(container, {
         durationMs: 600,
         onHoldStart: () => {
-          if (!draft.isDirty) return;
+          if (!active || overlayStore.open || !draft.isDirty || saving || dissolving) return;
           if (holdHintVisible) dismissHoldHint();
           solidifying = true;
         },
         onHold: () => {
-          if (!draft.isDirty) {
+          if (!active || overlayStore.open || !draft.isDirty || saving || dissolving) {
             solidifying = false;
-            solidifyProgress = 0;
             return;
           }
           solidifyEntry();
@@ -253,19 +267,19 @@
     }
 
     window.addEventListener('keydown', onEscapeKey);
-    window.addEventListener('visibilitychange', focusInput);
+    document.addEventListener('visibilitychange', focusInput);
     document.addEventListener('selectionchange', handleSelectionChange);
 
     rafId = requestAnimationFrame(tick);
 
-    if (!localStorage.getItem('lacuna_intro_shown')) {
-      localStorage.setItem('lacuna_intro_shown', '1');
+    if (!readLocal('lacuna_intro_shown')) {
+      writeLocal('lacuna_intro_shown', '1');
       showIntro = true;
-      setTimeout(() => { introVisible = true; }, 50);
-      introTimer = setTimeout(dismissIntro, 5500);
+      later(() => { introVisible = true; }, 50);
+      introTimer = later(dismissIntro, 5500);
     }
 
-    if (!localStorage.getItem('lacuna_hint_learned')) {
+    if (!readLocal('lacuna_hint_learned')) {
       hintArmed = true;
     }
 
@@ -280,16 +294,22 @@
     if (cursorTimer) clearTimeout(cursorTimer);
     if (holdHintTimer) clearTimeout(holdHintTimer);
     if (holdHintRevealTimer) clearTimeout(holdHintRevealTimer);
+    if (introTimer) clearTimeout(introTimer);
+    timers.forEach(clearTimeout);
     if (container) container.removeEventListener('pointermove', handlePointerMove);
     window.removeEventListener('keydown', onEscapeKey);
-    window.removeEventListener('visibilitychange', focusInput);
+    document.removeEventListener('visibilitychange', focusInput);
     document.removeEventListener('selectionchange', handleSelectionChange);
     window.visualViewport?.removeEventListener('resize', handleViewportResize);
   });
 
   function focusInput() {
-    inputEl?.focus();
+    if (active && !overlayStore.open && !document.hidden) inputEl?.focus({ preventScroll: true });
   }
+  $effect(() => {
+    if (!active || overlayStore.open) inputEl?.blur();
+    else void flushDom().then(focusInput);
+  });
 
   function startRefract() {
     // Skip on mobile — animating the SVG displacement filter on the glow-field
@@ -315,6 +335,7 @@
   }
 
   async function solidifyEntry() {
+    if (saving || dissolving || scattering || !active || overlayStore.open) return;
     const text = draft.text.trim();
     if (!text) {
       solidifying = false;
@@ -327,6 +348,22 @@
   }
 
   async function commitEntry(text: string, solidifiedAt: number) {
+    saving = true;
+    saveError = '';
+    const version = sessionVersion.value;
+    if (pendingSave?.text !== text) pendingSave = { text, id: crypto.randomUUID().replace(/-/g, '') };
+    try {
+      const { entry } = await api.entries.create(text, solidifiedAt, pendingSave.id);
+      if (version !== sessionVersion.value) return;
+      prependEntry(entry);
+      pendingSave = null;
+    } catch (err) {
+      if (version === sessionVersion.value) {
+        saveError = err instanceof Error ? `${err.message}. Your thought is still here.` : 'Could not save. Your thought is still here.';
+        solidifying = false;
+      }
+      return;
+    } finally { saving = false; }
     dissolving = true;
     justSolidified = true;
     startRefract();
@@ -334,39 +371,34 @@
 
     if (hintArmed) {
       hintArmed = false;
-      localStorage.setItem('lacuna_hint_learned', '1');
+      writeLocal('lacuna_hint_learned', '1');
       dismissHoldHint();
     }
 
-    setTimeout(() => {
+    later(() => {
       clearDraft();
       dissolving = false;
       solidifying = false;
       if (isMobile) focusInput();
     }, DISSOLVE_MS + 400);
 
-    setTimeout(() => (justSolidified = false), RIPPLE_MS);
-
-    try {
-      const { entry } = await api.entries.create(text, solidifiedAt);
-      prependEntry(entry);
-    } catch (err) {
-      console.error('Failed to save entry:', err);
-    }
+    later(() => (justSolidified = false), RIPPLE_MS);
   }
 
-  const charsLeft = $derived(MAX_CHARS - draft.chars.length);
+  const charsLeft = $derived(MAX_CHARS - draft.text.length);
   const nearLimit = $derived(charsLeft <= 80);
 
   function handleInput(e: Event) {
     const target = e.target as HTMLTextAreaElement;
-    if (dissolving || scattering) {
+    if (e instanceof InputEvent && e.isComposing) return;
+    if (saving || dissolving || scattering) {
       target.value = draft.text;
       return;
     }
 
     let newVal = target.value;
     if (newVal.length > MAX_CHARS) newVal = newVal.slice(0, MAX_CHARS);
+    if (/[\uD800-\uDBFF]$/.test(newVal)) newVal = newVal.slice(0, -1);
     const oldVal = draft.text;
     const newCursorPos = target.selectionStart ?? newVal.length;
 
@@ -374,9 +406,11 @@
       // Find common prefix and suffix to isolate the changed region
       let pfx = 0;
       while (pfx < oldVal.length && pfx < newVal.length && oldVal[pfx] === newVal[pfx]) pfx++;
+      if (/[\uDC00-\uDFFF]/.test(oldVal[pfx] ?? '')) pfx--;
       let oldEnd = oldVal.length;
       let newEnd = newVal.length;
       while (oldEnd > pfx && newEnd > pfx && oldVal[oldEnd - 1] === newVal[newEnd - 1]) { oldEnd--; newEnd--; }
+      if (/[\uDC00-\uDFFF]/.test(oldVal[oldEnd] ?? '')) { oldEnd++; newEnd++; }
 
       if (oldEnd > pfx) deleteRange(pfx, oldEnd);
       if (newEnd > pfx) insertAt(pfx, newVal.slice(pfx, newEnd));
@@ -393,7 +427,8 @@
   }
 
   function handleKeyDown(e: KeyboardEvent) {
-    if (dissolving || scattering) {
+    if (e.isComposing) return;
+    if (saving || dissolving || scattering || !active || overlayStore.open) {
       e.preventDefault();
       return;
     }
@@ -401,12 +436,15 @@
       e.preventDefault();
       if (!draft.isDirty) return;
       solidifying = true;
-      setTimeout(solidifyEntry, 220);
+      solidifyEntry();
       return;
     }
     if (e.key === 'Enter') {
       e.preventDefault();
       const pos = inputEl?.selectionStart ?? draft.text.length;
+      const end = inputEl?.selectionEnd ?? pos;
+      if (draft.text.length - (end - pos) >= MAX_CHARS) return;
+      deleteRange(pos, end);
       insertAt(pos, '\n');
       if (inputEl) {
         inputEl.value = draft.text;
@@ -416,7 +454,7 @@
       return;
     }
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) {
-      setTimeout(() => {
+      later(() => {
         if (inputEl) {
           cursorPos = inputEl.selectionStart ?? draft.text.length;
           showCursorBriefly();
@@ -504,6 +542,7 @@
   {#if draft.isDirty || showCursor}
     <div
       class="draft-prose"
+      aria-hidden="true"
       class:empty={!draft.isDirty}
       class:condensing={solidifying}
       class:dissolving
@@ -541,7 +580,7 @@
             </span>
           {/if}
         {/each}
-        {#if showCursor && !hasSelection && cursorPos >= draft.chars.length}
+        {#if showCursor && !hasSelection && cursorPos >= draft.text.length}
           <span class="cursor" aria-hidden="true"></span>
         {/if}
       {:else}
@@ -602,7 +641,9 @@
     spellcheck={false}
     {...{ autocorrect: 'off' }}
     maxlength={MAX_CHARS}
+    disabled={!active || overlayStore.open}
     oninput={handleInput}
+    oncompositionend={handleInput}
     onkeydown={handleKeyDown}
     onfocus={() => { focused = true; }}
     onblur={() => { focused = false; }}
@@ -612,10 +653,12 @@
     value={draft.text}
     aria-label="Write here"
   ></textarea>
+  {#if saveError}<p class="save-error" role="alert">{saveError}</p>{/if}
 
   {#if nearLimit}
     <div class="char-limit" aria-live="polite">{charsLeft}</div>
   {/if}
+  {#if aiStore.provider === 'chatgpt'}<p class="plan-indicator">Using ChatGPT plan · <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">Manage usage</a></p>{/if}
 
   <button class="down-hint" class:faint={draft.isDirty} onclick={onSwipeDown} aria-label="Go to your story">
     <span>↓</span>
@@ -624,6 +667,9 @@
 </div>
 
 <style>
+  .plan-indicator { position: absolute; top: 1.5rem; width: 100%; text-align: center; font-size: var(--text-xs); color: var(--void-text-hint); }
+  .plan-indicator a { color: inherit; }
+  .save-error { position: absolute; bottom: 5rem; left: 10%; width: 80%; text-align: center; color: var(--void-danger); font-size: var(--text-xs); line-height: 1.8; }
   .void {
     position: relative;
     width: 100%;

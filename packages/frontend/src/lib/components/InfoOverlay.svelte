@@ -1,13 +1,9 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
+  import { modal } from '$lib/modal.js';
 
   let { show = $bindable(false) }: { show: boolean } = $props();
-
-  function portal(node: HTMLElement) {
-    document.body.appendChild(node);
-    return { destroy() { node.remove(); } };
-  }
 
   function dismiss() { show = false; }
 </script>
@@ -16,13 +12,15 @@
 
 {#if show}
   <div
-    use:portal
+    use:modal={{ dismiss }}
     class="screen-overlay info-overlay"
     transition:fade={{ duration: 500, easing: cubicOut }}
     role="dialog"
+    tabindex="-1"
     aria-modal="true"
     aria-label="What is Lacuna"
     onclick={dismiss}
+    onkeydown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') dismiss(); }}
   >
     <div class="info-content">
       <p>a private space, just yours. you type, words float, nothing goes anywhere unless you hold a thought long enough to mean it.</p>

@@ -25,6 +25,15 @@ jobs:
       - name: Build frontend
         run: pnpm build:frontend
 
+      - name: Check frontend and worker
+        run: pnpm check
+
+      - name: Run regression tests
+        run: pnpm test
+
+      - name: Build local companion
+        run: pnpm build:companion
+
       - name: Apply D1 migrations (remote)
         run: pnpm -F worker exec wrangler d1 migrations apply lacuna-db --remote
         env:

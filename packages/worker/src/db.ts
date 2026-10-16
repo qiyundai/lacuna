@@ -1,5 +1,6 @@
 import type { EntryRow, MemoryGraphRow, MemoirSnapshotRow, PatternRow, RangeSummaryRow, UserRow } from './types.js';
 import type { MemoryGraph } from './ai/types.js';
+export class EntryConflictError extends Error {}
 
 export async function getUserByEmail(db: D1Database, email: string): Promise<UserRow | null> {
   return db.prepare('SELECT * FROM users WHERE email = ?').bind(email).first<UserRow>();
@@ -9,9 +10,9 @@ export async function getUserById(db: D1Database, id: string): Promise<UserRow |
   return db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first<UserRow>();
 }
 
-export async function getUserByMagicToken(db: D1Database, token: string): Promise<UserRow | null> {
+export async function consumeMagicToken(db: D1Database, token: string): Promise<UserRow | null> {
   return db
-    .prepare('SELECT * FROM users WHERE magic_token = ?')
+    .prepare('UPDATE users SET magic_token = NULL, magic_token_expires_at = NULL WHERE magic_token = ? AND magic_token_expires_at > unixepoch() RETURNING *')
     .bind(token)
     .first<UserRow>();
 }
@@ -19,7 +20,7 @@ export async function getUserByMagicToken(db: D1Database, token: string): Promis
 export async function upsertUser(db: D1Database, email: string): Promise<UserRow> {
   await db
     .prepare(
-      'INSERT INTO users (email, consent_given_at) VALUES (?, unixepoch()) ON CONFLICT(email) DO NOTHING'
+      'INSERT INTO users (email, consent_given_at) VALUES (?, unixepoch()) ON CONFLICT(email) DO UPDATE SET consent_given_at = coalesce(users.consent_given_at, excluded.consent_given_at)'
     )
     .bind(email)
     .run();
@@ -40,23 +41,17 @@ export async function setMagicToken(
     .run();
 }
 
-export async function clearMagicToken(db: D1Database, userId: string): Promise<void> {
-  await db
-    .prepare('UPDATE users SET magic_token = NULL, magic_token_expires_at = NULL WHERE id = ?')
-    .bind(userId)
-    .run();
-}
-
 export async function createEntry(
   db: D1Database,
   userId: string,
   body: string,
-  solidifiedAt: number
+  solidifiedAt: number,
+  entryId?: string
 ): Promise<EntryRow> {
-  const id = crypto.randomUUID().replace(/-/g, '');
+  const id = entryId ?? crypto.randomUUID().replace(/-/g, '');
   await db
     .prepare(
-      'INSERT INTO entries (id, user_id, body, solidified_at) VALUES (?, ?, ?, ?)'
+      'INSERT INTO entries (id, user_id, body, solidified_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO NOTHING'
     )
     .bind(id, userId, body, solidifiedAt)
     .run();
@@ -65,6 +60,7 @@ export async function createEntry(
     .bind(id)
     .first<EntryRow>();
   if (!entry) throw new Error('Failed to create entry');
+  if (entry.user_id !== userId || entry.body !== body) throw new EntryConflictError('Entry ID already used');
   return entry;
 }
 
@@ -101,7 +97,7 @@ export async function getEntries(
 
 export async function getAllEntriesForUser(db: D1Database, userId: string): Promise<EntryRow[]> {
   const result = await db
-    .prepare('SELECT * FROM entries WHERE user_id = ? ORDER BY created_at ASC')
+    .prepare('SELECT * FROM entries WHERE user_id = ? ORDER BY rowid ASC')
     .bind(userId)
     .all<EntryRow>();
   return result.results;
@@ -118,85 +114,26 @@ export async function upsertPatterns(
   entryCountAtLastMemoir?: number,
   graphExtractedThrough?: number
 ): Promise<void> {
-  const existing = await getPatterns(db, userId);
-  const weightsJson = JSON.stringify(modelWeights);
-  const now = Math.floor(Date.now() / 1000);
-  if (existing) {
-    if (entryCountAtLastMemoir !== undefined && graphExtractedThrough !== undefined) {
-      await db
-        .prepare(
-          'UPDATE patterns SET model_weights = ?, entry_count_at_last_memoir = ?, graph_extracted_through = ?, last_updated = ? WHERE user_id = ?'
-        )
-        .bind(weightsJson, entryCountAtLastMemoir, graphExtractedThrough, now, userId)
-        .run();
-    } else if (entryCountAtLastMemoir !== undefined) {
-      await db
-        .prepare(
-          'UPDATE patterns SET model_weights = ?, entry_count_at_last_memoir = ?, last_updated = ? WHERE user_id = ?'
-        )
-        .bind(weightsJson, entryCountAtLastMemoir, now, userId)
-        .run();
-    } else if (graphExtractedThrough !== undefined) {
-      await db
-        .prepare(
-          'UPDATE patterns SET model_weights = ?, graph_extracted_through = ?, last_updated = ? WHERE user_id = ?'
-        )
-        .bind(weightsJson, graphExtractedThrough, now, userId)
-        .run();
-    } else {
-      await db
-        .prepare('UPDATE patterns SET model_weights = ?, last_updated = ? WHERE user_id = ?')
-        .bind(weightsJson, now, userId)
-        .run();
-    }
-  } else {
-    const id = crypto.randomUUID().replace(/-/g, '');
-    await db
-      .prepare(
-        'INSERT INTO patterns (id, user_id, model_weights, entry_count_at_last_memoir, graph_extracted_through, last_updated) VALUES (?, ?, ?, ?, ?, ?)'
-      )
-      .bind(id, userId, weightsJson, entryCountAtLastMemoir ?? 0, graphExtractedThrough ?? 0, now)
-      .run();
-  }
+  await db.prepare(`INSERT INTO patterns (user_id, model_weights, entry_count_at_last_memoir, graph_extracted_through)
+    VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET
+    model_weights = excluded.model_weights,
+    entry_count_at_last_memoir = coalesce(?, patterns.entry_count_at_last_memoir),
+    graph_extracted_through = coalesce(?, patterns.graph_extracted_through), last_updated = unixepoch()`)
+    .bind(userId, JSON.stringify(modelWeights), entryCountAtLastMemoir ?? 0, graphExtractedThrough ?? 0,
+      entryCountAtLastMemoir ?? null, graphExtractedThrough ?? null).run();
 }
 
 export async function getMemoryGraph(db: D1Database, userId: string): Promise<MemoryGraph> {
   const row = await db
     .prepare('SELECT graph_json FROM memory_graph WHERE user_id = ?')
     .bind(userId)
-    .first<MemoryGraphRow>();
+    .first<Pick<MemoryGraphRow, 'graph_json'>>();
   if (!row) return { nodes: [], processed_count: 0 };
   try {
     return JSON.parse(row.graph_json) as MemoryGraph;
   } catch {
     return { nodes: [], processed_count: 0 };
   }
-}
-
-export async function upsertMemoryGraph(
-  db: D1Database,
-  userId: string,
-  graph: MemoryGraph
-): Promise<void> {
-  const now = Math.floor(Date.now() / 1000);
-  await db
-    .prepare(
-      'INSERT INTO memory_graph (user_id, graph_json, last_updated) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET graph_json = excluded.graph_json, last_updated = excluded.last_updated'
-    )
-    .bind(userId, JSON.stringify(graph), now)
-    .run();
-}
-
-export async function getRecentEntries(
-  db: D1Database,
-  userId: string,
-  limit: number
-): Promise<EntryRow[]> {
-  const result = await db
-    .prepare('SELECT * FROM entries WHERE user_id = ? ORDER BY created_at DESC LIMIT ?')
-    .bind(userId, limit)
-    .all<EntryRow>();
-  return result.results.reverse();
 }
 
 export async function getRangeSummaries(
@@ -212,28 +149,12 @@ export async function getRangeSummaries(
   return result.results;
 }
 
-export async function createRangeSummary(
-  db: D1Database,
-  userId: string,
-  fromEntryNum: number,
-  toEntryNum: number,
-  summaryText: string
-): Promise<void> {
-  const id = crypto.randomUUID().replace(/-/g, '');
-  await db
-    .prepare(
-      'INSERT INTO range_summaries (id, user_id, from_entry_num, to_entry_num, summary_text) VALUES (?, ?, ?, ?, ?)'
-    )
-    .bind(id, userId, fromEntryNum, toEntryNum, summaryText)
-    .run();
-}
-
 export async function getLatestMemoir(
   db: D1Database,
   userId: string
 ): Promise<MemoirSnapshotRow | null> {
   return db
-    .prepare('SELECT * FROM memoir_snapshots WHERE user_id = ? ORDER BY generated_at DESC LIMIT 1')
+    .prepare('SELECT * FROM memoir_snapshots WHERE user_id = ? ORDER BY generated_at DESC, rowid DESC LIMIT 1')
     .bind(userId)
     .first<MemoirSnapshotRow>();
 }
@@ -247,21 +168,13 @@ export async function deleteEntry(
   userId: string,
   entryId: string
 ): Promise<boolean> {
-  const result = await db
-    .prepare('DELETE FROM entries WHERE id = ? AND user_id = ?')
-    .bind(entryId, userId)
-    .run();
+  // Derived text can contain deleted content. Remove it atomically with the source.
+  const results = await db.batch([
+    ...['patterns', 'memory_graph', 'range_summaries', 'memoir_snapshots', 'analysis_jobs'].map(table =>
+      db.prepare(`DELETE FROM ${table} WHERE user_id = ? AND EXISTS (SELECT 1 FROM entries WHERE id = ? AND user_id = ?)`)
+        .bind(userId, entryId, userId)),
+    db.prepare('DELETE FROM entries WHERE id = ? AND user_id = ?').bind(entryId, userId),
+  ]);
+  const result = results[results.length - 1]!;
   return (result.meta.changes ?? 0) > 0;
-}
-
-export async function createMemoirSnapshot(
-  db: D1Database,
-  userId: string,
-  prose: string
-): Promise<void> {
-  const id = crypto.randomUUID().replace(/-/g, '');
-  await db
-    .prepare('INSERT INTO memoir_snapshots (id, user_id, prose) VALUES (?, ?, ?)')
-    .bind(id, userId, prose)
-    .run();
 }

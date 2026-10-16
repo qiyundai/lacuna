@@ -2,9 +2,10 @@
   import '../app.css';
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { session, hydrateSession, setAuthed } from '$lib/stores/session.svelte.js';
+  import { session, hydrateSession, signOut } from '$lib/stores/session.svelte.js';
   import { initWeather } from '$lib/stores/weather.svelte.js';
-  import { requestMagicLink, verifyMagicToken } from '$lib/auth.js';
+  import { requestMagicLink } from '$lib/auth.js';
+  import { readLocal, writeLocal } from '$lib/storage.js';
   import InfoOverlay from '$lib/components/InfoOverlay.svelte';
   import PrivacyOverlay from '$lib/components/PrivacyOverlay.svelte';
 
@@ -25,16 +26,18 @@
   let showConsentOverlay = $state(false);
 
   function handleConsent() {
-    localStorage.setItem('lacuna_consented', '1');
+    writeLocal('lacuna_consented', '1');
     consentGiven = true;
   }
 
   onMount(() => {
     hydrateSession();
     initWeather();
-    const stored = localStorage.getItem('lacuna_consented');
+    const stored = readLocal('lacuna_consented');
     consentGiven = !!stored;
     if (!stored) showConsentOverlay = true;
+    window.addEventListener('lacuna:unauthorized', signOut);
+    return () => window.removeEventListener('lacuna:unauthorized', signOut);
   });
 
   async function submitEmail(e: SubmitEvent) {
@@ -45,8 +48,8 @@
     try {
       await requestMagicLink(email.trim().toLowerCase());
       linkSent = true;
-    } catch {
-      authError = 'Something went wrong. Try again.';
+    } catch (err) {
+      authError = err instanceof Error ? err.message : 'Something went wrong. Try again.';
     } finally {
       submitting = false;
     }

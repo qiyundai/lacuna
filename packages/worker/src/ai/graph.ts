@@ -12,7 +12,7 @@ export function mergeConceptsIntoGraph(
   graph: MemoryGraph,
   extraction: ConceptExtraction
 ): MemoryGraph {
-  const nodes = [...graph.nodes];
+  const nodes = graph.nodes.map(node => ({ ...node }));
 
   const allConcepts: Array<{ concept: string; type: MemoryNode['type'] }> = [
     ...extraction.themes.map((c) => ({ concept: c.toLowerCase().trim(), type: 'theme' as const })),
@@ -20,8 +20,12 @@ export function mergeConceptsIntoGraph(
     ...extraction.entities.map((c) => ({ concept: c.toLowerCase().trim(), type: 'entity' as const })),
   ].filter((c) => c.concept.length > 0);
 
+  const seen = new Set<string>();
   for (const { concept, type } of allConcepts) {
-    const existing = nodes.find((n) => n.concept === concept);
+    const key = `${type}:${concept}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const existing = nodes.find((n) => n.concept === concept && n.type === type);
     if (existing) {
       existing.weight = WEIGHT_DECAY * existing.weight + WEIGHT_NEW;
       existing.count += 1;

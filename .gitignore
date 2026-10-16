@@ -7,6 +7,10 @@ node_modules/
 # Build outputs
 .svelte-kit/
 dist/
+build/
+.test-output/
+*.credentials
+companion.lock
 .wrangler/
 
 # Environment

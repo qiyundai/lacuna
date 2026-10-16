@@ -6,9 +6,20 @@
     "dev:worker": "pnpm -F worker dev",
     "build:frontend": "pnpm -F frontend build",
     "build:worker": "pnpm -F worker build",
-    "deploy:worker": "pnpm -F worker run deploy"
+    "deploy:worker": "pnpm -F worker run deploy",
+    "check": "pnpm -F frontend check && pnpm build:worker",
+    "build:companion": "node scripts/build-companion.mjs",
+    "companion": "pnpm build:frontend && pnpm build:companion && node packages/companion/dist/server.mjs",
+    "test": "node scripts/test.mjs"
   },
   "engines": {
-    "pnpm": ">=9"
+    "pnpm": ">=9",
+    "node": ">=22.16"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1"
+  },
+  "pnpm": {
+    "overrides": { "@sveltejs/kit>cookie": "^0.7.2" }
   }
 }

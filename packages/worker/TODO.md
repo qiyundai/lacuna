@@ -4,23 +4,13 @@ Items here were intentionally deferred from the initial implementation. P0s have
 
 ---
 
-## P1 — Quality regressions worth fixing soon
+## Current constraints
 
-### `blind_spots` false positives on historical themes
-**Status:** Partially fixed (activation now runs on all entries).
-**Remaining issue:** The activation check still uses regex on entry bodies, not graph nodes. A user whose older entries contained relationship/body/future keywords but were compressed into range summaries will still activate `blind_spots` correctly because we scan all entries — but once the entry body is only reachable through a range summary, the regex won't see it. This becomes a problem when entry counts are very high and some entries are *only* represented as summaries (no verbatim copy retained).
-**Fix:** Augment the `blind_spots` activation text with graph node labels:
-```typescript
-const graphText = graph.nodes.map((n) => n.concept).join(' ');
-const text = [...entries.map((e) => e.body), graphText].join(' ').toLowerCase();
-```
-Or change `ModelDefinition.activationCheck` to accept an optional `graphConcepts: string[]` second param.
+Activation scans all retained entries. Range summaries do not replace or delete original entries, so missing access to compressed historical text is not a current defect. If retention changes later, reassess activation with explicit provenance rather than treating generated graph labels as equivalent evidence.
 
-### Range summary threshold slightly misaligned
-**Current:** `count - highestSummarized >= RANGE_SUMMARY_BATCH_SIZE * 2` = 30
-**Ideal:** `RANGE_SUMMARY_BATCH_SIZE + RECENT_ENTRIES_WINDOW` = 35
-This means entries 16–30 could appear in both a range summary AND the recent entries window (slight prompt redundancy). Not a correctness bug, just wasted tokens.
-**Fix:** Change constant to `RANGE_SUMMARY_BATCH_SIZE + RECENT_ENTRIES_WINDOW`.
+The range-summary threshold is now 35 (15 summarized entries plus a 20-entry recent window). The graph query type now matches its selected fields. Concurrency, deletion consistency, checkpoint recovery and companion work are documented in the root `AUDIT.md`.
+
+Hosted background execution and loading all history remain scalability constraints. Introduce a durable queue and bounded historical reads before claiming reliable processing for large accounts; benchmark those changes against representative histories.
 
 ---
 
@@ -38,10 +28,6 @@ Graph nodes track `weight` and `count` but not *when* a concept appeared. The me
   
 The prompt normalization approach is cheaper and fits the current stack.
 
-### `getMemoryGraph` type inaccuracy
-`db.ts` selects only `graph_json` from `memory_graph` but types the result as `MemoryGraphRow` (which also has `user_id` and `last_updated`). Works at runtime since we only access `row.graph_json`, but is misleading.
-**Fix:** Change select to `SELECT * FROM memory_graph` or type the result as `Pick<MemoryGraphRow, 'graph_json'>`.
-
 ---
 
 ## P3 — Future capability
@@ -52,6 +38,6 @@ Enables "find entries most similar to what I'm writing now" (useful for soul map
 **Defer until:** private loop is stable and user testing shows this is needed.
 
 ### Community / cross-user pattern matching
-Graph nodes are already abstracted from raw text, which makes them safe to compare across users without exposing entry content. Could enable "others who return to similar themes" or aggregate pattern insights.
+Graph nodes can contain sensitive themes, named people, places, and inferred feelings. Abstraction does not make them anonymous or safe to share. Any cross-user feature needs an explicit privacy design and consent before implementation.
 **Explicitly Phase 2+** per spec. No action until then.
 

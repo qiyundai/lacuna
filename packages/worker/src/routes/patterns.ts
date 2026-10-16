@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env, JwtPayload } from '../types.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { getPatterns, upsertPatterns } from '../db.js';
+import { validWeights } from '../ai/validation.js';
 
 type Variables = { user: JwtPayload };
 
@@ -27,7 +28,7 @@ patternsRoute.get('/', async (c) => {
 patternsRoute.patch('/', async (c) => {
   const user = c.get('user');
   const body = await c.req.json<{ model_weights?: object }>();
-  if (!body.model_weights || typeof body.model_weights !== 'object') {
+  if (!body || !validWeights(body.model_weights)) {
     return c.json({ error: { code: 'BAD_REQUEST', message: 'model_weights required' } }, 400);
   }
   await upsertPatterns(c.env.DB, user.sub, body.model_weights);

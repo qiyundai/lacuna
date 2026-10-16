@@ -3,29 +3,50 @@ import { SignJWT } from 'jose';
 import type { Env, JwtPayload } from '../types.js';
 import { authMiddleware } from '../middleware/auth.js';
 import {
-  clearMagicToken,
   deleteUser,
-  getUserByMagicToken,
+  consumeMagicToken,
   setMagicToken,
   upsertUser,
 } from '../db.js';
+import { checkRateLimit } from '../ratelimit.js';
+
+export async function hashToken(token: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+}
 
 type Variables = { user: JwtPayload };
 export const authRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 authRoute.post('/request', async (c) => {
-  const body = await c.req.json<{ email?: string }>();
-  const email = body.email?.trim().toLowerCase();
-  if (!email || !email.includes('@')) {
+  const body = await c.req.json<{ email?: unknown; consent?: unknown; companionOrigin?: unknown }>();
+  const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
+  if (!email || email.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email) || body?.consent !== true) {
     return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid email' } }, 400);
+  }
+  const ip = c.req.header('CF-Connecting-IP') ?? 'local';
+  if (!await checkRateLimit(c.env.DB, `auth-ip:${ip}`, 20, 900) ||
+      !await checkRateLimit(c.env.DB, `auth-email:${await hashToken(email)}`, 3, 900)) {
+    return c.json({ error: { code: 'RATE_LIMITED', message: 'Please wait before requesting another link' } }, 429);
+  }
+  if (!c.env.RESEND_API_KEY && c.env.ALLOW_DEV_AUTH !== 'true') {
+    return c.json({ error: { code: 'UNAVAILABLE', message: 'Email sign-in is not configured' } }, 503);
   }
 
   const user = await upsertUser(c.env.DB, email);
   const token = crypto.randomUUID();
   const expiresAt = Math.floor(Date.now() / 1000) + 15 * 60; // 15 minutes
-  await setMagicToken(c.env.DB, user.id, token, expiresAt);
+  await setMagicToken(c.env.DB, user.id, await hashToken(token), expiresAt);
 
-  await sendMagicLinkEmail(c.env.RESEND_API_KEY, c.env.FRONTEND_ORIGIN, email, token);
+  let returnOrigin = c.env.FRONTEND_ORIGIN;
+  if (body.companionOrigin !== undefined) {
+    try {
+      const origin = new URL(String(body.companionOrigin));
+      if (origin.protocol !== 'http:' || origin.hostname !== '127.0.0.1' || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash) throw new Error('Invalid origin');
+      returnOrigin = origin.origin;
+    } catch { return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid companion address' } }, 400); }
+  }
+  await sendMagicLinkEmail(c.env.RESEND_API_KEY, returnOrigin, email, token);
 
   return c.json({ ok: true });
 });
@@ -36,18 +57,10 @@ authRoute.get('/verify', async (c) => {
     return c.json({ error: { code: 'BAD_REQUEST', message: 'Missing token' } }, 400);
   }
 
-  const user = await getUserByMagicToken(c.env.DB, token);
-  if (!user || !user.magic_token_expires_at) {
+  const user = await consumeMagicToken(c.env.DB, await hashToken(token));
+  if (!user) {
     return c.json({ error: { code: 'INVALID_TOKEN', message: 'Invalid or expired link' } }, 401);
   }
-
-  const now = Math.floor(Date.now() / 1000);
-  if (now > user.magic_token_expires_at) {
-    await clearMagicToken(c.env.DB, user.id);
-    return c.json({ error: { code: 'EXPIRED_TOKEN', message: 'Link has expired' } }, 401);
-  }
-
-  await clearMagicToken(c.env.DB, user.id);
 
   const secret = new TextEncoder().encode(c.env.JWT_SECRET);
   const jwt = await new SignJWT({ sub: user.id, email: user.email })
@@ -64,6 +77,8 @@ authRoute.delete('/account', authMiddleware, async (c) => {
   await deleteUser(c.env.DB, user.sub);
   return c.json({ ok: true });
 });
+
+authRoute.get('/me', authMiddleware, c => c.json({ id: c.get('user').sub, email: c.get('user').email }));
 
 async function sendMagicLinkEmail(
   resendApiKey: string,
@@ -96,7 +111,6 @@ async function sendMagicLinkEmail(
   });
 
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Resend API error ${res.status}: ${body}`);
+    throw new Error(`Email delivery failed (${res.status})`);
   }
 }

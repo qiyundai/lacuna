@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env, JwtPayload } from '../types.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { createEntry, deleteEntry, getEntries } from '../db.js';
+import { createEntry, deleteEntry, getEntries, EntryConflictError } from '../db.js';
 import { analyzeEntriesAsync } from '../ai/analyzer.js';
 import { checkRateLimit } from '../ratelimit.js';
 
@@ -16,7 +16,11 @@ entriesRoute.use('*', authMiddleware);
 entriesRoute.get('/', async (c) => {
   const user = c.get('user');
   const cursor = c.req.query('cursor') ?? null;
-  const limit = Math.min(parseInt(c.req.query('limit') ?? '20', 10), 50);
+  const requested = Number(c.req.query('limit') ?? '20');
+  if (!Number.isInteger(requested) || requested < 1) {
+    return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid page size' } }, 400);
+  }
+  const limit = Math.min(requested, 50);
 
   const entries = await getEntries(c.env.DB, user.sub, cursor, limit);
   const nextCursor = entries.length === limit ? (entries[entries.length - 1]?.id ?? null) : null;
@@ -27,26 +31,31 @@ entriesRoute.get('/', async (c) => {
 entriesRoute.post('/', async (c) => {
   const user = c.get('user');
 
-  // 50 entries per user per hour — fail-open so a missing table never blocks writes
-  const allowed = await checkRateLimit(c.env.DB, `entry:${user.sub}`, 50, 3600).catch((err) => {
-    console.error('Rate limit check failed:', err);
-    return true;
-  });
+  const allowed = await checkRateLimit(c.env.DB, `entry:${user.sub}`, 50, 3600);
   if (!allowed) {
     return c.json({ error: { code: 'RATE_LIMITED', message: 'Too many entries' } }, 429);
   }
 
-  const body = await c.req.json<{ body?: string; solidified_at?: number }>();
+  const body = await c.req.json<{ body?: string; solidified_at?: number; entry_id?: string }>();
 
-  if (!body.body?.trim()) {
+  if (typeof body?.body !== 'string' || !body.body.trim()) {
     return c.json({ error: { code: 'BAD_REQUEST', message: 'Entry body is required' } }, 400);
+  }
+  if (body.solidified_at !== undefined && (!Number.isSafeInteger(body.solidified_at) || body.solidified_at < 0 || body.solidified_at > Math.floor(Date.now() / 1000) + 300)) {
+    return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid timestamp' } }, 400);
   }
   if (body.body.length > MAX_ENTRY_LENGTH) {
     return c.json({ error: { code: 'BAD_REQUEST', message: 'Entry too long' } }, 400);
   }
 
   const solidifiedAt = body.solidified_at ?? Math.floor(Date.now() / 1000);
-  const entry = await createEntry(c.env.DB, user.sub, body.body.trim(), solidifiedAt);
+  if (body.entry_id !== undefined && (typeof body.entry_id !== 'string' || !/^[a-f0-9]{32}$/.test(body.entry_id))) return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid entry ID' } }, 400);
+  let entry;
+  try { entry = await createEntry(c.env.DB, user.sub, body.body.trim(), solidifiedAt, body.entry_id); }
+  catch (err) {
+    if (err instanceof EntryConflictError) return c.json({ error: { code: 'CONFLICT', message: 'Entry ID already used' } }, 409);
+    throw err;
+  }
 
   // Fire AI analysis asynchronously — does not block the response
   c.executionCtx.waitUntil(

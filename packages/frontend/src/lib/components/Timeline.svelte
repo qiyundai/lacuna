@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { entriesStore, loadMoreEntries } from '$lib/stores/entries.svelte.js';
+  import { entriesStore, loadEntries, loadMoreEntries } from '$lib/stores/entries.svelte.js';
 
   function formatDate(unix: number): string {
     return new Date(unix * 1000).toLocaleDateString('en-US', {
@@ -13,6 +13,8 @@
 <div class="timeline">
   {#if entriesStore.status === 'loading' && entriesStore.entries.length === 0}
     <div class="state-message">...</div>
+  {:else if entriesStore.status === 'error' && entriesStore.entries.length === 0}
+    <div class="state-message">could not load your entries. <button class="load-more" onclick={() => entriesStore.nextCursor ? loadMoreEntries() : loadEntries()}>try again</button></div>
   {:else if entriesStore.entries.length === 0}
     <div class="state-message">
       <span>nothing here yet.</span>
@@ -27,6 +29,7 @@
         </li>
       {/each}
     </ul>
+    {#if entriesStore.status === 'error'}<p class="state-message">could not load earlier entries. try again below.</p>{/if}
 
     {#if entriesStore.nextCursor}
       <button class="load-more" onclick={loadMoreEntries}>

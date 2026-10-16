@@ -26,11 +26,11 @@
   class:down={inDownSpace}
   use:swipeDetector={{ onSwipeDown: goDown, onSwipeUp: goUp }}
 >
-  <div class="space-panel void-panel">
-    <Void onSwipeDown={goDown} />
+  <div class="space-panel void-panel" inert={inDownSpace}>
+    <Void onSwipeDown={goDown} active={!inDownSpace} />
   </div>
-  <div class="space-panel down-panel">
-    <DownSpace onSwipeUp={goUp} />
+  <div class="space-panel down-panel" inert={!inDownSpace}>
+    <DownSpace onSwipeUp={goUp} active={inDownSpace} />
   </div>
 </div>
 
