@@ -1,6 +1,6 @@
 <script lang="ts">
   import { session, signOut } from '$lib/stores/session.svelte.js';
-  import { api } from '$lib/api.js';
+  import { api, isCompanion } from '$lib/api.js';
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import InfoOverlay from './InfoOverlay.svelte';
@@ -9,7 +9,7 @@
   import ChatGPTSettings from './ChatGPTSettings.svelte';
   import ArchiveExport from './ArchiveExport.svelte';
   import VaultSettings from './VaultSettings.svelte';
-  import { vaultStore } from '$lib/stores/vault.svelte.js';
+  import { vaultStore, lockVault, loadVault } from '$lib/stores/vault.svelte.js';
   import { modal } from '$lib/modal.js';
   import { loadAI } from '$lib/stores/ai.svelte.js';
   import { onMount } from 'svelte';
@@ -52,10 +52,12 @@
     try {
       await api.auth.deleteAccount();
       signOut();
+      if (!isCompanion) await loadVault();
     } catch (err) { error = err instanceof Error ? err.message : 'Could not delete your account. Try again.'; }
     finally { deleting = false; }
   }
   async function handleSignOut() {
+    if (!isCompanion) { try { await lockVault(); } catch { error = 'Could not lock this space. Try again.'; } return; }
     try {
       const result = await api.auth.logout();
       if (!result.revoked || !result.openaiRevoked) writeLocal('lacuna_revocation_notice', 'Signed out on this computer. A remote revocation was not confirmed; review connected apps in ChatGPT settings.');
@@ -110,14 +112,14 @@
         <button class="menu-item" onclick={() => { open = false; confirming = false; showInfo = true; }}>what is this</button>
         <button class="menu-item" onclick={() => { open = false; confirming = false; showPrivacy = true; }}>data & privacy</button>
         <button class="menu-item" onclick={() => { open = false; showVault = true; }}>privacy & storage</button>
-        <button class="menu-item" onclick={() => { open = false; showPlan = true; }}>AI & ChatGPT plan</button>
+        <button class="menu-item" onclick={() => { open = false; showPlan = true; }}>{isCompanion ? 'AI & ChatGPT plan' : 'about AI reflections'}</button>
         <button class="menu-item" onclick={() => { open = false; showExport = true; }}>take your words with you</button>
-        <button class="menu-item" onclick={handleSignOut}>sign out</button>
+        <button class="menu-item" onclick={handleSignOut}>{isCompanion ? 'sign out' : 'lock this space'}</button>
         <button class="menu-item danger" disabled={deleting} onclick={handleDelete}>
-          {confirming ? 'confirm account & vault deletion' : 'delete account'}
+          {confirming ? 'confirm journal deletion' : isCompanion ? 'delete account' : 'delete this browser journal'}
         </button>
       </nav>
-      {#if confirming}<p class="deletion-scope">This removes the active server account, cloud copy, and this computer’s vault and encrypted conflict backups. It cannot be undone here. Exports, other devices, and provider backup history are separate. Download a backup first if you want to keep your words.</p>{/if}
+      {#if confirming}<p class="deletion-scope">{isCompanion ? 'This removes the active server account, cloud copy, and this computer’s vault and encrypted conflict backups.' : 'This removes the journal and encrypted restore backups in this browser.'} It cannot be undone here. Downloaded files and other devices are separate. Download a backup first if you want to keep your words.</p>{/if}
       {#if error}<p role="alert">{error}</p>{/if}
     </div>
   </div>

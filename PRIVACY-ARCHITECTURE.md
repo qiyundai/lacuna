@@ -1,5 +1,7 @@
 # Privacy release 0.3
 
+Release 0.4 adds a separate browser-native local journal for phone onboarding. It uses Web Crypto AES-256-GCM, PBKDF2-HMAC-SHA256 with 600,000 iterations and a random 256-bit salt, and IndexedDB atomic compare-and-replace transactions. The derived CryptoKey is non-extractable and is never persisted; reload/idle/manual lock drop it. Browser passphrases and journal content do not reach any server. Browser sync and inference are unavailable pending a registered hosted integration; existing desktop features remain. Browser encrypted backups have their own versioned format. Before overwriting on restore, the browser saves an encrypted recovery copy that can be downloaded in privacy & storage. Explicit deletion clears active/recovery records. Site-data clearing, private browsing, quota/eviction, device compromise, and malicious same-origin code remain boundaries. See MOBILE-ONBOARDING.md and the declaration for user-facing behavior.
+
 The public declaration is the app's `/privacy` page. It describes implemented behavior, including legacy plaintext and provider retention limits. Do not replace those qualifications with claims of absolute privacy, zero retention, or universal instant deletion.
 
 ## Trust boundaries

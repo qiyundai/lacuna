@@ -36,7 +36,7 @@ app.use('*', async (c, next) => {
   c.header('Cache-Control', 'no-store');
 });
 
-app.get('/health', (c) => c.json({ ok: true, version: '0.3.0' }));
+app.get('/health', (c) => c.json({ ok: true, version: '0.4.0' }));
 
 // Old clients must never create fresh plaintext journals or derived material.
 app.use('*', async (c, next) => {

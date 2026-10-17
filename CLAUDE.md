@@ -122,6 +122,8 @@ Commit the new migration file with the code that depends on it. CI applies it to
 
 ### Data Flow
 
+Release 0.4 adds a phone-ready browser journal at the public URL. No account or companion is required for writing. `frontend/src/lib/web-vault.ts` uses Web Crypto AES-GCM/PBKDF2 and atomic IndexedDB envelope comparison; `web-api.ts` serves journal operations entirely in-browser. No plaintext journal, passphrase, or key is sent to the backend. Browser AI/account sync are explicitly unavailable until a registered hosted ChatGPT integration is implemented. Browser and companion backup formats are separate. Never redirect hosted phone users to localhost.
+
 ```
 User types in Void
   → hold 600ms to solidify → companion /api/entries → encrypted local vault

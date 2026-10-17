@@ -6,9 +6,11 @@
   import { vaultStore, loadVault, didLock, lockVault } from '$lib/stores/vault.svelte.js';
   import { companionRequest } from '$lib/stores/ai.svelte.js';
   import { downloadFile } from '$lib/story.js';
+  import { isCompanion } from '$lib/api.js';
   let { show = $bindable(false) }: { show: boolean } = $props();
   let busy = $state(false), error = $state(''), message = $state(''), confirmDelete = $state(false);
   let legacy = $state<{ migrated: boolean; entries: number } | null>(null);
+  let recoveryCopies = $state<string[]>([]);
   async function run(action: () => Promise<unknown>) {
     if (busy) return;
     busy = true; error = ''; message = '';
@@ -19,17 +21,21 @@
   async function preferences(aiAllowed: boolean, automaticAI: boolean) {
     await companionRequest('vault/preferences', 'PATCH', { aiAllowed, automaticAI });
   }
-  $effect(() => { if (show) untrack(() => run(async () => { legacy = await companionRequest('vault/legacy'); })); });
+  $effect(() => { if (show) untrack(() => run(async () => {
+    if (isCompanion) legacy = await companionRequest('vault/legacy');
+    else { const { browserVault } = await import('$lib/web-vault.js'); recoveryCopies = await browserVault().recoveryCopies(); }
+  })); });
 </script>
 {#if show}
   <div class="privacy-screen" use:modal={{ dismiss: () => { if (!busy) show = false; } }} role="dialog" aria-modal="true" aria-label="Privacy and storage" tabindex="-1" onclick={e => { if (!busy && e.target === e.currentTarget) show = false; }} onkeydown={e => { if (!busy && e.key === 'Escape') show = false; }} transition:fade={{ duration: 450, easing: cubicOut }}>
     <div class="privacy-settings">
       <p class="quiet">privacy & storage</p>
       <h2>Your words. Your key.</h2>
-      <p>Your journal is encrypted on this computer. It locks after 15 minutes without keyboard or pointer activity. Unsaved words disappear when it locks.</p>
+      <p>Your journal is encrypted {isCompanion ? 'on this computer' : 'in this browser'}. It locks after 15 minutes without keyboard or pointer activity. Unsaved words disappear when it locks.</p>
       <button disabled={busy} onclick={() => run(async () => { await lockVault(); show = false; })}>lock my space now</button>
-      <button disabled={busy} onclick={() => run(async () => { const encrypted = await companionRequest('vault/backup'); downloadFile(JSON.stringify(encrypted), `lacuna-${new Date().toISOString().slice(0, 10)}.lacuna-vault`, 'application/json'); message = 'Encrypted backup downloaded. Keep it and your passphrase somewhere you can recover.'; })}>download an encrypted backup</button>
-      <p class="quiet">The backup stays encrypted outside this app. Restore it from the lock screen with the same ChatGPT identity and your vault passphrase.</p>
+      <button disabled={busy} onclick={() => run(async () => { const encrypted = await companionRequest('vault/backup'); downloadFile(JSON.stringify(encrypted), `lacuna-${new Date().toISOString().slice(0, 10)}.${isCompanion ? 'lacuna-vault' : 'lacuna-web-vault'}`, 'application/json'); message = 'Encrypted backup downloaded. Keep it and your passphrase somewhere you can recover.'; })}>download an encrypted backup</button>
+      <p class="quiet">The backup stays encrypted outside this app. Restore it from the lock screen with {isCompanion ? 'the same ChatGPT identity and ' : ''}your passphrase.</p>
+      {#if isCompanion}
       <section>
         <h3>Choose what leaves this computer.</h3>
         <p>Reflections send journal context directly to OpenAI: thoughts being analyzed, up to 20 recent thoughts for a reflection, and accumulated concepts, summaries, and an earlier memoir where needed. Generated writing returns to your encrypted vault. This sharing is separate from signing in.</p>
@@ -54,6 +60,18 @@
           <p>{legacy.entries ? `${legacy.entries} older thoughts remain in the original cloud storage.` : 'Check this identity for older cloud journal data.'} Older releases saved readable journal content on the server. This step downloads it, saves and verifies an encrypted local copy, then removes the active plaintext cloud records.</p>
           <button disabled={busy} onclick={() => run(async () => { await companionRequest('vault/migrate', 'POST'); legacy = await companionRequest('vault/legacy'); didLock(); show = false; })}>move and verify my older cloud journal</button>
           <p class="quiet">Backups can retain older plaintext until they expire. Other ChatGPT registrations or retired email accounts are separate identities and are not automatically merged.</p>
+        </section>
+      {/if}
+      {:else}
+        <section>
+          <h3>Only on this device.</h3>
+          <p>Your journal is saved in this browser’s storage. No journal content or passphrase is sent to Lacuna or OpenAI. This browser version does not currently sync to a cloud account or generate ChatGPT reflections.</p>
+          <p>Clearing site data, using a private tab, losing your device, or browser storage cleanup can erase the only copy. Keep an encrypted backup somewhere safe. You can restore a browser backup on another phone or computer using its original passphrase.</p>
+          <p class="quiet">Browser backups and desktop companion backups have different formats. Existing companion journals remain on the computer that holds them.</p>
+          {#if recoveryCopies.length}<h3>Copies kept before a restore.</h3><p>These files remain encrypted with their original passphrase.</p>{/if}
+          {#each recoveryCopies as id}
+            <button disabled={busy} onclick={() => run(async () => { const { browserVault } = await import('$lib/web-vault.js'); const encrypted = await browserVault().recoveryCopy(id); downloadFile(JSON.stringify(encrypted), `lacuna-restore-copy-${id.split(':')[1]}.lacuna-web-vault`, 'application/json'); })}>download copy from {new Date(Number(id.split(':')[1])).toLocaleString()}</button>
+          {/each}
         </section>
       {/if}
       {#if error}<p role="alert">{error}</p>{/if}

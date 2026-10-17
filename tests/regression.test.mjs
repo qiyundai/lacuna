@@ -25,6 +25,8 @@ import { archiveMarkdown, groupThoughts } from '../packages/frontend/src/lib/sto
 import { Vault, LOCK_AFTER_MS } from '../packages/companion/src/vault.mjs';
 import { journalRequest, snapshot, applyAnalysis, importLegacy } from '../packages/companion/src/journal.mjs';
 import { initWeather, weather } from '../packages/frontend/src/lib/stores/weather.svelte.ts';
+import { WebVault, envelopeToken } from '../packages/frontend/src/lib/web-vault.ts';
+import { webRequest } from '../packages/frontend/src/lib/web-api.ts';
 
 async function fixture(t) {
   const DB = await createTestDatabase(); t.after(() => DB.sqlite.close());
@@ -651,4 +653,73 @@ test('ambient colors initialize without network calls or a location request', t 
   globalThis.fetch = () => { calls++; throw new Error('No network allowed for ambient color'); };
   Object.defineProperty(globalThis, 'navigator', { configurable: true, get() { calls++; throw new Error('No device permission needed'); } });
   initWeather(); assert.equal(weather.status, 'ready'); assert.equal(calls, 0);
+});
+
+function webStorage() {
+  return { current: null, backups: [], failed: false,
+    async read() { return structuredClone(this.current); },
+    async replace(expected, envelope, backup = false) {
+      if (this.failed) throw new Error('synthetic quota failure');
+      if (envelopeToken(this.current) !== expected) throw new Error('synthetic conflicting tab');
+      if (backup && this.current) this.backups.push(structuredClone(this.current));
+      this.current = structuredClone(envelope);
+      if (!envelope) this.backups = [];
+    },
+  };
+}
+test('phone vault persists ciphertext only and reopens without an account or network', async t => {
+  const originalFetch = globalThis.fetch; t.after(() => globalThis.fetch = originalFetch);
+  globalThis.fetch = () => { throw new Error('Browser journaling must not contact a server'); };
+  const storage = webStorage(), vault = new WebVault(storage);
+  await vault.unlock(samplePassphrase, true);
+  await webRequest('/entries', 'POST', thought(1, 'synthetic private phone thought'), vault);
+  const encrypted = JSON.stringify(storage.current);
+  assert.equal(encrypted.includes('synthetic private phone thought'), false); assert.equal(encrypted.includes(samplePassphrase), false);
+  assert.equal(storage.current.kdf, 'pbkdf2-sha256-600000');
+  vault.lock(); assert.throws(() => vault.read(), /Unlock/);
+  const reopened = new WebVault(storage); await reopened.unlock(samplePassphrase);
+  assert.equal((await webRequest('/entries', 'GET', undefined, reopened)).entries[0].body, 'synthetic private phone thought');
+  assert.equal((await webRequest('/ai/status', 'GET', undefined, reopened)).pending, 0);
+  await assert.rejects(webRequest('/ai/refresh', 'POST', undefined, reopened), /not connected/);
+});
+test('phone vault rejects wrong keys and tampering, and unlock cannot defeat a lock', async () => {
+  const storage = webStorage(), vault = new WebVault(storage); await vault.unlock(samplePassphrase, true);
+  const backup = await vault.backup(); vault.lock();
+  await assert.rejects(vault.unlock('incorrect long passphrase'), /Could not unlock/);
+  const opening = vault.unlock(samplePassphrase); vault.lock(); await assert.rejects(opening, /cancelled/);
+  await assert.rejects(vault.restore({ ...backup, owner: '0'.repeat(32) }, samplePassphrase), /could not be unlocked/);
+  assert.deepEqual(storage.current, backup);
+});
+test('phone saves serialize and competing tabs or quota failures retain the existing journal', async () => {
+  const storage = webStorage(), first = new WebVault(storage); await first.unlock(samplePassphrase, true);
+  const otherTab = new WebVault(storage); await otherTab.unlock(samplePassphrase);
+  await Promise.all(Array.from({ length: 8 }, (_, i) => webRequest('/entries', 'POST', thought(i), first)));
+  const before = structuredClone(storage.current);
+  await assert.rejects(webRequest('/entries', 'POST', thought(99), otherTab), /conflicting tab/);
+  assert.deepEqual(storage.current, before); assert.equal(otherTab.read().entries.length, 0);
+  storage.failed = true; await assert.rejects(webRequest('/entries', 'POST', thought(100), first), /quota/);
+  assert.deepEqual(storage.current, before); assert.equal(first.read().entries.length, 8);
+  storage.failed = false;
+  const retried = await webRequest('/entries', 'POST', { ...thought(1), solidified_at: 124 }, first);
+  assert.equal(retried.entry.solidified_at, 123); assert.equal(first.read().entries.length, 8);
+});
+test('phone encrypted backups restore on another device, preserve conflict copies, and clear on deletion', async () => {
+  let time = Date.now(); const storage = webStorage(), vault = new WebVault(storage, () => time);
+  await vault.unlock(samplePassphrase, true); await webRequest('/entries', 'POST', thought(1), vault);
+  const backup = await vault.backup(); await webRequest('/entries', 'POST', thought(2), vault);
+  await vault.restore(backup, samplePassphrase); assert.equal(vault.read().entries.length, 1); assert.equal(storage.backups.length, 1);
+  const otherStorage = webStorage(), other = new WebVault(otherStorage); await other.restore(backup, samplePassphrase); assert.equal(other.read().entries.length, 1);
+  time += 15 * 60 * 1000 + 1; assert.equal((await vault.status()).locked, true);
+  await vault.unlock(samplePassphrase); await webRequest('/auth/account', 'DELETE', undefined, vault);
+  assert.equal(storage.current, null); assert.equal(storage.backups.length, 0);
+});
+test('phone archive searches and kept markers use the complete encrypted local journal', async () => {
+  const vault = new WebVault(webStorage()); await vault.unlock(samplePassphrase, true);
+  for (let i = 0; i < 25; i++) await webRequest('/entries', 'POST', thought(i, `Home ${i}`), vault);
+  await webRequest(`/entries/${thought(1).entry_id}/keep`, 'PATCH', { kept: true }, vault);
+  assert.equal((await webRequest('/entries?kept=1', 'GET', undefined, vault)).entries.length, 1);
+  const first = await webRequest('/entries?q=home', 'GET', undefined, vault), second = await webRequest(`/entries?q=home&cursor=${encodeURIComponent(first.nextCursor)}`, 'GET', undefined, vault);
+  assert.equal(new Set([...first.entries, ...second.entries].map(e => e.id)).size, 25);
+  await webRequest(`/entries/${thought(1).entry_id}`, 'DELETE', undefined, vault);
+  assert.equal((await webRequest('/story/export', 'GET', undefined, vault)).entries.length, 24);
 });

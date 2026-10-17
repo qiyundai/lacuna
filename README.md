@@ -1,6 +1,21 @@
 # Lacuna
 
-A quiet reflection space. Type into the void, hold to save a thought, and move down into your timeline, soul map, and living memoir. The Node companion saves your journal in a passphrase-encrypted local vault and handles ChatGPT sign-in and optional inference. Cloudflare hosts the public interface, identity service, and optional encrypted cloud copies.
+A quiet reflection space. Open [Lacuna](https://lacuna-app.pages.dev) on a phone or computer, choose a private passphrase, and start writing. No account, email link, or desktop installation is needed for browser journaling. Hold to save a thought; move down to search your archive, keep thoughts close, and export your words.
+
+## On your phone
+
+1. Open the public URL in a normal browser tab.
+2. Create a long, unique passphrase and save it in your password manager. It cannot be reset.
+3. Write, then hold to save. On a keyboard, Control/Command+Enter also saves.
+4. From your story's menu, open **privacy & storage** and download an encrypted browser backup.
+
+The browser encrypts the journal using Web Crypto AES-256-GCM and PBKDF2-HMAC-SHA256 (600,000 iterations, random salt). Only ciphertext is persisted in IndexedDB. The passphrase and non-extractable key are held only in memory while unlocked. Atomic compare-and-replace transactions reject competing-tab writes; quota failures retain the last saved copy. The journal locks after 15 idle minutes and on reload. Clearing site storage, private browsing, or device loss can erase the only copy. Keep backups outside the browser.
+
+Restore `.lacuna-web-vault` backups in another browser with their original passphrase. An existing encrypted copy is kept before replacement and can be downloaded under privacy & storage. Deleting this browser journal removes its active copy and those restore copies, not downloaded backups or other devices.
+
+**Browser ChatGPT/cloud connections are not configured yet.** Phone writing works independently. OpenAI's [hosted application registration path](https://developers.openai.com/siwc/website) and [hosted plan-access requirement](https://developers.openai.com/siwc/token-sharing-open-source) must be completed before offering a hosted ChatGPT-plan connection. Do not adapt the local OAuth flow into a public website or put OAuth refresh tokens in browser storage. No hosted connection, account sync, or inference is claimed in release 0.4.0.
+
+The optional Node companion retains the ChatGPT sign-in/inference and encrypted cloud-copy features described below. Its journal and backup format are separate from the browser journal. Existing companion data is not automatically moved, replaced, or merged.
 
 Find a word across your story, keep thoughts close, explore recurring concepts, and revisit memoir editions. Release **0.3.0** makes encrypted local storage the default. AI sharing, automatic reflections, and encrypted cloud sync start off. Read the public [privacy declaration](https://lacuna-app.pages.dev/privacy), also available at `/privacy` in the companion. Deploy migration `0006_private_vault.sql` with the matching app and companion.
 
@@ -22,7 +37,7 @@ pnpm companion
 
 The companion follows [OpenAI's open-source registration flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in). OpenAI determines eligibility, models, and limits. **Manage usage** opens [ChatGPT settings](https://chatgpt.com/settings/usage). Sign-in can succeed without plan-use permission; reconnect to grant it. There is no fallback provider or API key requirement.
 
-The hosted app directs sign-ins to the companion. It cannot open your local vault. New plaintext journal uploads and hosted AI result uploads return 410. Older browser JWTs are invalidated by the new session requirement; sign in again. A hosted OAuth callback requires separate OpenAI registration and is not configured here.
+The hosted app now opens its own encrypted browser journal; it does not redirect phones to localhost. It cannot open the companion's vault. New plaintext journal uploads and hosted AI result uploads still return 410. Older browser JWTs remain invalidated by the session requirement. A hosted OAuth callback requires separate OpenAI registration and is not configured here.
 
 ## Private storage and recovery
 

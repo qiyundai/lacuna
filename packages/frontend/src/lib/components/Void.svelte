@@ -3,7 +3,7 @@
   import { draft, insertAt, deleteRange, clearDraft, type DraftChar } from '$lib/stores/draft.svelte.js';
   import { weather } from '$lib/stores/weather.svelte.js';
   import { holdDetector } from '$lib/gesture.js';
-  import { api } from '$lib/api.js';
+  import { api, isCompanion } from '$lib/api.js';
   import { prependEntry } from '$lib/stores/entries.svelte.js';
   import { sessionVersion } from '$lib/session-version.js';
   import { overlayStore } from '$lib/stores/overlay.svelte.js';
@@ -664,7 +664,7 @@
   {#if nearLimit}
     <div class="char-limit" aria-live="polite">{charsLeft}</div>
   {/if}
-  <p class="plan-indicator">{vaultStore.status?.aiAllowed ? 'OpenAI reflections allowed' : 'Encrypted on this computer · AI sharing off'}</p>
+  <p class="plan-indicator">{vaultStore.status?.aiAllowed ? 'OpenAI reflections allowed' : isCompanion ? 'Encrypted on this computer · AI sharing off' : 'Encrypted in this browser · only on this device'}</p>
 
   <button class="down-hint" class:faint={draft.isDirty} onclick={onSwipeDown} aria-label="Go to your story">
     <span>↓</span>

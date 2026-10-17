@@ -34,7 +34,11 @@
     consentGiven = !!stored;
     const notice = readLocal('lacuna_revocation_notice');
     if (notice) authError = notice;
-    if (!stored) showConsentOverlay = true;
+    if (!stored && isCompanion) showConsentOverlay = true;
+    if (!isCompanion) {
+      setAuthed({ id: 'this-browser', email: 'on this device' });
+      loadVault().catch(err => { authError = err instanceof Error ? err.message : 'Could not open browser storage.'; });
+    }
     if (isCompanion) {
       companionRequest<{ session: { user: { id: string; email: string } } | null; error: string | null }>('session').then(async result => {
         if (result.session) {
@@ -49,12 +53,12 @@
     window.addEventListener('lacuna:locked', didLock);
     let lastActivity = 0;
     const activity = () => {
-      if (!isCompanion || session.status !== 'authed' || vaultStore.status?.locked || Date.now() - lastActivity < 15000) return;
+      if (session.status !== 'authed' || vaultStore.status?.locked || Date.now() - lastActivity < 15000) return;
       lastActivity = Date.now(); companionRequest('vault/activity', 'POST').catch(() => {});
     };
     const activityEvents = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchmove'];
     for (const event of activityEvents) window.addEventListener(event, activity, { passive: true });
-    const timer = setInterval(() => { if (isCompanion && session.status === 'authed') loadVault().catch(() => {}); }, 5000);
+    const timer = setInterval(() => { if (session.status === 'authed') loadVault().catch(() => {}); }, 5000);
     return () => {
       clearInterval(timer); window.removeEventListener('lacuna:unauthorized', signOut); window.removeEventListener('lacuna:locked', didLock);
       for (const event of activityEvents) window.removeEventListener(event, activity);
@@ -78,6 +82,14 @@
 
 {#if page.url.pathname === '/privacy'}
   {@render children()}
+{:else if !isCompanion}
+  {#if !vaultStore.status}
+    <div class="vault-loading" role="status"><p>{authError || 'opening your private space…'}</p>{#if authError}<button onclick={() => { authError = ''; loadVault().catch(e => authError = e.message); }}>try again</button>{/if}</div>
+  {:else if vaultStore.status.locked}
+    <VaultGate />
+  {:else}
+    {@render children()}
+  {/if}
 {:else if session.status === 'loading'}
   <!-- Silent loading — void background shows through -->
 {:else if session.status === 'unauthed'}
@@ -87,14 +99,8 @@
     {#if consentGiven}
       <div class="auth-content">
         <p class="app-name">lacuna</p>
-        {#if isCompanion}
           <button class="auth-submit" disabled={submitting} onclick={connect}>{submitting ? 'connecting…' : 'Continue with ChatGPT'}</button>
           <p class="auth-message">your account and reflections, through ChatGPT</p>
-        {:else}
-          <a class="auth-submit" href="http://127.0.0.1:1455">Continue with ChatGPT</a>
-          <p class="auth-message">start the companion on this computer, then continue</p>
-          <a class="what-is-this" href="https://github.com/qiyundai/lacuna#chatgpt-plan-companion" target="_blank" rel="noreferrer">set up the companion</a>
-        {/if}
         {#if authError}<p class="auth-error" role="alert">{authError}</p>{/if}
         <div class="auth-links">
           <button class="what-is-this" onclick={() => (showInfo = true)}>what is this</button>

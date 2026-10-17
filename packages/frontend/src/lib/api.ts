@@ -1,5 +1,6 @@
 import { sessionVersion } from './session-version.js';
 export const isCompanion = typeof document !== 'undefined' && document.querySelector('meta[name="lacuna-companion"]') !== null;
+export const isBrowserApp = typeof document !== 'undefined' && !isCompanion;
 const BASE = isCompanion ? '/api' : import.meta.env.VITE_API_URL ?? (
   import.meta.env.DEV ? 'http://localhost:8787' : 'https://lacuna-api.pianoquin4126.workers.dev'
 );
@@ -10,6 +11,10 @@ async function request<T>(
   auth = true
 ): Promise<T> {
   const version = sessionVersion.value;
+  if (isBrowserApp) {
+    try { const { webRequest } = await import('./web-api.js'); return await webRequest(path, options.method ?? 'GET', typeof options.body === 'string' ? JSON.parse(options.body) : undefined) as T; }
+    catch (error) { if (version === sessionVersion.value && (error as { code?: string }).code === 'VAULT_LOCKED') window.dispatchEvent(new Event('lacuna:locked')); throw error; }
+  }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),

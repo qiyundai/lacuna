@@ -6,29 +6,35 @@
   <article>
     <a class="wordmark" href="/">lacuna</a>
     <header>
-      <p class="eyebrow">our privacy declaration · release 0.3</p>
+      <p class="eyebrow">our privacy declaration · release 0.4</p>
       <h1>A private space<br />should earn your trust.</h1>
       <p class="opening">Your words are yours. We work to protect them by keeping less, encrypting what we keep, and giving you a clear choice about what leaves your computer.</p>
       <p class="quiet">Updated 16 October 2026. These are the protections in this release, and the limits you should know.</p>
     </header>
     <section>
+      <h2>On your phone, in this browser.</h2>
+      <p>The public website now lets you write without an account or desktop installation. Your passphrase encrypts the browser journal with AES-256-GCM. Browser-native PBKDF2-HMAC-SHA256, with 600,000 iterations and a random salt, derives a non-extractable key held only in memory while unlocked. Only ciphertext is saved in IndexedDB; neither the passphrase nor key is persisted or sent to a server.</p>
+      <p>This browser journal is local to the current site and browser profile. It does not automatically share the companion’s journal, sync with a cloud account, or generate ChatGPT reflections. Download an encrypted browser backup from privacy & storage and restore it on another device with its original passphrase. Browser and companion backup formats are different.</p>
+      <p class="aside">Clearing browser data, private browsing, browser storage cleanup, or losing this device can erase the only copy. Keep a backup and its passphrase somewhere safe. We cannot reset the passphrase or recover a lost local copy.</p>
+    </section>
+    <section>
       <span class="number" aria-hidden="true">01</span>
       <h2>At home, under your key.</h2>
-      <p>The local companion saves new thoughts, reflections, your concept map, and memoir editions in an encrypted file on your computer. The vault uses AES-256-GCM authenticated encryption. A long, unique passphrase derives the key with scrypt and a random salt. We do not receive or keep the passphrase or encryption key on our servers.</p>
+      <p>If you use the optional desktop companion, it saves new thoughts, reflections, your concept map, and memoir editions in an encrypted file on your computer. The companion vault uses AES-256-GCM authenticated encryption. A long, unique passphrase derives the key with scrypt and a random salt. We do not receive or keep the passphrase or encryption key on our servers.</p>
       <p>The vault locks after 15 minutes without keyboard or pointer activity. Locking clears private application state and stops reflections; unsaved words disappear. While unlocked, readable content and the key are necessarily in local process memory.</p>
       <p class="aside">There is no vault password reset. Save your passphrase in a trusted password manager. A lost passphrase, lost device, or damaged file can mean losing your journal. “Download an encrypted backup” in privacy & storage makes a portable ciphertext file. Restore it from the lock screen with the same ChatGPT identity and passphrase.</p>
     </section>
     <section>
       <span class="number" aria-hidden="true">02</span>
       <h2>The cloud is a choice.</h2>
-      <p>Encrypted cloud sync starts off. If you enable it, the companion uploads an encrypted vault to Lacuna’s Cloudflare D1 database after local changes. The server receives ciphertext, an account identifier, format information, file size, version, and update time. It does not receive the vault’s decryption key.</p>
+      <p>In the companion, encrypted cloud sync starts off. If you enable it, the companion uploads an encrypted vault to Lacuna’s Cloudflare D1 database after local changes. The server receives ciphertext, an account identifier, format information, file size, version, and update time. It does not receive the vault’s decryption key. Cloud sync is not currently available for the browser journal.</p>
       <p>Conflicting versions pause uploads instead of silently replacing another copy. Restoring requires the same ChatGPT identity and the vault passphrase. It disables AI sharing and sync on the receiving device and preserves an existing local copy as an encrypted backup. This release supports cloud copies of about 4.5 MB of journal data; larger journals remain local and an upload error is shown.</p>
       <p>Turning sync off stops future uploads. “Delete encrypted cloud copy” removes the active remote copy. It cannot erase backups immediately. Encrypted local conflict backups stay on that computer until you delete the account here or remove them yourself. This is a simple encrypted copy service, without live merging or a promise of seamless access across ChatGPT registrations.</p>
     </section>
     <section>
       <span class="number" aria-hidden="true">03</span>
       <h2>Signing in is not permission to read your journal.</h2>
-      <p>ChatGPT verifies your identity. The companion and Lacuna’s server verify an OpenAI identity token to establish your account. The server keeps a pseudonymous identity mapping, consent time, and revocable sessions, rather than your display email. OpenAI access and refresh tokens remain in the companion’s credential store: protected by Windows DPAPI on Windows, and restricted file permissions on other systems. The public OpenAI client registration is retained so reconnecting does not create a new identity unnecessarily.</p>
+      <p>The browser journal needs no sign-in. For the companion, ChatGPT verifies your identity. The companion and Lacuna’s server verify an OpenAI identity token to establish your account. The server keeps a pseudonymous identity mapping, consent time, and revocable sessions, rather than your display email. OpenAI access and refresh tokens remain in the companion’s credential store: protected by Windows DPAPI on Windows, and restricted file permissions on other systems. The public OpenAI client registration is retained so reconnecting does not create a new identity unnecessarily.</p>
       <p>The browser uses a separate HttpOnly, SameSite cookie. It never receives OpenAI credentials or the Lacuna bearer token. Server sessions expire after 12 hours, and sign-out revokes the current server session when the service is reachable. Signing out also locks the vault and removes credentials here; remote OpenAI revocation may need to be completed in ChatGPT settings if the provider is unavailable.</p>
     </section>
     <section>

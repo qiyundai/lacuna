@@ -41,9 +41,8 @@
     onclick={(event) => { if (event.target === event.currentTarget) show = false; }} onkeydown={(event) => { if (event.key === 'Escape') show = false; }} transition:fade={{ duration: 500, easing: cubicOut }}>
     <div class="plan-content">
       <p>your reflections</p>
-        <p>using your ChatGPT plan. eligible requests use your plan allowance or credits. enable journal sharing in privacy & storage before refreshing reflections.</p>
-        {#if !isCompanion}<p>open the local companion on your computer to generate new reflections. your saved entries are still available here.</p>{/if}
       {#if isCompanion}
+        <p>using your ChatGPT plan. eligible requests use your plan allowance or credits. enable journal sharing in privacy & storage before refreshing reflections.</p>
         {#if aiStore.companion?.connected}
           <p>{aiStore.companion.email}</p>
           {#if !aiStore.companion.planEnabled}<p>you’re signed in. reconnect and allow ChatGPT plan use to generate reflections.</p>{/if}
@@ -65,10 +64,10 @@
         {/if}
         {#if aiStore.companion?.message}<p role="status">{aiStore.companion.message}</p>{/if}
       {:else}
-        <p>the local companion lets you connect an eligible ChatGPT plan without an API key.</p>
-        <a href="https://github.com/qiyundai/lacuna#chatgpt-plan-companion" target="_blank" rel="noreferrer">set up the companion</a>
+        <p>ChatGPT reflections are not connected in the browser app yet. You can write, search, keep thoughts close, and back up your journal here without connecting an account.</p>
+        <p>Your words are not sent to AI. A future connection will ask for your permission before sharing journal context.</p>
       {/if}
-      <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">Manage usage</a>
+      {#if isCompanion}<a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">Manage usage</a>{/if}
       {#if error}<p role="alert">{error}</p>{/if}
       <button onclick={() => show = false}>return</button>
     </div>

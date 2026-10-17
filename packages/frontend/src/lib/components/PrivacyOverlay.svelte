@@ -32,11 +32,18 @@
     onkeydown={(e) => { if (!consentMode && e.key === 'Escape') dismiss(); }}
   >
     <div class="privacy-content">
+      {#if isCompanion}
       <p>your words belong to you. new journal content is encrypted in a passphrase-protected vault on this computer. cloud sync and AI sharing start off.</p>
       <p>ChatGPT signs you in. Lacuna verifies an identity token; access and refresh tokens stay in the local companion. if you allow reflections, journal context goes directly to OpenAI using your plan allowance or credits.</p>
       <p>optional cloud sync stores an encrypted copy. older cloud journals need a verified migration before their active plaintext records are removed. deletion does not instantly erase provider backups or copies you exported.</p>
       <a class="hint" href="/privacy">read the full privacy declaration</a>
       {#if isCompanion}<p class="hint">disconnecting ChatGPT removes credentials here. manage app access and usage in ChatGPT settings.</p>{/if}
+      {:else}
+        <p>your journal is encrypted in this browser. your passphrase and encryption key are never saved or sent to a server.</p>
+        <p>this browser journal does not currently connect to a cloud account or ChatGPT. your words stay on this device. lock your space from the menu when you’re done.</p>
+        <p>clearing browser storage or losing your device can erase the only copy. download an encrypted backup from privacy & storage and keep its passphrase safe. there is no password reset.</p>
+        <a class="hint" href="/privacy">read the full privacy declaration</a>
+      {/if}
       {#if consentMode}<button class="hint" onclick={dismiss}>acknowledge and continue</button>{:else}<button class="hint" onclick={dismiss}>return</button>{/if}
     </div>
   </div>

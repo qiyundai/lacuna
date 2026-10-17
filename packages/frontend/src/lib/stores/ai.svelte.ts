@@ -1,9 +1,10 @@
-import { api, isCompanion } from '../api.js';
+import { api, isCompanion, isBrowserApp } from '../api.js';
 import { sessionVersion } from '../session-version.js';
 export interface CompanionStatus { connected: boolean; planEnabled: boolean; email: string | null; model: string | null; state: string; code: string | null; message: string }
 export const aiStore = $state<{ provider: 'chatgpt'; pending: boolean; entryCount: number; companion: CompanionStatus | null }>({ provider: 'chatgpt', pending: false, entryCount: 0, companion: null });
 let latestLoad = 0;
 export async function companionRequest<T>(path: string, method = 'GET', data?: unknown): Promise<T> {
+  if (isBrowserApp) { const { webControl } = await import('../web-api.js'); return await webControl(path, method, data) as T; }
   const version = sessionVersion.value;
   const response = await fetch(`/companion/${path}`, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: data === undefined ? undefined : JSON.stringify(data), signal: AbortSignal.timeout(path === 'test' ? 120000 : 30000) });
   const value = await response.json();

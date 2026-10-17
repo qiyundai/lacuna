@@ -8,7 +8,7 @@
   import LivingMemoir from './LivingMemoir.svelte';
   import UserMenu from './UserMenu.svelte';
   import { overlayStore } from '$lib/stores/overlay.svelte.js';
-  import { api } from '$lib/api.js';
+  import { api, isCompanion } from '$lib/api.js';
   import { loadAI } from '$lib/stores/ai.svelte.js';
   import { loadStory } from '$lib/stores/story.svelte.js';
 
@@ -41,12 +41,14 @@
   });
 
   function touchStart(e: TouchEvent) {
+    if (!isCompanion) return;
     if ((e.target as Element).closest('button, input, textarea, a') || e.touches.length !== 1) { touchStartX = NaN; return; }
     touchStartX = e.touches[0]!.clientX;
     touchStartY = e.touches[0]!.clientY;
   }
 
   function touchEnd(e: TouchEvent) {
+    if (!isCompanion) return;
     if (!Number.isFinite(touchStartX) || !e.changedTouches[0]) return;
     const deltaX = touchStartX - e.changedTouches[0]!.clientX;
     if (Math.abs(touchStartY - e.changedTouches[0]!.clientY) >= Math.abs(deltaX)) return;
@@ -76,13 +78,15 @@
   <!-- View container -->
   <div class="views" style="transform: translateX(-{currentView * 100}vw)">
     <div class="view" inert={currentView !== 0}><Timeline /></div>
-    <div class="view" inert={currentView !== 1}><SoulMap /></div>
-    <div class="view" inert={currentView !== 2}><LivingMemoir active={active && currentView === 2} /></div>
+    {#if isCompanion}
+      <div class="view" inert={currentView !== 1}><SoulMap /></div>
+      <div class="view" inert={currentView !== 2}><LivingMemoir active={active && currentView === 2} /></div>
+    {/if}
   </div>
 
   <!-- Dot indicators -->
   <div class="dots">
-    {#each [0, 1, 2] as i}
+    {#each isCompanion ? [0, 1, 2] : [0] as i}
       <button
         class="dot"
         class:active={currentView === i}
