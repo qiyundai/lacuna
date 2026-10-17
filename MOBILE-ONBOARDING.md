@@ -16,7 +16,7 @@ Create my private space
 Restore a backup · Privacy
 ```
 
-Returning users see one unlock field. Choosing a passphrase stays with the user. No preflight consent overlay is needed for local-only writing; AI sharing needs its own explicit permission if/when available. Explain that clearing site data can erase the only copy. Offer an encrypted backup and explicit restore. Do not promise a reset or cloud recovery.
+Returning users see one unlock field. Choosing a passphrase stays with the user. A visible “save thought” button appears while writing, so no gesture needs to be learned. No preflight consent overlay is needed for local-only writing; AI sharing needs its own explicit permission if/when available. Explain that clearing site data can erase the only copy. Offer an encrypted backup and explicit restore. Do not promise a reset or cloud recovery.
 
 Review: this follows Lacuna's established aesthetic instead of introducing another landing-page visual system. The one meaningful change is making the first screen a useful action on the current phone. Avoid a dead-end ChatGPT button or a link to localhost on the hosted site.
 

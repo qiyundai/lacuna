@@ -660,6 +660,9 @@
   ></textarea>
   <p class="visually-hidden" id="writing-keys">Hold to save your thought, or press Control or Command and Enter. Escape clears your unsaved draft.</p>
   {#if saveError}<p class="save-error" role="alert">{saveError}</p>{/if}
+  {#if !isCompanion && draft.text.trim()}
+    <button class="save-thought" disabled={saving || dissolving || scattering} onclick={solidifyEntry}>{saving ? 'saving…' : dissolving ? 'saved privately' : 'save thought'}</button>
+  {/if}
 
   {#if nearLimit}
     <div class="char-limit" aria-live="polite">{charsLeft}</div>
@@ -673,6 +676,8 @@
 </div>
 
 <style>
+  .save-thought { position: absolute; bottom: 7rem; left: 50%; transform: translateX(-50%); z-index: 4; min-height: 44px; padding: .65rem 1.2rem; background: var(--bg); border: 1px solid var(--void-text-hint); border-radius: 2rem; color: var(--void-text); font: inherit; cursor: pointer; }
+  .save-thought:disabled { opacity: .6; cursor: default; }
   .plan-indicator { position: absolute; top: 1.5rem; width: 100%; text-align: center; font-size: var(--text-xs); color: var(--void-text-hint); }
   .save-error { position: absolute; bottom: 5rem; left: 10%; width: 80%; text-align: center; color: var(--void-danger); font-size: var(--text-xs); line-height: 1.8; }
   .void {
