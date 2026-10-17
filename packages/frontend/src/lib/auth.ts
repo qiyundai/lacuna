@@ -1,28 +1,11 @@
-import { readLocal, writeLocal, removeLocal } from './storage.js';
+import { removeLocal } from './storage.js';
 
 const TOKEN_KEY = 'lacuna_token';
 const USER_KEY = 'lacuna_user';
 
-export function getStoredToken(): string | null {
-  return readLocal(TOKEN_KEY);
-}
-
-export function getStoredUser(): { id: string; email: string } | null {
-  try {
-    const raw = readLocal(USER_KEY);
-    const value = raw ? JSON.parse(raw) : null;
-    return value && typeof value.id === 'string' && typeof value.email === 'string' ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-export function storeSession(jwt: string, user: { id: string; email: string }): void {
-  writeLocal(TOKEN_KEY, jwt);
-  writeLocal(USER_KEY, JSON.stringify(user));
-}
-
+// Sessions now use an HttpOnly companion cookie. Purge old browser tokens.
 export function clearSession(): void {
   removeLocal(TOKEN_KEY);
   removeLocal(USER_KEY);
+  removeLocal('lacuna_weather');
 }

@@ -124,17 +124,17 @@ Commit the new migration file with the code that depends on it. CI applies it to
 
 ```
 User types in Void
-  → hold 600ms to solidify → POST /entries → D1 (entries)
-  → local companion: ChatGPT analysis → guarded D1 commit (patterns)
-  → async: memoir regeneration every 5 entries → D1 (memoir_snapshots)
+  → hold 600ms to solidify → companion /api/entries → encrypted local vault
+  → optional local ChatGPT analysis → version-guarded encrypted local commit
+  → optional encrypted cloud sync → atomic, versioned ciphertext chunks in D1
 ```
 
 ### Auth Flow
 
 1. After consent, the local companion requests a single-use challenge from `POST /auth/openai/start`.
 2. OpenAI loopback OAuth uses PKCE/state and the server nonce. The companion verifies the identity and sends the ID token and issued client ID to `POST /auth/openai/complete`.
-3. The Worker independently checks signature/issuer/audience/nonce/expiry, atomically consumes the challenge, maps issuer/client/subject to an account, and issues a seven-day Lacuna JWT.
-4. A browser-specific HttpOnly cookie binds the callback and one-time Lacuna session delivery. Frontend stores only the Lacuna JWT/user.
+3. The Worker independently checks signature/issuer/audience/nonce/expiry, atomically consumes the challenge, maps issuer/client/subject to an account, and issues a revocable 12-hour Lacuna JWT with a session ID.
+4. A port-specific HttpOnly cookie binds the browser and callback. The JWT stays in the companion's protected store; JavaScript receives only user identity. Clear legacy browser JWT/user/weather keys on load.
 5. Preserve old email accounts/data. Never merge by email. Access/refresh tokens remain local. ID tokens may reach the verification endpoint, where they must never be logged or stored. Email sign-in is retired.
 
 ### D1 Schema
@@ -148,9 +148,9 @@ memoir_snapshots (id, user_id, prose, generated_at)
 
 ### AI System
 
-The shared pipeline is `ai/pipeline.ts`; `ai/storage.ts` acquires an expiring per-user lease and commits derived data in one transaction guarded by the entry version, provider, and lease owner. Entry deletion clears generated content and invalidates running jobs. Failed extraction/memoir generation does not advance checkpoints. The companion obtains a snapshot through `/ai/context`, executes the same pipeline locally, and returns validated output through `/ai/results`. Access and refresh tokens never belong in the Worker, frontend storage, logs, or URLs. The Worker accepts an ID token only for identity verification; a retained local ID token can also be an OpenAI authorization hint. See README for companion setup and AUDIT.md for verification scope.
+The shared pipeline is `ai/pipeline.ts`. Release 0.3 executes it on a cloned local-vault snapshot, validates output, and commits only while sharing is enabled and the entry version still matches. Lock/opt-out/deletion cancels running work; entry deletion clears derived content. Failed extraction/memoir generation does not advance checkpoints. Hosted `/ai/context` and `/ai/results` writes are retired (410). `ai/storage.ts` remains for legacy regression coverage; it is not a route for new journal content. Access/refresh tokens never belong in the Worker, frontend, logs, or URLs. The Worker accepts an ID token only for verification. See README and AUDIT.md.
 
-Runs in the companion after every solidified entry, using the selected model from the account's ChatGPT catalog. Entry-count tiers:
+Runs in the companion only with explicit AI-sharing consent. Automatic runs after saving require a second opt-in; otherwise use manual refresh. Uses the selected model from the account's ChatGPT catalog. Entry-count tiers:
 
 | Entries | Model | Output |
 |---|---|---|

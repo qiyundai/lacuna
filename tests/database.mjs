@@ -9,7 +9,15 @@ class D1 {
     return { args: [], bind(...args) { this.args = args; return this; },
       async first() { return db.sqlite.prepare(sql).get(...this.args) ?? null; },
       async all() { return { results: db.sqlite.prepare(sql).all(...this.args) }; },
-      async run() { const result = db.sqlite.prepare(sql).run(...this.args); return { meta: { changes: Number(result.changes) } }; } };
+      async run() {
+        const statement = db.sqlite.prepare(sql);
+        if (statement.columns().length) {
+          const results = statement.all(...this.args);
+          const changes = /^\s*SELECT\b/i.test(sql) ? 0 : Number(db.sqlite.prepare('SELECT changes() AS n').get().n);
+          return { results, meta: { changes } };
+        }
+        const result = statement.run(...this.args); return { results: [], meta: { changes: Number(result.changes) } };
+      } };
   }
   async batch(statements) {
     this.sqlite.exec('BEGIN');

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createTestDatabase } from './database.mjs';
-import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { readFile, mkdtemp, rm, writeFile, readdir } from 'node:fs/promises';
+import { randomBytes, createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { SignJWT, generateKeyPair, createLocalJWKSet, exportJWK } from 'jose';
@@ -21,12 +22,17 @@ import { entriesStore, loadEntries } from '../packages/frontend/src/lib/stores/e
 import { draft, insertAt, deleteRange, clearDraft } from '../packages/frontend/src/lib/stores/draft.svelte.ts';
 import { storyStore, loadStory } from '../packages/frontend/src/lib/stores/story.svelte.ts';
 import { archiveMarkdown, groupThoughts } from '../packages/frontend/src/lib/story.ts';
+import { Vault, LOCK_AFTER_MS } from '../packages/companion/src/vault.mjs';
+import { journalRequest, snapshot, applyAnalysis, importLegacy } from '../packages/companion/src/journal.mjs';
+import { initWeather, weather } from '../packages/frontend/src/lib/stores/weather.svelte.ts';
 
 async function fixture(t) {
   const DB = await createTestDatabase(); t.after(() => DB.sqlite.close());
   const user = await upsertUser(DB, 'one@example.com');
   const env = { DB, JWT_SECRET: 'test-secret-only', FRONTEND_ORIGIN: 'https://lacuna.example',  };
-  const jwt = await new SignJWT({ sub: user.id, email: user.email }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(env.JWT_SECRET));
+  const sessionId = crypto.randomUUID();
+  await DB.prepare('INSERT INTO auth_sessions (id, user_id, expires_at) VALUES (?, ?, unixepoch() + 3600)').bind(sessionId, user.id).run();
+  const jwt = await new SignJWT({ sub: user.id, email: user.email }).setJti(sessionId).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(env.JWT_SECRET));
   const work = [];
   const request = (path, method = 'GET', value, authorization = jwt) => app.request(`https://api.example${path}`, { method,
     headers: { Authorization: `Bearer ${authorization}`, 'Content-Type': 'application/json' }, body: value === undefined ? undefined : typeof value === 'string' ? value : JSON.stringify(value) }, env, { waitUntil(promise) { work.push(promise); } });
@@ -35,12 +41,13 @@ async function fixture(t) {
 }
 const emptyResult = { weights: {}, graph: { nodes: [], processed_count: 0 }, summaries: [], extracted: 0, memoir: null, memoirCount: 0 };
 
-test('malformed JSON, non-string bodies and invalid page sizes return 400', async t => {
+test('hosted API refuses new plaintext journal writes from old clients', async t => {
   const f = await fixture(t);
-  for (const value of ['{', 'null', { body: 5 }, { body: [] }, { body: 'hello', solidified_at: 'yesterday' }, { body: 'x'.repeat(501) }]) assert.equal((await f.request('/entries', 'POST', value)).status, 400);
+  for (const value of ['{', 'null', { body: 5 }, { body: [] }, { body: 'hello', solidified_at: 'yesterday' }, { body: 'x'.repeat(501) }]) assert.equal((await f.request('/entries', 'POST', value)).status, 410);
   for (const limit of ['0', '-1', 'NaN', '1.5']) assert.equal((await f.request(`/entries?limit=${limit}`)).status, 400);
-  assert.equal((await f.request('/patterns', 'PATCH', { model_weights: { story_thread: 2 } })).status, 400);
-  assert.equal((await f.request('/patterns', 'PATCH', { model_weights: [] })).status, 400);
+  assert.equal((await f.request('/patterns', 'PATCH', { model_weights: { story_thread: .2 } })).status, 410);
+  assert.equal((await f.request('/ai/context', 'POST')).status, 410);
+  assert.equal((await f.request('/ai/results', 'POST', emptyResult)).status, 410);
 });
 test('email links are retired and ChatGPT challenges require consent and expire', async t => {
   const f = await fixture(t);
@@ -52,8 +59,8 @@ test('email links are retired and ChatGPT challenges require consent and expire'
   assert.equal((await f.request('/auth/openai/complete', 'POST', { challenge: challenge.id, clientId: 'issued', idToken: 'forged' })).status, 401);
   await f.DB.prepare('UPDATE openai_login_challenges SET expires_at = unixepoch()').run();
   assert.equal((await f.request('/auth/openai/complete', 'POST', { challenge: challenge.id, clientId: 'issued', idToken: 'forged' })).status, 401);
-  assert.equal((await f.request('/ai/provider', 'PATCH', { provider: 'anthropic' })).status, 400);
-  assert.equal((await f.request('/ai/refresh', 'POST')).status, 409);
+  assert.equal((await f.request('/ai/provider', 'PATCH', { provider: 'anthropic' })).status, 410);
+  assert.equal((await f.request('/ai/refresh', 'POST')).status, 410);
 });
 test('deleted accounts lose access with previously valid JWTs', async t => {
   const f = await fixture(t);
@@ -120,9 +127,11 @@ test('new entries invalidate an analysis snapshot', async t => {
 test('entry retries are idempotent and cannot reuse another account’s entry ID', async t => {
   const f = await fixture(t);
   const entry_id = 'a'.repeat(32);
-  for (let i = 0; i < 2; i++) assert.equal((await f.request('/entries', 'POST', { body: 'one thought', entry_id })).status, 201);
+  for (let i = 0; i < 2; i++) assert.equal((await createEntry(f.DB, f.user.id, 'one thought', 123, entry_id)).id, entry_id);
   assert.equal(f.DB.sqlite.prepare('SELECT count(*) AS n FROM entries').get().n, 1);
-  assert.equal((await f.request('/entries', 'POST', { body: 'different thought', entry_id })).status, 409);
+  await assert.rejects(createEntry(f.DB, f.user.id, 'different thought', 123, entry_id));
+  const other = await upsertUser(f.DB, 'another@example.test');
+  await assert.rejects(createEntry(f.DB, other.id, 'one thought', 123, entry_id));
 });
 test('AI output validates weights and concept shapes, and preserves input graph', () => {
   const graph = { nodes: [{ concept: 'work', type: 'theme', weight: .2, count: 1 }], processed_count: 1 };
@@ -274,10 +283,11 @@ test('slow pointer movement cancels a hold based on total distance and destroy r
   await new Promise(resolve => setTimeout(resolve, 30)); assert.equal(saved, 0);
 });
 
-test('companion serves the app, proxies authenticated entries, and completes local analysis into the hosted account', async t => {
+test('real companion HTTP keeps journals local, requires AI consent, and syncs ciphertext only', async t => {
   const f = await fixture(t);
-  await f.request('/ai/provider', 'PATCH', { provider: 'chatgpt' });
+  const cloudPaths = [];
   const cloud = createServer(async (req, res) => {
+    cloudPaths.push(req.url);
     const chunks = []; for await (const chunk of req) chunks.push(chunk);
     const response = await app.request(`https://api.example${req.url}`, { method: req.method, headers: req.headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(chunks) }, f.env, { waitUntil() {} });
     res.writeHead(response.status, Object.fromEntries(response.headers)); res.end(Buffer.from(await response.arrayBuffer()));
@@ -286,18 +296,27 @@ test('companion serves the app, proxies authenticated entries, and completes loc
   const unused = createServer(); await new Promise(resolve => unused.listen(0, '127.0.0.1', resolve)); const port = unused.address().port; await new Promise(resolve => unused.close(resolve));
   const directory = await mkdtemp(resolve('.test-output/companion-'));
   await writeFile(resolve(directory, 'index.html'), '<html><head></head><body>Lacuna</body></html>');
-  const store = { data: { hostId: 'urn:uuid:host', registrations: {}, profiles: { [f.user.id]: { access_token: 'never-expose-this', email: 'plan@example.com' } } }, async save() {} };
-  const plan = { async models() { return [{ slug: 'test-model', name: 'Test model' }]; }, async generate(_id, _model, prompt) { return prompt.system.includes('extract') ? '{"themes":["home"],"emotions":[],"entities":[]}' : '{"acknowledgment":"Held."}'; } };
+  const cookieValue = randomBytes(32).toString('hex'), cookieHash = createHash('sha256').update(cookieValue).digest('hex');
+  const store = { data: { hostId: 'urn:uuid:host', registrations: {}, browserSessions: { [cookieHash]: { auth: { jwt: f.jwt, user: f.user }, expires: Date.now() + 3600000 } }, profiles: { [f.user.id]: { access_token: 'never-expose-this', email: 'plan@example.com' } } }, async save() {} };
+  let inferenceCalls = 0;
+  const plan = { async disconnect() { return true; }, async models() { return [{ slug: 'test-model', name: 'Test model' }]; }, async generate(_id, _model, prompt) { inferenceCalls++; return prompt.system.includes('extract') ? '{"themes":["home"],"emotions":[],"entities":[]}' : '{"acknowledgment":"Held."}'; } };
   const companion = await startCompanion({ port, dataDir: directory, buildDir: directory, apiUrl: `http://127.0.0.1:${cloud.address().port}`, store, plan });
   try {
     const home = await fetch(companion.origin);
     assert.match(await home.text(), /lacuna-companion/);
-    const cookie = home.headers.get('set-cookie').split(';')[0];
-    const headers = { Cookie: cookie, Origin: companion.origin, Authorization: `Bearer ${f.jwt}`, 'Content-Type': 'application/json' };
+    const cookie = `lacuna_companion_${port}=${cookieValue}`;
+    const headers = { Cookie: cookie, Origin: companion.origin, 'Content-Type': 'application/json' };
+    const local = (path, method = 'GET', value) => fetch(`${companion.origin}${path}`, { method, headers, body: value === undefined ? undefined : JSON.stringify(value) });
     const denied = await fetch(`${companion.origin}/companion/connect`, { method: 'POST', headers: { ...headers, Origin: 'https://evil.example' } });
     assert.equal(denied.status, 403);
-    const created = await fetch(`${companion.origin}/api/entries`, { method: 'POST', headers, body: JSON.stringify({ body: 'home is quiet', solidified_at: 123 }) });
-    assert.equal(created.status, 201);
+    assert.equal((await local('/api/entries')).status, 423);
+    assert.equal((await local('/companion/vault/unlock', 'POST', { create: true, passphrase: 'synthetic test vault passphrase' })).status, 200);
+    const created = await local('/api/entries', 'POST', { body: 'home is quiet', solidified_at: 123, entry_id: 'b'.repeat(32) });
+    assert.equal(created.status, 200);
+    assert.equal(inferenceCalls, 0);
+    assert.equal((await local('/companion/reflect', 'POST')).status, 400);
+    assert.equal((await local('/companion/vault/preferences', 'PATCH', { aiAllowed: true, automaticAI: false })).status, 200);
+    assert.equal((await local('/companion/reflect', 'POST')).status, 202);
     let status;
     for (let i = 0; i < 50; i++) {
       status = await (await fetch(`${companion.origin}/companion/status`, { headers })).json();
@@ -306,9 +325,30 @@ test('companion serves the app, proxies authenticated entries, and completes loc
     }
     assert.equal(status.state, 'complete', JSON.stringify(status));
     assert.equal(JSON.stringify(status).includes('never-expose-this'), false);
-    const patterns = await (await f.request('/patterns')).json();
+    const patterns = await (await local('/api/patterns')).json();
     assert.equal(patterns.model_weights.acknowledgment, 'Held.');
-    assert.equal(f.DB.sqlite.prepare('SELECT count(*) AS n FROM entries').get().n, 1);
+    assert.equal(f.DB.sqlite.prepare('SELECT count(*) AS n FROM entries').get().n, 0);
+    assert.equal(f.DB.sqlite.prepare('SELECT count(*) AS n FROM memoir_snapshots').get().n, 0);
+    assert.equal((await local('/companion/vault/sync', 'POST', { enabled: true })).status, 200);
+    const encrypted = f.DB.sqlite.prepare('SELECT envelope FROM encrypted_vaults').get().envelope;
+    for (const secret of ['home is quiet', 'Held.', 'synthetic test vault passphrase', 'never-expose-this']) assert.equal(encrypted.includes(secret), false);
+    assert.equal(cloudPaths.some(path => /^\/(entries|patterns|ai|story)/.test(path)), false);
+    const backup = await (await local('/companion/vault/backup')).json();
+    assert.equal(backup.format, 'lacuna.vault.v1'); assert.equal(JSON.stringify(backup).includes('home is quiet'), false);
+    assert.equal((await local('/companion/vault/lock', 'POST')).status, 200);
+    assert.equal((await local('/api/story')).status, 423);
+    assert.equal((await local('/companion/vault/restore', 'POST', { envelope: backup, passphrase: 'synthetic test vault passphrase' })).status, 200);
+    const restored = await (await local('/companion/vault/status')).json(); assert.equal(restored.aiAllowed, false); assert.equal(restored.sync.enabled, false);
+    assert.equal((await (await local('/api/entries')).json()).entries.length, 1);
+    await createEntry(f.DB, f.user.id, 'older synthetic cloud thought', 123);
+    assert.equal((await local('/companion/vault/migrate', 'POST')).status, 200);
+    assert.equal((await local('/api/entries')).status, 423);
+    assert.equal(f.DB.sqlite.prepare('SELECT count(*) AS n FROM entries').get().n, 0);
+    assert.equal((await local('/companion/vault/unlock', 'POST', { passphrase: 'synthetic test vault passphrase' })).status, 200);
+    assert.equal((await (await local('/api/entries')).json()).entries.length, 2);
+    const signedOut = await (await local('/api/auth/logout', 'POST')).json();
+    assert.equal(signedOut.revoked, true);
+    assert.equal((await f.request('/auth/me')).status, 401);
   } finally { await companion.close(); await new Promise(resolve => cloud.close(resolve)); await rm(directory, { recursive: true, force: true }); }
 });
 
@@ -355,17 +395,19 @@ test('ChatGPT sign-in verifies identity, isolates browsers, rejects replay and p
     const attempt = await (await fetch(`${companion.origin}/companion/connect`, { method: 'POST', headers, body: JSON.stringify({ consent: true }) })).json();
     const state = new URL(attempt.url).searchParams.get('state');
     const callback = `${companion.origin}/auth/callback?state=${state}&client_id=issued-client&code=test`;
-    assert.equal((await fetch(callback, { headers: { Cookie: otherCookie }, redirect: 'manual' })).status, 502);
+    assert.equal((await fetch(callback, { headers: { Cookie: otherCookie }, redirect: 'manual' })).status, 400);
     assert.equal((await fetch(callback, { headers, redirect: 'manual' })).status, 303);
     assert.equal((await (await fetch(`${companion.origin}/companion/session`, { headers: { Cookie: otherCookie } })).json()).session, null);
     const result = await (await fetch(`${companion.origin}/companion/session`, { headers })).json();
-    assert.ok(result.session?.jwt, JSON.stringify(result));
+    assert.ok(result.session?.user, JSON.stringify(result));
+    assert.equal(result.session.jwt, undefined);
     const user = result.session.user;
     assert.notEqual(user.id, f.user.id, 'matching emails must never claim an existing account');
-    assert.equal((await f.request('/auth/me', 'GET', undefined, result.session.jwt)).status, 200);
+    const serverSession = Object.values(store.data.browserSessions)[0];
+    assert.equal((await f.request('/auth/me', 'GET', undefined, serverSession.auth.jwt)).status, 200);
     assert.equal(JSON.stringify(result).includes('private-access'), false);
     assert.equal(JSON.stringify(result).includes(lastToken), false);
-    assert.equal((await (await fetch(`${companion.origin}/companion/session`, { headers })).json()).session, null);
+    assert.deepEqual((await (await fetch(`${companion.origin}/companion/session`, { headers })).json()).session.user, user);
     assert.equal((await f.request('/auth/openai/complete', 'POST', { challenge: lastAttempt.challenge, clientId: 'issued-client', idToken: lastToken })).status, 401);
     const second = await (await f.request('/auth/openai/start', 'POST', { consent: true })).json();
     assert.equal((await f.request('/auth/openai/complete', 'POST', { challenge: second.id, clientId: 'issued-client', idToken: lastToken })).status, 401);
@@ -373,11 +415,12 @@ test('ChatGPT sign-in verifies identity, isolates browsers, rejects replay and p
     const responses = await Promise.all([1, 2].map(() => f.request('/auth/openai/complete', 'POST', { challenge: second.id, clientId: 'issued-client', idToken: signed })));
     assert.deepEqual(responses.map(r => r.status).sort(), [200, 401]);
     assert.equal((await responses.find(r => r.status === 200).json()).user.id, user.id);
-    const tested = await fetch(`${companion.origin}/companion/test`, { method: 'POST', headers: { ...headers, Authorization: `Bearer ${result.session.jwt}` } });
+    const tested = await fetch(`${companion.origin}/companion/test`, { method: 'POST', headers });
     assert.deepEqual(await tested.json(), { ok: true, text: 'Lacuna is connected.' });
     assert.equal(f.DB.sqlite.prepare('SELECT count(*) AS n FROM entries').get().n, 0);
     assert.equal(f.DB.sqlite.prepare('SELECT count(*) AS n FROM openai_identities').get().n, 1);
-    assert.equal((await f.request('/auth/account', 'DELETE', undefined, result.session.jwt)).status, 200);
+    assert.equal(f.DB.sqlite.prepare('SELECT display_email FROM openai_identities').get().display_email, 'ChatGPT account');
+    assert.equal((await f.request('/auth/account', 'DELETE', undefined, serverSession.auth.jwt)).status, 200);
     assert.equal(f.DB.sqlite.prepare('SELECT count(*) AS n FROM openai_identities').get().n, 0);
   } finally { await companion.close(); await new Promise(resolve => cloud.close(resolve)); await rm(directory, { recursive: true, force: true }); }
 });
@@ -400,10 +443,9 @@ test('archive search and kept thoughts paginate across all history without cross
   for (let i = 0; i < 25; i++) ids.push((await createEntry(f.DB, f.user.id, `Home ${i} 100%_literal`, 123)).id);
   const foreign = await createEntry(f.DB, other.id, 'Home private', 123);
   const originalVersion = (await f.request('/ai/status').then(r => r.json())).pending;
-  for (const id of ids.slice(0, 3)) assert.equal((await f.request(`/entries/${id}/keep`, 'PATCH', { kept: true })).status, 200);
+  for (const id of ids.slice(0, 3)) await f.DB.prepare('UPDATE entries SET kept_at = unixepoch() WHERE id = ?').bind(id).run();
   assert.equal((await f.request('/ai/status').then(r => r.json())).pending, originalVersion);
-  assert.equal((await f.request(`/entries/${foreign.id}/keep`, 'PATCH', { kept: true })).status, 404);
-  assert.equal((await f.request(`/entries/${ids[0]}/keep`, 'PATCH', { kept: 'yes' })).status, 400);
+  assert.equal((await f.request(`/entries/${foreign.id}/keep`, 'PATCH', { kept: true })).status, 410);
   const kept = await (await f.request('/entries?kept=1&q=home')).json();
   assert.equal(kept.entries.length, 3);
   const first = await (await f.request('/entries?q=HOME&limit=20')).json();
@@ -415,7 +457,7 @@ test('archive search and kept thoughts paginate across all history without cross
   const story = await (await f.request('/story')).json();
   assert.equal(story.summary.total, 25); assert.equal(story.summary.kept, 3);
   assert.deepEqual(story.graph.nodes, []);
-  await f.request(`/entries/${ids[0]}/keep`, 'PATCH', { kept: false });
+  await f.DB.prepare('UPDATE entries SET kept_at = NULL WHERE id = ?').bind(ids[0]).run();
   assert.equal((await (await f.request('/entries?kept=1')).json()).entries.length, 2);
 });
 
@@ -444,4 +486,169 @@ test('memoir history has stable same-second pagination and account isolation; ex
   assert.equal(groupThoughts(archive.entries).flatMap(g => g.entries).length, 1);
   for (let i = 0; i < 5; i++) assert.equal((await f.request('/story/export')).status, 200);
   assert.equal((await f.request('/story/export')).status, 429);
+});
+
+const samplePassphrase = 'sample only long vault passphrase';
+async function localVault(t, options) {
+  const directory = await mkdtemp(resolve('.test-output/vault-'));
+  const vault = new Vault(directory, 'a'.repeat(32), options);
+  t.after(async () => { vault.lock(); await rm(directory, { recursive: true, force: true }); });
+  await vault.unlock(samplePassphrase, true);
+  return vault;
+}
+const localURL = path => new URL(path, 'http://127.0.0.1:1455');
+const thought = (n, body = `sample thought ${n}`) => ({ entry_id: n.toString(16).padStart(32, '0'), body, solidified_at: 123 });
+
+test('vault encrypts all journal data, authenticates ciphertext, and never saves its key or passphrase', async t => {
+  const vault = await localVault(t);
+  await journalRequest(vault, '/entries', 'POST', thought(1, 'synthetic-secret-journal'), localURL('/entries'));
+  await vault.verifySaved();
+  const envelope = await vault.envelope(), serialized = JSON.stringify(envelope);
+  assert.equal(serialized.includes('synthetic-secret-journal'), false);
+  assert.equal(serialized.includes(samplePassphrase), false);
+  assert.equal(serialized.includes(vault.key.toString('hex')), false);
+  assert.equal(envelope.kdf, 'scrypt-131072-8-1');
+  vault.lock(); assert.throws(() => vault.read(), /Unlock/);
+  await assert.rejects(vault.unlock('this is the wrong passphrase'), /Could not unlock/);
+  assert.equal(vault.unlocked, false);
+  await vault.unlock(samplePassphrase); assert.equal(vault.read().entries[0].body, 'synthetic-secret-journal');
+  const tampered = { ...envelope, tag: '0'.repeat(32) };
+  await assert.rejects(vault.restore(tampered, samplePassphrase), /could not be unlocked/);
+  assert.equal(vault.read().entries.length, 1);
+  await assert.rejects(vault.restore({ ...envelope, owner: 'b'.repeat(32) }, samplePassphrase), /Invalid encrypted/);
+  assert.deepEqual((await readdir(vault.directory)).filter(f => f.endsWith('.tmp')), []);
+});
+test('idle polling never extends vault lifetime and locking cancels an in-flight unlock', async t => {
+  let time = Date.now(); const vault = await localVault(t, { now: () => time });
+  time += LOCK_AFTER_MS - 100; vault.read();
+  time += 101; assert.equal(vault.unlocked, false);
+  const opening = vault.unlock(samplePassphrase); vault.lock();
+  await assert.rejects(opening, /cancelled/); assert.equal(vault.unlocked, false);
+  await vault.unlock(samplePassphrase); time += LOCK_AFTER_MS - 100; vault.activity(); time += 101;
+  assert.equal(vault.unlocked, true);
+});
+test('local saves serialize, retry idempotently, validate input, and keep searching isolated', async t => {
+  const vault = await localVault(t);
+  await Promise.all(Array.from({ length: 25 }, (_, i) => journalRequest(vault, '/entries', 'POST', thought(i, `Home ${i} 100%_literal`), localURL('/entries'))));
+  const retried = await journalRequest(vault, '/entries', 'POST', { ...thought(0, 'Home 0 100%_literal'), solidified_at: 124 }, localURL('/entries'));
+  assert.equal(retried.entry.solidified_at, 123, 'a later retry retains the original save timestamp');
+  assert.equal(vault.read().entries.length, 25);
+  await assert.rejects(journalRequest(vault, '/entries', 'POST', thought(0, 'different'), localURL('/entries')), /already used/);
+  for (const value of [{ body: 5 }, thought(26, 'x'.repeat(501)), { ...thought(26), solidified_at: 'yesterday' }]) await assert.rejects(journalRequest(vault, '/entries', 'POST', value, localURL('/entries')), /Invalid thought/);
+  await assert.rejects(journalRequest(vault, '/patterns', 'PATCH', { model_weights: { story_thread: 2 } }, localURL('/patterns')), /Invalid/);
+  const first = await journalRequest(vault, '/entries', 'GET', null, localURL('/entries?q=100%25_literal&limit=20'));
+  const second = await journalRequest(vault, '/entries', 'GET', null, localURL(`/entries?q=100%25_literal&limit=20&cursor=${first.nextCursor}`));
+  assert.equal(new Set([...first.entries, ...second.entries].map(e => e.id)).size, 25);
+  await assert.rejects(journalRequest(vault, '/entries', 'GET', null, localURL(`/entries?q=other&cursor=${first.nextCursor}`)), /Invalid archive/);
+  const before = vault.read().version;
+  await journalRequest(vault, `/entries/${thought(0).entry_id}/keep`, 'PATCH', { kept: true }, localURL('/'));
+  assert.equal(vault.read().version, before);
+  assert.equal((await journalRequest(vault, '/entries', 'GET', null, localURL('/entries?kept=1'))).entries.length, 1);
+});
+test('local deletion and AI opt-out reject stale reflections and clear derived private text', async t => {
+  const vault = await localVault(t);
+  await journalRequest(vault, '/entries', 'POST', thought(1), localURL('/entries'));
+  await vault.update(d => { d.aiAllowed = true; d.memoirs.push({ id: 'sample', prose: 'old generated words', generated_at: 123 }); });
+  const source = snapshot(vault.read());
+  await journalRequest(vault, `/entries/${thought(1).entry_id}`, 'DELETE', null, localURL('/'));
+  await assert.rejects(applyAnalysis(vault, source, emptyResult), /journal changed/);
+  assert.equal(vault.read().memoirs.length, 0);
+  await vault.update(d => { d.aiAllowed = false; });
+  await assert.rejects(applyAnalysis(vault, snapshot(vault.read()), emptyResult), /journal changed/);
+});
+test('failed durable local writes preserve the old encrypted journal', async t => {
+  const vault = await localVault(t);
+  await journalRequest(vault, '/entries', 'POST', thought(1), localURL('/'));
+  const before = await readFile(vault.path, 'utf8'), path = vault.path;
+  vault.path = resolve(vault.directory, 'missing', 'cannot-write.vault');
+  await assert.rejects(journalRequest(vault, '/entries', 'POST', thought(2), localURL('/')));
+  vault.path = path;
+  assert.equal(vault.read().entries.length, 1);
+  assert.equal(await readFile(path, 'utf8'), before);
+});
+test('legacy migration verifies a durable encrypted copy, guards versions, and preserves other accounts', async t => {
+  const f = await fixture(t), other = await upsertUser(f.DB, 'other-migration@example.test');
+  await createEntry(f.DB, f.user.id, 'old private journal', 123);
+  await createEntry(f.DB, other.id, 'other private journal', 123);
+  await f.DB.prepare('INSERT INTO memoir_snapshots (user_id, prose) VALUES (?, ?)').bind(f.user.id, 'old private memoir').run();
+  const legacy = await (await f.request('/privacy/legacy')).json();
+  const directory = await mkdtemp(resolve('.test-output/migration-')), vault = new Vault(directory, f.user.id);
+  t.after(async () => { vault.lock(); await rm(directory, { recursive: true, force: true }); });
+  await vault.unlock(samplePassphrase, true); await importLegacy(vault, legacy);
+  const disk = new Vault(directory, f.user.id); await disk.unlock(samplePassphrase); assert.equal(disk.read().entries[0].body, 'old private journal'); disk.lock();
+  assert.equal((await f.request('/privacy/migrate', 'POST', { version: legacy.version + 1 })).status, 409);
+  assert.equal(f.DB.sqlite.prepare('SELECT count(*) AS n FROM entries').get().n, 2);
+  assert.equal((await f.request('/privacy/migrate', 'POST', { version: legacy.version })).status, 200);
+  assert.equal(f.DB.sqlite.prepare('SELECT count(*) AS n FROM entries WHERE user_id = ?').get(f.user.id).n, 0);
+  assert.equal(f.DB.sqlite.prepare('SELECT count(*) AS n FROM entries WHERE user_id = ?').get(other.id).n, 1);
+  assert.equal(f.DB.sqlite.prepare('SELECT count(*) AS n FROM memoir_snapshots WHERE user_id = ?').get(f.user.id).n, 0);
+  assert.equal((await f.request('/privacy/migrate', 'POST', { version: legacy.version })).status, 409);
+});
+test('encrypted cloud sync is account scoped, rejects plaintext, and detects conflicts and deleted-copy resurrection', async t => {
+  const f = await fixture(t), directory = await mkdtemp(resolve('.test-output/sync-')), vault = new Vault(directory, f.user.id);
+  t.after(async () => { vault.lock(); await rm(directory, { recursive: true, force: true }); });
+  await vault.unlock(samplePassphrase, true); const envelope = await vault.envelope();
+  assert.equal((await f.request('/privacy/sync', 'PUT', { version: 0, envelope: { ...envelope, passphrase: samplePassphrase } })).status, 400);
+  assert.equal((await f.request('/privacy/sync', 'PUT', { version: 0, envelope: { body: 'plaintext' } })).status, 400);
+  assert.equal((await f.request('/privacy/sync', 'PUT', { version: 0, envelope: { ...envelope, owner: 'b'.repeat(32) } })).status, 400);
+  assert.deepEqual(await (await f.request('/privacy/sync', 'PUT', { version: 0, envelope })).json(), { version: 1 });
+  assert.equal((await f.request('/privacy/sync', 'PUT', { version: 0, envelope })).status, 409);
+  assert.deepEqual(await (await f.request('/privacy/sync', 'PUT', { version: 1, envelope })).json(), { version: 2 });
+  assert.equal((await f.request('/privacy/sync', 'GET', undefined, 'forged')).status, 401);
+  assert.equal((await f.request('/privacy/sync', 'DELETE')).status, 200);
+  assert.equal((await f.request('/privacy/sync', 'PUT', { version: 2, envelope })).status, 409);
+  const remote = await (await f.request('/privacy/sync')).json(); assert.equal(remote.envelope, null); assert.equal(remote.version, 3);
+});
+test('large cloud ciphertext is atomically chunked below D1 row limits and failed writes preserve the old version', async t => {
+  const f = await fixture(t), vault = await localVault(t);
+  const envelope = { ...await vault.envelope(), owner: f.user.id, ciphertext: randomBytes(1800000).toString('base64') };
+  assert.equal((await f.request('/privacy/sync', 'PUT', { version: 0, envelope })).status, 200);
+  const rows = f.DB.sqlite.prepare('SELECT length(ciphertext) AS size FROM encrypted_vault_chunks').all();
+  assert.equal(rows.length, 3); assert.ok(rows.every(r => r.size <= 1000000));
+  const remote = await (await f.request('/privacy/sync')).json(); assert.deepEqual(remote.envelope, envelope);
+  f.DB.sqlite.exec("CREATE TRIGGER fail_chunk BEFORE INSERT ON encrypted_vault_chunks BEGIN SELECT RAISE(ABORT, 'synthetic storage failure'); END");
+  assert.equal((await f.request('/privacy/sync', 'PUT', { version: 1, envelope: { ...envelope, ciphertext: 'AAAA' } })).status, 500);
+  const kept = await (await f.request('/privacy/sync')).json(); assert.equal(kept.version, 1); assert.deepEqual(kept.envelope, envelope);
+  const other = await upsertUser(f.DB, 'isolated-sync@example.test'), jti = crypto.randomUUID();
+  await f.DB.prepare('INSERT INTO auth_sessions (id, user_id, expires_at) VALUES (?, ?, unixepoch() + 3600)').bind(jti, other.id).run();
+  const jwt = await new SignJWT({ sub: other.id, email: 'ChatGPT account' }).setJti(jti).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(f.env.JWT_SECRET));
+  assert.equal((await (await f.request('/privacy/sync', 'GET', undefined, jwt)).json()).envelope, null);
+  assert.equal((await f.request('/privacy/sync', 'PUT', { version: 0, envelope }, jwt)).status, 400);
+  assert.equal((await f.request('/auth/account', 'DELETE')).status, 200);
+  assert.equal(f.DB.sqlite.prepare('SELECT count(*) AS n FROM encrypted_vault_chunks').get().n, 0);
+});
+test('restoring a cloud copy requires the key and preserves a prior encrypted local copy', async t => {
+  const vault = await localVault(t), remote = await vault.envelope();
+  await journalRequest(vault, '/entries', 'POST', thought(1, 'new local words'), localURL('/'));
+  await assert.rejects(vault.restore(remote, 'wrong cloud vault passphrase'), /could not be unlocked/);
+  assert.equal(vault.read().entries.length, 1);
+  await vault.restore(remote, samplePassphrase); assert.equal(vault.read().entries.length, 0);
+  const backups = (await readdir(vault.directory)).filter(f => f.endsWith('.backup')); assert.equal(backups.length, 1);
+  assert.equal((await readFile(resolve(vault.directory, backups[0]), 'utf8')).includes('new local words'), false);
+  await vault.remove(); assert.deepEqual(await readdir(vault.directory), []);
+});
+test('server sessions revoke immediately and old bearer tokens cannot bypass the new session table', async t => {
+  const f = await fixture(t);
+  const oldJWT = await new SignJWT({ sub: f.user.id, email: f.user.email }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('7d').sign(new TextEncoder().encode(f.env.JWT_SECRET));
+  assert.equal((await f.request('/auth/me', 'GET', undefined, oldJWT)).status, 401);
+  assert.equal((await f.request('/auth/me')).status, 200);
+  assert.equal((await f.request('/auth/logout', 'POST')).status, 200);
+  assert.equal((await f.request('/auth/me')).status, 401);
+});
+test('login limits store keyed IP pseudonyms and no raw IP address', async t => {
+  const f = await fixture(t), ip = '192.0.2.123';
+  const response = await app.request('https://api.example/auth/openai/start', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip }, body: JSON.stringify({ consent: true }) }, f.env);
+  assert.equal(response.status, 200);
+  const keys = f.DB.sqlite.prepare('SELECT key FROM rate_limits').all();
+  assert.equal(JSON.stringify(keys).includes(ip), false); assert.ok(keys.length);
+  assert.match(response.headers.get('permissions-policy'), /geolocation=\(\)/);
+  assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
+});
+test('ambient colors initialize without network calls or a location request', t => {
+  const originalFetch = globalThis.fetch, navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  t.after(() => { globalThis.fetch = originalFetch; if (navigatorDescriptor) Object.defineProperty(globalThis, 'navigator', navigatorDescriptor); else delete globalThis.navigator; });
+  let calls = 0;
+  globalThis.fetch = () => { calls++; throw new Error('No network allowed for ambient color'); };
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, get() { calls++; throw new Error('No device permission needed'); } });
+  initWeather(); assert.equal(weather.status, 'ready'); assert.equal(calls, 0);
 });

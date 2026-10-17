@@ -1,4 +1,4 @@
-import { getStoredToken, getStoredUser, clearSession } from '../auth.js';
+import { clearSession } from '../auth.js';
 import { entriesStore } from './entries.svelte.js';
 import { patternsStore } from './patterns.svelte.js';
 import { memoirStore } from './memoir.svelte.js';
@@ -8,7 +8,7 @@ import { sessionVersion } from '../session-version.js';
 import { aiStore } from './ai.svelte.js';
 import { storyStore } from './story.svelte.js';
 
-function resetData() {
+export function resetData() {
   sessionVersion.value++;
   entriesStore.entries = []; entriesStore.nextCursor = null; entriesStore.status = 'idle';
   patternsStore.model_weights = null; patternsStore.last_updated = null; patternsStore.status = 'idle';
@@ -29,15 +29,9 @@ export const session = $state<{
 });
 
 export function hydrateSession(): void {
-  const token = getStoredToken();
-  const user = getStoredUser();
-  if (token && user) {
-    session.user = user;
-    session.status = 'authed';
-  } else {
-    session.user = null;
-    session.status = 'unauthed';
-  }
+  clearSession();
+  session.user = null;
+  session.status = 'unauthed';
 }
 
 export function setAuthed(user: { id: string; email: string }): void {

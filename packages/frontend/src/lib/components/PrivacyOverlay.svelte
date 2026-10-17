@@ -28,15 +28,16 @@
     tabindex="-1"
     aria-modal="true"
     aria-label="Data and privacy"
-    onclick={() => { if (!consentMode) dismiss(); }}
+    onclick={(e) => { if (!consentMode && e.target === e.currentTarget) dismiss(); }}
     onkeydown={(e) => { if (!consentMode && e.key === 'Escape') dismiss(); }}
   >
     <div class="privacy-content">
-      <p>your entries are stored in your private Lacuna account. the local companion sends reflection context to OpenAI to create reflections, a concept map, and your memoir using your ChatGPT plan.</p>
-      <p>ChatGPT signs you in. Lacuna verifies an identity token to create your account; access and refresh tokens stay on your computer. generated reflections are saved to Lacuna. eligible requests use your plan allowance or credits.</p>
-      <p>deleting your account permanently removes everything — entries, your concept map, and all generated text — from our servers.</p>
+      <p>your words belong to you. new journal content is encrypted in a passphrase-protected vault on this computer. cloud sync and AI sharing start off.</p>
+      <p>ChatGPT signs you in. Lacuna verifies an identity token; access and refresh tokens stay in the local companion. if you allow reflections, journal context goes directly to OpenAI using your plan allowance or credits.</p>
+      <p>optional cloud sync stores an encrypted copy. older cloud journals need a verified migration before their active plaintext records are removed. deletion does not instantly erase provider backups or copies you exported.</p>
+      <a class="hint" href="/privacy">read the full privacy declaration</a>
       {#if isCompanion}<p class="hint">disconnecting ChatGPT removes credentials here. manage app access and usage in ChatGPT settings.</p>{/if}
-      {#if consentMode}<button class="hint" onclick={dismiss}>acknowledge and continue</button>{:else}<p class="hint">anywhere to close</p>{/if}
+      {#if consentMode}<button class="hint" onclick={dismiss}>acknowledge and continue</button>{:else}<button class="hint" onclick={dismiss}>return</button>{/if}
     </div>
   </div>
 {/if}

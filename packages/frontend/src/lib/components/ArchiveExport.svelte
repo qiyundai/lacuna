@@ -26,7 +26,7 @@
     <div class="export-content">
       <span class="seed" aria-hidden="true">✧</span>
       <h2>Your words belong to you.</h2>
-      <p>Take a copy of every saved thought and every memoir edition. Keep it somewhere private.</p>
+      <p>Take a copy of every saved thought and every memoir edition. These downloads are readable plaintext, outside your encrypted vault. Anyone who can open the file can read it. Keep it somewhere private.</p>
       <button disabled={busy} onclick={() => take('markdown')}>a readable book · Markdown</button>
       <button disabled={busy} onclick={() => take('json')}>the complete archive · JSON</button>
       <p class="quiet">The complete archive also includes your concept map and generated reflections.</p>

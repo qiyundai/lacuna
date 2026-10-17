@@ -8,7 +8,8 @@
   import { sessionVersion } from '$lib/session-version.js';
   import { overlayStore } from '$lib/stores/overlay.svelte.js';
   import { readLocal, writeLocal } from '$lib/storage.js';
-  import { aiStore, loadAI } from '$lib/stores/ai.svelte.js';
+  import { loadAI } from '$lib/stores/ai.svelte.js';
+  import { vaultStore } from '$lib/stores/vault.svelte.js';
 
   let { onSwipeDown, active = true }: { onSwipeDown: () => void; active?: boolean } = $props();
 
@@ -663,7 +664,7 @@
   {#if nearLimit}
     <div class="char-limit" aria-live="polite">{charsLeft}</div>
   {/if}
-  {#if aiStore.provider === 'chatgpt'}<p class="plan-indicator">Using ChatGPT plan · <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">Manage usage</a></p>{/if}
+  <p class="plan-indicator">{vaultStore.status?.aiAllowed ? 'OpenAI reflections allowed' : 'Encrypted on this computer · AI sharing off'}</p>
 
   <button class="down-hint" class:faint={draft.isDirty} onclick={onSwipeDown} aria-label="Go to your story">
     <span>↓</span>
@@ -673,7 +674,6 @@
 
 <style>
   .plan-indicator { position: absolute; top: 1.5rem; width: 100%; text-align: center; font-size: var(--text-xs); color: var(--void-text-hint); }
-  .plan-indicator a { color: inherit; }
   .save-error { position: absolute; bottom: 5rem; left: 10%; width: 80%; text-align: center; color: var(--void-danger); font-size: var(--text-xs); line-height: 1.8; }
   .void {
     position: relative;

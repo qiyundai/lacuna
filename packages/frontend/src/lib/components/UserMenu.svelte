@@ -1,6 +1,6 @@
 <script lang="ts">
   import { session, signOut } from '$lib/stores/session.svelte.js';
-  import { api, isCompanion } from '$lib/api.js';
+  import { api } from '$lib/api.js';
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import InfoOverlay from './InfoOverlay.svelte';
@@ -8,11 +8,12 @@
   import { overlayStore } from '$lib/stores/overlay.svelte.js';
   import ChatGPTSettings from './ChatGPTSettings.svelte';
   import ArchiveExport from './ArchiveExport.svelte';
+  import VaultSettings from './VaultSettings.svelte';
+  import { vaultStore } from '$lib/stores/vault.svelte.js';
   import { modal } from '$lib/modal.js';
-  import { companionRequest } from '$lib/stores/ai.svelte.js';
-  import { aiStore, loadAI } from '$lib/stores/ai.svelte.js';
+  import { loadAI } from '$lib/stores/ai.svelte.js';
   import { onMount } from 'svelte';
-  import { readLocal, writeLocal } from '$lib/storage.js';
+  import { writeLocal } from '$lib/storage.js';
 
   let open = $state(false);
   let confirming = $state(false);
@@ -20,17 +21,16 @@
   let showPrivacy = $state(false);
   let showPlan = $state(false);
   let showExport = $state(false);
+  let showVault = $state(false);
   let error = $state('');
   let deleting = $state(false);
-  let showWelcome = $state(false);
   onMount(() => {
     let mounted = true;
     loadAI().then(() => {
-      if (mounted && aiStore.companion?.planEnabled && !readLocal(`lacuna_plan_welcome:${session.user?.id}`)) showWelcome = true;
+      if (mounted && !vaultStore.status?.migrated) showVault = true;
     }).catch(() => {});
     return () => { mounted = false; };
   });
-  function welcomeDone() { writeLocal(`lacuna_plan_welcome:${session.user?.id}`, '1'); showWelcome = false; }
 
   function toggle() {
     open = !open;
@@ -50,7 +50,6 @@
     }
     deleting = true; error = '';
     try {
-      if (isCompanion) await companionRequest('disconnect', 'POST');
       await api.auth.deleteAccount();
       signOut();
     } catch (err) { error = err instanceof Error ? err.message : 'Could not delete your account. Try again.'; }
@@ -58,10 +57,8 @@
   }
   async function handleSignOut() {
     try {
-      if (isCompanion) {
-        const result = await companionRequest<{ revoked: boolean }>('disconnect', 'POST');
-        if (!result.revoked) { error = 'Disconnected here. Remote revocation was not confirmed. Manage access in ChatGPT settings, then sign out again.'; return; }
-      }
+      const result = await api.auth.logout();
+      if (!result.revoked || !result.openaiRevoked) writeLocal('lacuna_revocation_notice', 'Signed out on this computer. A remote revocation was not confirmed; review connected apps in ChatGPT settings.');
       signOut();
     } catch { error = 'Could not disconnect the companion. Try signing out again.'; }
   }
@@ -72,12 +69,13 @@
       if (showPrivacy) { showPrivacy = false; return; }
       if (showPlan) { showPlan = false; return; }
       if (showExport) { showExport = false; return; }
+      if (showVault) { showVault = false; return; }
       if (open) { close(); return; }
     }
   }
 
   $effect(() => {
-    overlayStore.open = open || showInfo || showPrivacy || showPlan || showWelcome || showExport;
+    overlayStore.open = open || showInfo || showPrivacy || showPlan || showExport || showVault;
     return () => { overlayStore.open = false; };
   });
 
@@ -111,13 +109,15 @@
       <nav class="menu-actions">
         <button class="menu-item" onclick={() => { open = false; confirming = false; showInfo = true; }}>what is this</button>
         <button class="menu-item" onclick={() => { open = false; confirming = false; showPrivacy = true; }}>data & privacy</button>
+        <button class="menu-item" onclick={() => { open = false; showVault = true; }}>privacy & storage</button>
         <button class="menu-item" onclick={() => { open = false; showPlan = true; }}>AI & ChatGPT plan</button>
         <button class="menu-item" onclick={() => { open = false; showExport = true; }}>take your words with you</button>
         <button class="menu-item" onclick={handleSignOut}>sign out</button>
         <button class="menu-item danger" disabled={deleting} onclick={handleDelete}>
-          {confirming ? 'sure?' : 'delete account'}
+          {confirming ? 'confirm account & vault deletion' : 'delete account'}
         </button>
       </nav>
+      {#if confirming}<p class="deletion-scope">This removes the active server account, cloud copy, and this computer’s vault and encrypted conflict backups. It cannot be undone here. Exports, other devices, and provider backup history are separate. Download a backup first if you want to keep your words.</p>{/if}
       {#if error}<p role="alert">{error}</p>{/if}
     </div>
   </div>
@@ -127,21 +127,10 @@
 <PrivacyOverlay bind:show={showPrivacy} />
 <ChatGPTSettings bind:show={showPlan} />
 <ArchiveExport bind:show={showExport} />
-{#if showWelcome}
-  <div use:modal={{ dismiss: welcomeDone }} class="screen-overlay" role="dialog" aria-modal="true" aria-label="You’re using your ChatGPT plan" tabindex="-1"
-    onclick={(e) => { if (e.target === e.currentTarget) welcomeDone(); }} onkeydown={(e) => { if (e.key === 'Escape') welcomeDone(); }} transition:fade={{ duration: 500, easing: cubicOut }}>
-    <div class="welcome-content">
-      <p>you’re using your ChatGPT plan</p>
-      <p>eligible AI requests use your ChatGPT plan allowance or credits. your entries remain in your Lacuna account.</p>
-      <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">Manage usage</a>
-      <button class="menu-item" onclick={welcomeDone}>Got it</button>
-    </div>
-  </div>
-{/if}
+<VaultSettings bind:show={showVault} />
 
 <style>
-  .welcome-content { max-width: 42ch; padding: 2rem; text-align: center; display: flex; flex-direction: column; gap: 1.8rem; line-height: 1.8; letter-spacing: .03em; }
-  .welcome-content a { color: var(--void-text-dim); }
+  .deletion-scope { max-width: 40ch; text-align: center; line-height: 1.8; color: var(--void-text-dim); font-size: .85rem; padding: 0 1rem; }
   .trigger {
     position: absolute;
     top: 1.25rem;

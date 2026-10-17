@@ -1,30 +1,23 @@
-import { readLocal } from './storage.js';
+import { sessionVersion } from './session-version.js';
 export const isCompanion = typeof document !== 'undefined' && document.querySelector('meta[name="lacuna-companion"]') !== null;
 const BASE = isCompanion ? '/api' : import.meta.env.VITE_API_URL ?? (
   import.meta.env.DEV ? 'http://localhost:8787' : 'https://lacuna-api.pianoquin4126.workers.dev'
 );
-
-function getToken(): string | null {
-  return readLocal('lacuna_token');
-}
 
 async function request<T>(
   path: string,
   options: RequestInit = {},
   auth = true
 ): Promise<T> {
+  const version = sessionVersion.value;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
-  if (auth) {
-    const token = getToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-  }
-  const tokenAtStart = getToken();
-  const res = await fetch(`${BASE}${path}`, { ...options, headers, signal: options.signal ?? AbortSignal.timeout(30000) });
+  const res = await fetch(`${BASE}${path}`, { ...options, credentials: 'same-origin', headers, signal: options.signal ?? AbortSignal.timeout(30000) });
   if (!res.ok) {
-    if (auth && res.status === 401 && tokenAtStart === getToken()) window.dispatchEvent(new Event('lacuna:unauthorized'));
+    if (version === sessionVersion.value && auth && res.status === 401) window.dispatchEvent(new Event('lacuna:unauthorized'));
+    if (version === sessionVersion.value && res.status === 423) window.dispatchEvent(new Event('lacuna:locked'));
     const body = await res.json().catch(() => ({}));
     throw Object.assign(new Error((body as { error?: { message?: string } }).error?.message ?? 'Request failed'), {
       status: res.status,
@@ -36,6 +29,7 @@ async function request<T>(
 
 export const api = {
   auth: {
+    logout: () => request<{ ok: boolean; revoked: boolean; openaiRevoked: boolean }>('/auth/logout', { method: 'POST' }),
     deleteAccount: () =>
       request<{ ok: boolean }>('/auth/account', { method: 'DELETE' }),
   },

@@ -3,12 +3,14 @@
   import { onMount } from 'svelte';
   import { session, hydrateSession, setAuthed, signOut } from '$lib/stores/session.svelte.js';
   import { initWeather } from '$lib/stores/weather.svelte.js';
-  import { storeSession } from '$lib/auth.js';
+  import { page } from '$app/state';
   import { isCompanion } from '$lib/api.js';
   import { companionRequest } from '$lib/stores/ai.svelte.js';
   import { readLocal, writeLocal } from '$lib/storage.js';
   import InfoOverlay from '$lib/components/InfoOverlay.svelte';
   import PrivacyOverlay from '$lib/components/PrivacyOverlay.svelte';
+  import VaultGate from '$lib/components/VaultGate.svelte';
+  import { vaultStore, loadVault, didLock } from '$lib/stores/vault.svelte.js';
 
   let { children } = $props();
 
@@ -30,18 +32,33 @@
     initWeather();
     const stored = readLocal('lacuna_consented');
     consentGiven = !!stored;
+    const notice = readLocal('lacuna_revocation_notice');
+    if (notice) authError = notice;
     if (!stored) showConsentOverlay = true;
     if (isCompanion) {
-      companionRequest<{ session: { jwt: string; user: { id: string; email: string } } | null; error: string | null }>('session').then(result => {
+      companionRequest<{ session: { user: { id: string; email: string } } | null; error: string | null }>('session').then(async result => {
         if (result.session) {
-          storeSession(result.session.jwt, result.session.user);
           setAuthed(result.session.user);
+          vaultStore.status = null;
+          await loadVault();
         }
         if (result.error) authError = result.error;
       }).catch(err => { authError = err instanceof Error ? err.message : 'Reopen the companion to sign in.'; });
     }
     window.addEventListener('lacuna:unauthorized', signOut);
-    return () => window.removeEventListener('lacuna:unauthorized', signOut);
+    window.addEventListener('lacuna:locked', didLock);
+    let lastActivity = 0;
+    const activity = () => {
+      if (!isCompanion || session.status !== 'authed' || vaultStore.status?.locked || Date.now() - lastActivity < 15000) return;
+      lastActivity = Date.now(); companionRequest('vault/activity', 'POST').catch(() => {});
+    };
+    const activityEvents = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchmove'];
+    for (const event of activityEvents) window.addEventListener(event, activity, { passive: true });
+    const timer = setInterval(() => { if (isCompanion && session.status === 'authed') loadVault().catch(() => {}); }, 5000);
+    return () => {
+      clearInterval(timer); window.removeEventListener('lacuna:unauthorized', signOut); window.removeEventListener('lacuna:locked', didLock);
+      for (const event of activityEvents) window.removeEventListener(event, activity);
+    };
   });
 
   async function connect() {
@@ -59,7 +76,9 @@
   }
 </script>
 
-{#if session.status === 'loading'}
+{#if page.url.pathname === '/privacy'}
+  {@render children()}
+{:else if session.status === 'loading'}
   <!-- Silent loading — void background shows through -->
 {:else if session.status === 'unauthed'}
   <div class="auth-overlay" class:blurred={showInfo || showPrivacy}>
@@ -81,6 +100,7 @@
           <button class="what-is-this" onclick={() => (showInfo = true)}>what is this</button>
           <span class="auth-sep" aria-hidden="true">·</span>
           <button class="what-is-this" onclick={() => (showPrivacy = true)}>data & privacy</button>
+          <a class="what-is-this" href="/privacy">privacy declaration</a>
         </div>
       </div>
     {/if}
@@ -92,11 +112,16 @@
   />
   <PrivacyOverlay bind:show={showPrivacy} />
   <InfoOverlay bind:show={showInfo} />
+{:else if !vaultStore.status}
+  <p class="vault-loading" role="status">opening your private space… {authError}</p>
+{:else if vaultStore.status.locked}
+  <VaultGate />
 {:else}
   {@render children()}
 {/if}
 
 <style>
+  .vault-loading { padding: 3rem; text-align: center; color: var(--void-text-dim); }
   .auth-overlay {
     position: fixed;
     inset: 0;

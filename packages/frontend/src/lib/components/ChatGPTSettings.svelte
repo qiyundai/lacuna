@@ -41,7 +41,7 @@
     onclick={(event) => { if (event.target === event.currentTarget) show = false; }} onkeydown={(event) => { if (event.key === 'Escape') show = false; }} transition:fade={{ duration: 500, easing: cubicOut }}>
     <div class="plan-content">
       <p>your reflections</p>
-        <p>using your ChatGPT plan. eligible requests use your plan allowance or credits.</p>
+        <p>using your ChatGPT plan. eligible requests use your plan allowance or credits. enable journal sharing in privacy & storage before refreshing reflections.</p>
         {#if !isCompanion}<p>open the local companion on your computer to generate new reflections. your saved entries are still available here.</p>{/if}
       {#if isCompanion}
         {#if aiStore.companion?.connected}
@@ -60,7 +60,7 @@
           {#if testResult}<p role="status">{testResult}</p>{/if}
           <button disabled={busy} onclick={() => run(disconnect)}>disconnect ChatGPT</button>
         {:else}
-          <p>use your ChatGPT plan for reflections. your entries stay in your Lacuna account; access and refresh tokens stay on this computer.</p>
+          <p>use your ChatGPT plan for reflections. your journal is saved in your encrypted local vault; access and refresh tokens stay on this computer.</p>
           <button disabled={busy} onclick={() => run(connect)}>Continue with ChatGPT</button>
         {/if}
         {#if aiStore.companion?.message}<p role="status">{aiStore.companion.message}</p>{/if}
