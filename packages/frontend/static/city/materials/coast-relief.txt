@@ -1,0 +1,10 @@
+Coast relief combines downsampled displacement maps from Poly Haven, licensed CC0.
+
+Red channel — Clay Plaster, Amal Kumar
+https://polyhaven.com/a/clay_plaster
+
+Green channel — Grass Path 2, Rob Tuytel
+https://polyhaven.com/a/grass_path_2
+
+Blue channel — Gravel Floor, Matterfield and Jenelle van Heerden
+https://polyhaven.com/a/gravel_floor

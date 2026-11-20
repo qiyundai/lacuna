@@ -1,3 +1,4 @@
+import { interpretVillagePage } from './village.mjs';
 import { createServer } from 'node:http';
 import { readFile, stat, mkdir, open, rm } from 'node:fs/promises';
 import { resolve, sep, extname, join } from 'node:path';
@@ -257,6 +258,20 @@ export async function startCompanion(options = {}) {
           return json(res, { revoked });
         }
         if (url.pathname === '/companion/models' && req.method === 'GET') return json(res, await plan.models(user.id));
+        if (url.pathname === '/companion/village/interpret' && req.method === 'POST') {
+          const value=await body(req);
+          if(value.consent!==true) throw new PlanError('AI_CONSENT_REQUIRED','Choose to share this page first.');
+          const generation=vault.generation;
+          const result=await interpretVillagePage(vault,value.entry,async prompt=>{
+            const models=await plan.models(user.id);
+            const model=profile?.model ?? models[0]?.slug;
+            if(!model || !models.some(m=>m.slug===model))throw new PlanError('MODEL_UNAVAILABLE','Choose an available model.');
+            if(!vault.unlocked || generation!==vault.generation || !vault.read().aiAllowed)throw new PlanError('VAULT_LOCKED','Journal sharing has ended.');
+            return plan.generate(user.id,model,prompt,AbortSignal.timeout(25000));
+          });
+          syncLater(user.id,token);
+          return json(res,result);
+        }
         if (url.pathname === '/companion/test' && req.method === 'POST') {
           const models = await plan.models(user.id);
           const model = profile?.model ?? models[0]?.slug;
@@ -311,7 +326,7 @@ export async function startCompanion(options = {}) {
       if (info?.isDirectory()) file = join(file, 'index.html');
       info = await stat(file).catch(() => null);
       if (!info?.isFile()) { if (extname(url.pathname)) return json(res, { error: { code: 'NOT_FOUND', message: 'Not found' } }, 404); file = join(build, 'index.html'); }
-      const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
+      const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webp': 'image/webp', '.glb': 'model/gltf-binary', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
       let data = await readFile(file);
       if (extname(file) === '.html') {
         data = Buffer.from(data.toString().replace('<head>', '<head><meta name="lacuna-companion" content="1">').replace(/<script\b/g, `<script nonce="${nonce}"`));

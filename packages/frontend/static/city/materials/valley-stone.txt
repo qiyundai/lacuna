@@ -1,0 +1,3 @@
+Aerial Rocks 02, Poly Haven, CC0.
+https://polyhaven.com/a/aerial_rocks_02
+The valley uses the 1K diffuse and OpenGL normal maps, converted to WebP.

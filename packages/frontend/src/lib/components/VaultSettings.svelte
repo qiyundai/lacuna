@@ -28,12 +28,11 @@
 </script>
 {#if show}
   <div class="privacy-screen" use:modal={{ dismiss: () => { if (!busy) show = false; } }} role="dialog" aria-modal="true" aria-label="Privacy and storage" tabindex="-1" onclick={e => { if (!busy && e.target === e.currentTarget) show = false; }} onkeydown={e => { if (!busy && e.key === 'Escape') show = false; }} transition:fade={{ duration: 450, easing: cubicOut }}>
-    <div class="privacy-settings">
-      <p class="quiet">privacy & storage</p>
-      <h2>Your words. Your key.</h2>
+    <div class="privacy-settings journal-sheet">
+      <h2>Privacy &amp; storage</h2>
       <p>Your journal is encrypted {isCompanion ? 'on this computer' : 'in this browser'}. It locks after 15 minutes without keyboard or pointer activity. Unsaved words disappear when it locks.</p>
-      <button disabled={busy} onclick={() => run(async () => { await lockVault(); show = false; })}>lock my space now</button>
-      <button disabled={busy} onclick={() => run(async () => { const encrypted = await companionRequest('vault/backup'); downloadFile(JSON.stringify(encrypted), `lacuna-${new Date().toISOString().slice(0, 10)}.${isCompanion ? 'lacuna-vault' : 'lacuna-web-vault'}`, 'application/json'); message = 'Encrypted backup downloaded. Keep it and your passphrase somewhere you can recover.'; })}>download an encrypted backup</button>
+      <button disabled={busy} onclick={() => run(async () => { await lockVault(); show = false; })}>Lock my space now</button>
+      <button disabled={busy} onclick={() => run(async () => { const encrypted = await companionRequest('vault/backup'); downloadFile(JSON.stringify(encrypted), `lacuna-${new Date().toISOString().slice(0, 10)}.${isCompanion ? 'lacuna-vault' : 'lacuna-web-vault'}`, 'application/json'); message = 'Encrypted backup downloaded. Keep it and your passphrase somewhere you can recover.'; })}>Download an encrypted backup</button>
       <p class="quiet">The backup stays encrypted outside this app. Restore it from the lock screen with {isCompanion ? 'the same ChatGPT identity and ' : ''}your passphrase.</p>
       {#if isCompanion}
       <section>
@@ -49,7 +48,7 @@
         <label><input type="checkbox" checked={vaultStore.status?.sync.enabled ?? false} disabled={busy} onchange={e => run(() => companionRequest('vault/sync', 'POST', { enabled: e.currentTarget.checked }))} /> Sync my encrypted journal after local saves</label>
         <p class="quiet">{vaultStore.status?.sync.lastSync ? `Last upload: ${new Date(vaultStore.status.sync.lastSync).toLocaleString()}` : 'No successful upload on this device.'} A different cloud version pauses uploads; it is never silently overwritten. Sync requires the same ChatGPT identity and a supported vault size (about 4.5 MB before encryption).</p>
         {#if vaultStore.status?.sync.error}<p role="status">{vaultStore.status.sync.error}</p>{/if}
-        {#if vaultStore.status?.sync.enabled}<button disabled={busy} onclick={() => run(() => companionRequest('vault/sync', 'POST', { enabled: true }))}>sync now / retry</button>{/if}
+        {#if vaultStore.status?.sync.enabled}<button disabled={busy} onclick={() => run(() => companionRequest('vault/sync', 'POST', { enabled: true }))}>Sync now / retry</button>{/if}
         <p class="quiet">To restore a copy, lock this space and choose restore. Restoring disables AI sharing and sync on this device. A prior local copy is kept as an encrypted backup.</p>
         <button disabled={busy} onclick={() => { if (!confirmDelete) { confirmDelete = true; return; } run(async () => { await companionRequest('vault/sync', 'DELETE'); confirmDelete = false; message = 'The active cloud copy is deleted. Provider backups expire on their own schedule.'; }); }}>{confirmDelete ? 'confirm deletion of the cloud copy' : 'delete encrypted cloud copy'}</button>
         <p class="quiet">Turning sync off stops future uploads and keeps an existing cloud copy. Deleting it removes the active copy; Cloudflare backup history may retain ciphertext temporarily.</p>
@@ -58,7 +57,7 @@
         <section>
           <h3>Bring an older journal home.</h3>
           <p>{legacy.entries ? `${legacy.entries} older thoughts remain in the original cloud storage.` : 'Check this identity for older cloud journal data.'} Older releases saved readable journal content on the server. This step downloads it, saves and verifies an encrypted local copy, then removes the active plaintext cloud records.</p>
-          <button disabled={busy} onclick={() => run(async () => { await companionRequest('vault/migrate', 'POST'); legacy = await companionRequest('vault/legacy'); didLock(); show = false; })}>move and verify my older cloud journal</button>
+          <button disabled={busy} onclick={() => run(async () => { await companionRequest('vault/migrate', 'POST'); legacy = await companionRequest('vault/legacy'); didLock(); show = false; })}>Move and verify my older cloud journal</button>
           <p class="quiet">Backups can retain older plaintext until they expire. Other ChatGPT registrations or retired email accounts are separate identities and are not automatically merged.</p>
         </section>
       {/if}
@@ -77,7 +76,7 @@
       {#if error}<p role="alert">{error}</p>{/if}
       {#if message}<p role="status">{message}</p>{/if}
       <a href="/privacy">read our privacy declaration</a>
-      <button disabled={busy} onclick={() => show = false}>return to my space</button>
+      <button disabled={busy} onclick={() => show = false}>Return to my space</button>
     </div>
   </div>
 {/if}

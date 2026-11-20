@@ -11,40 +11,43 @@
   }: { show: boolean; consentMode?: boolean; onConsent?: () => void } = $props();
 
 
-  function dismiss() {
+  function dismiss() { show = false; }
+  function acknowledge() {
     show = false;
-    if (consentMode) onConsent?.();
+    onConsent?.();
   }
 </script>
 
-<svelte:window onkeydown={(e) => { if (!consentMode && e.key === 'Escape') dismiss(); }} />
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape') dismiss(); }} />
 
 {#if show}
   <div
-    use:modal={{ dismiss: consentMode ? undefined : dismiss }}
+    use:modal={{ dismiss }}
     class="screen-overlay privacy-overlay"
     transition:fade={{ duration: 500, easing: cubicOut }}
     role="dialog"
     tabindex="-1"
     aria-modal="true"
     aria-label="Data and privacy"
-    onclick={(e) => { if (!consentMode && e.target === e.currentTarget) dismiss(); }}
-    onkeydown={(e) => { if (!consentMode && e.key === 'Escape') dismiss(); }}
+    onclick={(e) => { if (e.target === e.currentTarget) dismiss(); }}
+    onkeydown={(e) => { if (e.key === 'Escape') dismiss(); }}
   >
-    <div class="privacy-content">
+    <div class="privacy-content journal-sheet">
+      <h2>Data and privacy</h2>
       {#if isCompanion}
-      <p>your words belong to you. new journal content is encrypted in a passphrase-protected vault on this computer. cloud sync and AI sharing start off.</p>
-      <p>ChatGPT signs you in. Lacuna verifies an identity token; access and refresh tokens stay in the local companion. if you allow reflections, journal context goes directly to OpenAI using your plan allowance or credits.</p>
-      <p>optional cloud sync stores an encrypted copy. older cloud journals need a verified migration before their active plaintext records are removed. deletion does not instantly erase provider backups or copies you exported.</p>
-      <a class="hint" href="/privacy">read the full privacy declaration</a>
-      {#if isCompanion}<p class="hint">disconnecting ChatGPT removes credentials here. manage app access and usage in ChatGPT settings.</p>{/if}
+      <p>New journal content is encrypted in a passphrase-protected vault on this computer. Cloud sync and AI sharing start off.</p>
+      <p>ChatGPT signs you in. Lacuna verifies an identity token. Access and refresh tokens stay in the local companion. If you allow reflections, journal context goes directly to OpenAI using your plan allowance or credits.</p>
+      <p>Optional cloud sync stores an encrypted copy. Older cloud journals need a verified migration before their active plaintext records are removed. Deletion does not instantly erase provider backups or copies you exported.</p>
+      <a class="hint" href="/privacy">Read the full privacy declaration</a>
+      <p class="hint">Disconnecting ChatGPT removes credentials here. Manage app access and usage in ChatGPT settings.</p>
       {:else}
-        <p>your journal is encrypted in this browser. your passphrase and encryption key are never saved or sent to a server.</p>
-        <p>this browser journal does not currently connect to a cloud account or ChatGPT. your words stay on this device. lock your space from the menu when you’re done.</p>
-        <p>clearing browser storage or losing your device can erase the only copy. download an encrypted backup from privacy & storage and keep its passphrase safe. there is no password reset.</p>
-        <a class="hint" href="/privacy">read the full privacy declaration</a>
+        <p>Your journal is encrypted in this browser. Your passphrase and encryption key are never saved or sent to a server.</p>
+        <p>This browser journal does not currently connect to a cloud account or ChatGPT. Your words stay on this device. Lock your space from the menu when you’re done.</p>
+        <p>Clearing browser storage or losing your device can erase the only copy. Download an encrypted backup from privacy & storage and keep its passphrase safe. There is no password reset.</p>
+        <a class="hint" href="/privacy">Read the full privacy declaration</a>
       {/if}
-      {#if consentMode}<button class="hint" onclick={dismiss}>acknowledge and continue</button>{:else}<button class="hint" onclick={dismiss}>return</button>{/if}
+      {#if consentMode}<button class="atlas-primary" onclick={acknowledge}>Acknowledge and continue</button>{/if}
+      <button class="atlas-link" onclick={dismiss}>{consentMode ? "Go back" : "Close"}</button>
     </div>
   </div>
 {/if}
@@ -104,5 +107,4 @@
     letter-spacing: var(--ls-label);
     margin-top: var(--space-3);
   }
-  button.hint { background: none; border: none; font: inherit; cursor: pointer; line-height: 1.8; }
 </style>

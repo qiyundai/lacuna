@@ -1,0 +1,5 @@
+Venice Canal Scene by intervirtual (https://sketchfab.com/intervirtual)
+Original: https://sketchfab.com/models/f16cd5ff64ec46d883022c8607a05827
+Distribution source: https://opengameart.org/content/venice-canal-scene
+Licensed under Creative Commons Attribution 4.0 International (https://creativecommons.org/licenses/by/4.0/).
+Lacuna uses two architectural sections, separated, simplified, UV-mapped, rescaled and resurfaced for the harbor.

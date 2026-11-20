@@ -20,18 +20,15 @@
     tabindex="-1"
     aria-modal="true"
     aria-label="What is Lacuna"
-    onclick={dismiss}
-    onkeydown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') dismiss(); }}
+    onclick={e => { if (e.target === e.currentTarget) dismiss(); }}
+    onkeydown={(e) => { if (e.key === 'Escape') dismiss(); }}
   >
-    <div class="info-content">
-      <p>a private space, just yours. you type, words float, nothing goes anywhere unless you hold a thought long enough to mean it.</p>
-      <p>swipe down whenever you're ready to see the things you've held. open a thought to keep it close, or find a word from any time in your story.</p>
-      {#if isCompanion}<p>with ChatGPT reflections enabled, those fragments can become a map of recurring themes and a living memoir.</p>{:else}<p>this browser keeps your journal encrypted on this device. no account or desktop is needed. download an encrypted backup from privacy & storage so you can recover your words if you lose browser data.</p>{/if}
-      <p>take your words with you from the menu. encrypted backups stay private; readable Markdown and JSON downloads need a safe place of their own.</p>
-      <p class="hint">hold to save. Control or Command + Enter works too. Escape lets an unsaved thought go.</p>
-
-      <p class="music-nudge">before you begin — put on something you love. let the walls crack a little.</p>
-
+    <div class="info-content journal-sheet">
+      <h2>About Lacuna</h2>
+      <p>Open the journal at the cabin desk. Step outside to visit the river, open the sliding screen, or walk on. The birds carry the words that brought them here.</p>
+      <p>Visit the gardener for recurring threads and the bookbinder for memoir editions. Open the journal archive to find any original page.</p>
+      <p>Quiet writing gives you a blank page. Hold to save, or press Control or Command and Enter.</p>
+      <p>Manage encryption, backups, and exports in the menu.</p>
       {#if isCompanion}<div class="lenses-section">
         <p class="lenses-intro">as you write, we read through six lenses — not to label you, but to find the shape of what keeps returning.</p>
 
@@ -65,7 +62,7 @@
         <p class="lenses-close">these lenses shape your soul map and, in time, the living memoir — a piece of prose that becomes more honest the longer you stay.</p>
       </div>{/if}
 
-      <p class="hint">anywhere to close</p>
+      <button class="atlas-link" onclick={dismiss}>Close</button>
     </div>
   </div>
 {/if}
@@ -118,12 +115,7 @@
     margin: 0;
   }
 
-  .music-nudge {
-    color: var(--void-text) !important;
-    font-style: italic;
-    margin-top: var(--space-3) !important;
-  }
-
+  .info-content h2 {font:400 2.5rem/1.1 var(--font-reading);letter-spacing:-.045em}
   .lenses-section {
     display: flex;
     flex-direction: column;
@@ -181,10 +173,4 @@
     margin: 0;
   }
 
-  .info-content .hint {
-    color: var(--void-text-hint);
-    font-size: var(--text-xs);
-    letter-spacing: var(--ls-label);
-    margin-top: var(--space-3);
-  }
 </style>

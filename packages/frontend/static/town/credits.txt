@@ -1,0 +1,12 @@
+Great egret by Poly by Google
+https://poly.pizza/m/4GacWAa1lit
+Creative Commons Attribution 3.0 Unported
+https://creativecommons.org/licenses/by/3.0/
+Texture converted to an external WebP; model resized and animated in the village.
+
+Villagers by Kenney, CC0. See folk/License.txt.
+Valley, cedar, rooftiles, cottage fronts, and maple boughs were generated for Lacuna.
+
+Village skybox uses Belfast Sunset (Pure Sky), CC0, by Dimitrios Savva, Greg Zaal, and Jarod Guest.
+https://polyhaven.com/a/belfast_sunset_puresky
+Color graded and combined with Lacuna's painted valley.

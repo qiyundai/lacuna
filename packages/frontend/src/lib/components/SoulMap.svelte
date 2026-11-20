@@ -14,8 +14,7 @@
 
 <section class="story-page map-page" aria-label="Soul map">
   <header class="story-heading centered">
-    <p class="whisper">what keeps returning</p>
-    <h1>A sky made of your words.</h1>
+    <h1>Soul map</h1>
     <p class="quiet">{tone || 'Small recurrences, gradually becoming visible.'}</p>
   </header>
   <div class="map-modes" aria-label="Explore your map">

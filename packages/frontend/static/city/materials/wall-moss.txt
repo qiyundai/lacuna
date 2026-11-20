@@ -1,0 +1,3 @@
+Mossy Rock by Poly Haven, CC0.
+https://polyhaven.com/a/mossy_rock
+The corridor uses the 1K diffuse and OpenGL normal maps, converted to WebP.

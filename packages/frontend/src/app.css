@@ -5,13 +5,23 @@
 }
 
 :root {
-  /* Surface */
-  --bg: #131010;
-  --lavender: #a4a4c2;
-  --moss: #a5b49b;
-  --rose: #c9a4a3;
-  --hairline: rgba(237, 227, 216, .12);
-  --font-reading: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  color-scheme: light;
+  --paper: #f8f7ee;
+  --field: #eff1e6;
+  --valley: #e5eadd;
+  --ink: #203d35;
+  --muted: #496154;
+  --river: #366553;
+  --line: #bec8b8;
+  --gutter: clamp(18px, 4.5vw, 80px);
+  --mast-height: 64px;
+  --bg: var(--paper);
+  --lavender: #44675f;
+  --moss: #45603b;
+  --rose: #925445;
+  --hairline: #c9d1c2;
+  --font-reading: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  --font-ui: 'Segoe UI', system-ui, sans-serif;
 
   /* Type scale */
   --text-xs:   0.875rem;  /* 14px — smallest legible */
@@ -32,13 +42,12 @@
   --ls-label:   0.08em;
   --ls-display: 0.16em;
 
-  /* Color — opacity-tier text on --bg */
-  --void-text:       rgba(255, 238, 220, 0.92);
-  --void-text-dim:   rgba(255, 238, 220, 0.70);
-  --void-text-hint:  rgba(255, 238, 220, 0.55);
-  --void-text-faint: rgba(255, 238, 220, 0.50);
-  --void-danger:     rgba(232, 130, 120, 0.85);
-  --accent:          rgba(255, 238, 220, 0.6);
+  --void-text: var(--ink);
+  --void-text-dim: var(--muted);
+  --void-text-hint: #536557;
+  --void-text-faint: #59695c;
+  --void-danger: #913e31;
+  --accent: var(--river);
 
   /* Spacing — base 0.25rem (4px) */
   --space-1: 0.25rem;
@@ -59,7 +68,7 @@
 
   /* Type families */
   --font-mono: 'Courier New', Courier, monospace;
-  --font-serif: Georgia, 'Times New Roman', serif;
+  --font-serif: var(--font-reading);
 }
 
 html {
@@ -91,7 +100,7 @@ body {
 }
 
 ::selection {
-  background: rgba(255, 238, 220, 0.18);
+  background: #d3e3cb;
 }
 
 button, a, input { -webkit-touch-callout: default; }
@@ -109,3 +118,44 @@ button:disabled { cursor: default; opacity: .5; }
 @media(prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+.atlas-form{display:grid;gap:1.05rem;font-family:var(--font-ui);color:var(--ink)}
+.atlas-form h1{font:400 clamp(2rem,3.5vw,3.4rem)/1.03 var(--font-reading);letter-spacing:-.055em}
+.atlas-form>p{font-size:.98rem;line-height:1.55;color:var(--muted)}
+.field{display:grid;gap:.32rem}.field label{font-size:.9rem;font-weight:600}
+.field input{font:inherit;font-size:1rem;color:var(--ink);background:var(--paper);border:1px solid #7e9183;border-radius:7px;padding:.66rem .82rem;min-height:48px;min-width:0;width:100%}
+.field input[aria-invalid=true]{border-color:var(--void-danger)}
+.atlas-form .field-note{font-size:.84rem;line-height:1.5}.atlas-form .form-error{color:var(--void-danger)}
+.atlas-primary,.atlas-link{font:600 .94rem/1.25 var(--font-ui);cursor:pointer;min-height:48px}
+.atlas-primary{display:inline-flex;align-items:center;justify-content:center;background:var(--ink);color:var(--paper);border:1px solid var(--ink);border-radius:8px;padding:.7rem 1.35rem;transition:background .2s,transform .2s}
+.atlas-primary:hover{background:var(--river)}.atlas-primary:active{transform:translateY(1px)}
+.atlas-link{border:none;color:var(--river);background:transparent;text-align:start;text-decoration:underline;text-underline-offset:.2em}
+:focus-visible{outline:2px solid var(--river);outline-offset:3px}
+@media(max-width:760px){:root{--mast-height:54px}}
+
+[role="dialog"] > .journal-sheet {
+  width: min(100%, 38rem);
+  max-width: 38rem;
+  height: fit-content;
+  max-height: none;
+  margin: auto;
+  padding: clamp(1.4rem, 4vw, 3rem);
+  display: grid;
+  gap: 1rem;
+  text-align: start;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  font: 1rem/1.6 var(--font-ui);
+  letter-spacing: normal;
+}
+.journal-sheet.journal-sheet h2 {
+  margin: 0 0 .5rem;
+  font: 400 clamp(2rem, 4vw, 3.1rem)/1.1 var(--font-reading);
+  letter-spacing: -.045em;
+}
+.journal-sheet.journal-sheet p { color: var(--muted); font: inherit; letter-spacing: normal; }
+.journal-sheet.journal-sheet :is(button,a) { min-height: 44px; display: inline-flex; align-items: center; font: 500 .95rem/1.4 var(--font-ui); text-align: start; }
+.journal-sheet.journal-sheet button:not(.atlas-primary) { border-radius: 0; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--river); cursor: pointer; }
+[role="dialog"]:has(> .journal-sheet) { align-items: safe center; padding: clamp(12px, 4vw, 56px); background: var(--field); overflow-y: auto; }

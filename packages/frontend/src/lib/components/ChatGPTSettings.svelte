@@ -39,14 +39,14 @@
 {#if show}
   <div class="plan-screen" use:modal={{ dismiss: () => show = false }} role="dialog" aria-modal="true" aria-label="AI and ChatGPT plan" tabindex="-1"
     onclick={(event) => { if (event.target === event.currentTarget) show = false; }} onkeydown={(event) => { if (event.key === 'Escape') show = false; }} transition:fade={{ duration: 500, easing: cubicOut }}>
-    <div class="plan-content">
-      <p>your reflections</p>
+    <div class="plan-content journal-sheet">
+      <h2>AI reflections</h2>
       {#if isCompanion}
         <p>using your ChatGPT plan. eligible requests use your plan allowance or credits. enable journal sharing in privacy & storage before refreshing reflections.</p>
         {#if aiStore.companion?.connected}
           <p>{aiStore.companion.email}</p>
           {#if !aiStore.companion.planEnabled}<p>you’re signed in. reconnect and allow ChatGPT plan use to generate reflections.</p>{/if}
-          <button disabled={busy || aiStore.companion.state === 'running'} onclick={() => run(connect)}>reconnect ChatGPT</button>
+          <button disabled={busy || aiStore.companion.state === 'running'} onclick={() => run(connect)}>Reconnect ChatGPT</button>
           <p class="small">choose a model</p>
           <div class="models">
             {#each models as model}
@@ -55,9 +55,9 @@
             {/each}
           </div>
           <button disabled={busy || aiStore.companion.state === 'running'} onclick={() => run(() => companionRequest('reflect', 'POST'))}>{aiStore.companion.state === 'running' ? 'reflecting…' : 'refresh reflections'}</button>
-          <button disabled={busy} onclick={() => run(async () => { testResult = ''; const result = await companionRequest<{ text: string }>('test', 'POST'); testResult = result.text; })}>test ChatGPT connection</button>
+          <button disabled={busy} onclick={() => run(async () => { testResult = ''; const result = await companionRequest<{ text: string }>('test', 'POST'); testResult = result.text; })}>Test ChatGPT connection</button>
           {#if testResult}<p role="status">{testResult}</p>{/if}
-          <button disabled={busy} onclick={() => run(disconnect)}>disconnect ChatGPT</button>
+          <button disabled={busy} onclick={() => run(disconnect)}>Disconnect ChatGPT</button>
         {:else}
           <p>use your ChatGPT plan for reflections. your journal is saved in your encrypted local vault; access and refresh tokens stay on this computer.</p>
           <button disabled={busy} onclick={() => run(connect)}>Continue with ChatGPT</button>
@@ -69,7 +69,7 @@
       {/if}
       {#if isCompanion}<a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">Manage usage</a>{/if}
       {#if error}<p role="alert">{error}</p>{/if}
-      <button onclick={() => show = false}>return</button>
+      <button onclick={() => show = false}>Return</button>
     </div>
   </div>
 {/if}

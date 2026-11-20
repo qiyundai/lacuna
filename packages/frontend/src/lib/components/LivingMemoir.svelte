@@ -51,8 +51,7 @@
 
 <section class="story-page memoir" class:reading aria-label="Living memoir" bind:this={room}>
   <header class="story-heading">
-    <p class="whisper">a story still becoming</p>
-    <h1>Something like a life.</h1>
+    <h1>Living memoir</h1>
     <p class="quiet">Your fragments, gathered into a living memoir.</p>
   </header>
   {#if prose}

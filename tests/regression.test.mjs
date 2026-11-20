@@ -1,5 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { districts } from '../packages/frontend/src/lib/town/districts.ts';
+
+test('a river crossing keeps its founding page and opens the far bank to later pages', () => {
+  const page = (id, body, presence) => ({ id, body, presence, created_at: Number(id) });
+  const journal = [
+    page('1', 'I planted basil.', '1'),
+    page('2', 'I wonder if we made peace.', '1'),
+    page('3', 'We finally talked again. I brought basil.', '1'),
+    page('4', 'We shared dinner.', '1'),
+    page('5', 'Walking home in the rain.', '5')
+  ];
+  assert.equal(districts(journal.slice(0, 2))[0].landing, undefined);
+  const [garden, quay, walk] = districts(journal);
+  assert.equal(garden.landing.entry.id, '3');
+  assert.equal(garden.landing.crossing, 'We finally talked again.');
+  assert.equal(garden.farBank, false);
+  assert.equal(quay.farBank, true);
+  assert.equal(quay.thread, garden.thread);
+  assert.equal(quay.pages[0].activity, 'market');
+  assert.equal(walk.farBank, false);
+  assert.deepEqual(districts(structuredClone(journal)), [garden, quay, walk]);
+  assert.equal(new Set([garden, quay, walk].flatMap(d => d.pages.map(p => p.entry.id))).size, journal.length);
+});
 import { createTestDatabase } from './database.mjs';
 import { readFile, mkdtemp, rm, writeFile, readdir } from 'node:fs/promises';
 import { randomBytes, createHash } from 'node:crypto';
@@ -27,6 +50,47 @@ import { journalRequest, snapshot, applyAnalysis, importLegacy } from '../packag
 import { initWeather, weather } from '../packages/frontend/src/lib/stores/weather.svelte.ts';
 import { WebVault, envelopeToken } from '../packages/frontend/src/lib/web-vault.ts';
 import { webRequest } from '../packages/frontend/src/lib/web-api.ts';
+import { advance, firstMorning, home, population, workday } from '../packages/shared/river.ts';
+
+test('settling the same cook on opposite banks changes deliveries, meals and paths', () => {
+  const cook = {id:'cook',body:'I miss cooking for friends.'};
+  assert.deepEqual(home(cook),{trade:'cook',site:0});
+  const workforce = site => population([{...cook,settlement:{trade:'cook',site}}]);
+  const clock = firstMorning(100);
+  const west = workday(workforce(3),clock.grain);
+  const east = workday(workforce(4),clock.grain);
+  assert.ok(east.fed[1] > west.fed[1]);
+  assert.ok(west.mealsMoved[1] > east.mealsMoved[1]);
+  assert.ok(east.grainMoved[1] > west.grainMoved[1]);
+  const later = advance(clock,workforce(4),5000);
+  assert.equal(later.day,5001);
+  assert.equal(later.traffic[4],100);
+  assert.equal(later.traffic[3],0);
+  assert.deepEqual(later,advance(advance(clock,workforce(4),4900),workforce(4),100));
+});
+
+test('both encrypted journals keep a settlement, serialize plot claims and retry a morning once', async t => {
+  const desktop=await localVault(t), browser=new WebVault(webStorage());
+  await browser.unlock(samplePassphrase,true);
+  for(const request of [
+    (path,method,value)=>webRequest(path,method,value,browser),
+    (path,method,value)=>journalRequest(desktop,path,method,value,localURL(path))
+  ]){
+    const arrival={...thought(7,'Dinner with friends'),settlement:{trade:'cook',site:4}};
+    await request('/entries','POST',arrival);
+    await request('/entries','POST',arrival);
+    await assert.rejects(request('/entries','POST',{...thought(8),settlement:{trade:'grower',site:4}}),/site/);
+    const day=await request('/town','GET');
+    assert.equal(day.entries.length,1);
+    assert.deepEqual(day.entries[0].settlement,arrival.settlement);
+    const tomorrow=await request('/town/day','POST',{day:day.clock.day});
+    const retry=await request('/town/day','POST',{day:day.clock.day});
+    assert.deepEqual(tomorrow.clock,retry.clock);
+    await request('/entries/'+arrival.entry_id,'DELETE');
+    assert.deepEqual((await request('/town','GET')).entries,[]);
+    await request('/entries','POST',{...thought(8),settlement:{trade:'grower',site:4}});
+  }
+});
 
 async function fixture(t) {
   const DB = await createTestDatabase(); t.after(() => DB.sqlite.close());
@@ -722,4 +786,193 @@ test('phone archive searches and kept markers use the complete encrypted local j
   assert.equal(new Set([...first.entries, ...second.entries].map(e => e.id)).size, 25);
   await webRequest(`/entries/${thought(1).entry_id}`, 'DELETE', undefined, vault);
   assert.equal((await webRequest('/story/export', 'GET', undefined, vault)).entries.length, 24);
+});
+import { presences, birdHabit } from '../packages/shared/village.ts';
+import { interpretVillagePage } from '../packages/companion/src/village.mjs';
+
+test('the two encrypted villages preserve distinct histories at the same doorway', async t => {
+  const desktop=await localVault(t),browser=new WebVault(webStorage());
+  await browser.unlock(samplePassphrase,true);
+  for(const request of [
+    (path,method,value)=>webRequest(path,method,value,browser),
+    (path,method,value)=>journalRequest(desktop,path,method,value,localURL(path))
+  ]){
+    const first=thought(410,'Dad sends me the forecast every morning.');
+    const second=thought(411,'I sent him the forecast first today.');
+    const other=thought(412,'Dad and I argued about selling the house.');
+    await request('/entries','POST',first);
+    const event={entry:first.entry_id,action:'sheltered'};
+    await request('/village/encounter','POST',event);
+    await request('/village/encounter','POST',event);
+    await request('/entries','POST',second);
+    await request('/entries','POST',other);
+    const {entries}=await request('/village','GET');
+    const [bird,otherBird]=presences(entries);
+    assert.deepEqual(bird.entries.map(e=>e.body),[first.body,second.body]);
+    assert.deepEqual(bird.entries[0].traces,['sheltered']);
+    assert.equal(otherBird.id,other.entry_id);
+    assert.equal(birdHabit(bird),'return-to-door');
+    const split=await request('/village/thread','POST',{entry:second.entry_id,separate:true});
+    assert.equal(presences(split.entries).length,3);
+    const joined=await request('/village/thread','POST',{entry:second.entry_id,separate:false});
+    assert.equal(presences(joined.entries).length,2);
+    const passed={...bird,entries:bird.entries.map((e,i)=>i===0?{...e,traces:['passed']}:e)};
+    assert.equal(birdHabit(passed),'wait-for-you');
+    await assert.rejects(request('/village/encounter','POST',{entry:first.entry_id,action:'invent'}));
+    await request('/entries/'+first.entry_id,'DELETE');
+    const survivors=presences((await request('/village','GET')).entries);
+    assert.equal(survivors[0].id,bird.id);
+    assert.equal(birdHabit(survivors[0]),'lead');
+    assert.deepEqual(survivors[0].entries.map(e=>e.body),[second.body]);
+  }
+});
+
+test('an optional village reading requires sharing and grounded excerpts and preserves encountered pages', async t=>{
+  const vault=await localVault(t);
+  const save=n=>journalRequest(vault,'/entries','POST',n,localURL('/entries'));
+  const first=thought(520,'The kettle was already on when I arrived.');
+  const next=thought(521,'I put two cups out for her this time.');
+  await save(first);await save(next);
+  let calls=0;
+  const generate=async()=>{calls++;return JSON.stringify({gesture:'company',quote:'two cups',thread:0,earlierQuote:'kettle was already on'});};
+  await assert.rejects(interpretVillagePage(vault,next.entry_id,generate),/sharing/);
+  assert.equal(calls,0);
+  await vault.update(d=>{d.aiAllowed=true;});
+  await assert.rejects(interpretVillagePage(vault,next.entry_id,async()=>JSON.stringify({gesture:'company',quote:'gave a hug',thread:null})),/grounded/);
+  const {entry}=await interpretVillagePage(vault,next.entry_id,generate);
+  assert.equal(entry.presence,first.entry_id);
+  assert.equal(entry.reading.gesture,'company');
+  await interpretVillagePage(vault,next.entry_id,generate);
+  assert.equal(calls,1);
+  const last=thought(522,'An unrelated page.');
+  await save(last);
+  await vault.update(d=>{d.entries.at(-1).traces=['passed'];});
+  await interpretVillagePage(vault,last.entry_id,generate);
+  assert.equal(calls,1);
+});
+
+test('city growth follows the saved sequence independently of page meaning and calendar gaps', async () => {
+  const {cityFromPages}=await import('../packages/frontend/src/lib/town/city-growth.ts');
+  const pages=Array.from({length:60},(_,i)=>({id:'page-'+i,created_at:Math.floor(i/2),body:'rain'}));
+  const original=cityFromPages(pages);
+  assert.deepEqual(original,cityFromPages(pages.map(p=>({...p,created_at:p.created_at*86400*365,body:'something else'}))));
+  assert.deepEqual(cityFromPages([]).blocks,[]);
+  assert.equal(new Set(original.blocks.map(b=>b.x+','+b.z)).size,original.blocks.length);
+  assert.ok(original.blocks.some(b=>b.green));
+  assert.ok(original.blocks.some(b=>b.levels>1));
+  const past=cityFromPages(pages.slice(0,-1));
+  assert.deepEqual(past.blocks.map(b=>b.seed),original.blocks.slice(0,past.blocks.length).map(b=>b.seed));
+  assert.equal(original.blocks.reduce((sum,b)=>sum+b.levels,0),pages.length);
+});
+
+test('city saves on both vaults preserve words and skip the legacy story classifier',async t=>{
+  const desktop=await localVault(t),browser=new WebVault(webStorage());
+  await browser.unlock(samplePassphrase,true);
+  for(const send of [
+    value=>webRequest('/entries','POST',value,browser),
+    value=>journalRequest(desktop,'/entries','POST',value,localURL('/entries'))
+  ]){
+    const value={...thought(948,'A page with no particular theme.'),city:true};
+    const {entry}=await send(value);
+    assert.equal(entry.body,value.body);
+    assert.equal(entry.presence,undefined);
+    assert.deepEqual((await send(value)).entry,entry);
+  }
+});
+
+test('a journal grows connected parcels upstream and every page keeps a stable city address',async()=>{
+  const {paintedCoast}=await import('../packages/frontend/src/lib/town/painted-coast.ts');
+  const first={id:'z',created_at:100},second={id:'a',created_at:100};
+  assert.deepEqual(paintedCoast([first,second]).sites[0],paintedCoast([first]).sites[0]);
+  const signatures=new Set();
+  assert.equal(paintedCoast([]).sites.length,0);
+  for(let seed=0;seed<12;seed++){
+    const pages=Array.from({length:250},(_,i)=>({id:seed+'-folio-'+i,created_at:i}));
+    const early=paintedCoast(pages.slice(0,32)),full=paintedCoast(pages);
+    assert.equal(full.addresses.size,pages.length);
+    assert.ok(full.sites.length<pages.length && full.end>1800);
+    assert.ok(full.sites.every(s=>s.x-s.width/2>=full.start && s.x+s.width/2<=full.end));
+    const parcels=new Set();
+    for(const site of full.sites){
+      const col=Math.round((site.x-132-site.lane*8)/157),key=col+','+site.lane;
+      assert.ok(!parcels.has(key));
+      if(parcels.size)assert.ok([[1,0],[-1,0],[0,1],[0,-1]].some(([dc,dl])=>parcels.has((col+dc)+','+(site.lane+dl))));
+      parcels.add(key);
+    }
+    for(const [id,site] of early.addresses){
+      const later=full.addresses.get(id);
+      assert.deepEqual([later.id,later.x,later.lane,later.kind],[site.id,site.x,site.lane,site.kind]);
+    }
+    signatures.add(early.sites.map(s=>s.kind+'/'+s.x).join(','));
+    assert.deepEqual(early,paintedCoast(pages.slice(0,32).reverse().map(p=>({...p,body:'different words'}))));
+  }
+  assert.equal(signatures.size,12);
+});
+
+test('coastal groves have clearings and clustered saplings that persist across inlet boundaries',async()=>{
+  const {plantGroves,groveDensity}=await import('../packages/frontend/src/lib/town/waterfront-meadow.ts');
+  const shore=x=>6+10*Math.cos(x*.064);
+  const grow=(left,right)=>{
+    const trees=[];
+    plantGroves(left,right,shore,()=>8,(x,y,z,height,seed)=>{if(Math.abs(x)<65) trees.push([x,y,z,height,seed]);});
+    return trees;
+  };
+  const trees=grow(-72,72);
+  assert.deepEqual(trees,grow(-216,216));
+  const densities=Array.from({length:130},(_,i)=>groveDensity(i-65,shore(i-65)-40));
+  assert.ok(Math.min(...densities)<.1 && Math.max(...densities)>.85);
+  const sheltered=trees.filter(t=>groveDensity(t[0],t[2])>.7);
+  const open=trees.filter(t=>groveDensity(t[0],t[2])<.15);
+  assert.ok(sheltered.length>open.length*3);
+  assert.ok(trees.some(a=>a[3]<2 && trees.some(b=>b[3]>3 && Math.hypot(a[0]-b[0],a[2]-b[2])<3)));
+});
+
+test('the low cloud thins to clear air before a new formation gathers',async()=>{
+  const {createLowCloud}=await import('../packages/frontend/src/lib/town/low-cloud.ts');
+  const sky=createLowCloud(),near=sky.cloud.children[0],far=sky.cloud.children[1];
+  try{
+    const uniforms=near.material.uniforms,old=uniforms.volume.value;
+    let retired=false;old.addEventListener('dispose',()=>{retired=true;});
+    assert.notEqual(old,far.material.uniforms.volume.value);
+    sky.tick(32);assert.equal(uniforms.humidity.value,1);
+    sky.tick(100);assert.ok(uniforms.humidity.value>0 && uniforms.humidity.value<1);
+    for(let t=101;t<=185;t+=.25)sky.tick(t);
+    assert.equal(near.visible,false);assert.equal(uniforms.volume.value,old);
+    sky.tick(186);
+    assert.equal(near.visible,false);assert.ok(retired);
+    assert.notDeepEqual(uniforms.volume.value.image.data,old.image.data);
+    sky.tick(245);
+    const growing=uniforms.humidity.value,position=near.position.clone();
+    assert.ok(near.visible && growing>0 && growing<1);
+    sky.tick(245);assert.equal(uniforms.humidity.value,growing);assert.deepEqual(near.position,position);
+    sky.tick(298);assert.equal(uniforms.humidity.value,1);
+  }finally{sky.dispose();}
+});
+
+test('the lawn roots blades on every grassy terrain triangle and tapers detail with viewing distance',async()=>{
+  const T=await import('three');
+  const {createMeadow}=await import('../packages/frontend/src/lib/town/waterfront-meadow.ts');
+  const ground=new T.BufferGeometry(),positions=[],normals=[];
+  for(let x=0;x<4;x++)for(let j=0;j<3;j++){
+    positions.push(x,5,-j);
+    normals.push(0,1,0);
+  }
+  ground.setAttribute('position',new T.Float32BufferAttribute(positions,3));
+  ground.setAttribute('normal',new T.Float32BufferAttribute(normals,3));
+  ground.setAttribute('habitat',new T.Float32BufferAttribute(new Float32Array(12),1));
+  const eye=new T.Vector3(2,8,-1),texture=new T.Texture(),lawn=createMeadow(ground,3,eye,texture);
+  try {
+    const roots=new Set();
+    for(const sector of lawn.group.children){
+      const {corner,edgeB,edgeC}=sector.geometry.attributes;
+      for(let i=0;i<sector.geometry.instanceCount;i++)roots.add([corner.getX(i),corner.getZ(i),edgeB.getX(i),edgeB.getZ(i),edgeC.getX(i),edgeC.getZ(i)].join(','));
+    }
+    assert.equal(roots.size,12);
+    lawn.view();
+    assert.ok(lawn.group.children.every(mesh=>mesh.visible));
+    eye.set(0,200,0);lawn.view();
+    assert.ok(lawn.group.children.every(mesh=>!mesh.visible));
+    eye.set(2,8,-1);lawn.view();
+    assert.ok(lawn.group.children.every(mesh=>mesh.visible));
+  } finally {lawn.dispose();ground.dispose();texture.dispose();}
 });

@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { weather } from '$lib/stores/weather.svelte.js';
   import { onMount, onDestroy, tick as flushDom } from 'svelte';
   import { draft, insertAt, deleteRange, clearDraft, type DraftChar } from '$lib/stores/draft.svelte.js';
-  import { weather } from '$lib/stores/weather.svelte.js';
   import { holdDetector } from '$lib/gesture.js';
   import { api, isCompanion } from '$lib/api.js';
   import { prependEntry } from '$lib/stores/entries.svelte.js';
@@ -32,22 +32,11 @@
   }
   let keyboardShift = $state(0);
 
-  let showIntro = $state(false);
-  let introVisible = $state(false);
-  let introTimer: ReturnType<typeof setTimeout> | null = null;
-
   let hintArmed = $state(false);
   let showHoldHint = $state(false);
   let holdHintVisible = $state(false);
   let holdHintTimer: ReturnType<typeof setTimeout> | null = null;
   let holdHintRevealTimer: ReturnType<typeof setTimeout> | null = null;
-
-  function dismissIntro() {
-    if (introTimer) clearTimeout(introTimer);
-    introTimer = null;
-    introVisible = false;
-    later(() => { showIntro = false; }, 800);
-  }
 
   function dismissHoldHint() {
     if (holdHintTimer) clearTimeout(holdHintTimer);
@@ -275,13 +264,6 @@
 
     if (!rafId) rafId = requestAnimationFrame(tick);
 
-    if (!readLocal('lacuna_intro_shown')) {
-      writeLocal('lacuna_intro_shown', '1');
-      showIntro = true;
-      later(() => { introVisible = true; }, 50);
-      introTimer = later(dismissIntro, 5500);
-    }
-
     if (!readLocal('lacuna_hint_learned')) {
       hintArmed = true;
     }
@@ -297,7 +279,6 @@
     if (cursorTimer) clearTimeout(cursorTimer);
     if (holdHintTimer) clearTimeout(holdHintTimer);
     if (holdHintRevealTimer) clearTimeout(holdHintRevealTimer);
-    if (introTimer) clearTimeout(introTimer);
     timers.forEach(clearTimeout);
     if (container) container.removeEventListener('pointermove', handlePointerMove);
     window.removeEventListener('keydown', onEscapeKey);
@@ -493,13 +474,9 @@
   ontouchstart={handleTouchStart}
   ontouchend={handleTouchEnd}
   style="
-    --bg: {weather.palette.base};
-    --void-text: {weather.palette.text};
-    --void-text-faint: {weather.palette.textFaint};
-    --void-text-hint: {weather.palette.textFaint};
-    --glow-0: {weather.palette.glows[0]};
+    --glow-0: var(--valley);
     --glow-1: {weather.palette.glows[1]};
-    --glow-2: {weather.palette.glows[2]};
+    --glow-2: #e6dec5;
     --keyboard-shift: {keyboardShift}px;
   "
 >
@@ -543,6 +520,7 @@
     {/each}
   </div>
 
+  {#if !draft.isDirty}<div class="writing-heading"><h1>Quiet writing</h1><p>Write a thought, then hold to save.</p></div>{/if}
   {#if draft.isDirty || showCursor}
     <div
       class="draft-prose"
@@ -596,19 +574,6 @@
   {#if justSolidified}
     <div class="ripple ripple-primary"></div>
     <div class="ripple ripple-secondary"></div>
-  {/if}
-
-  {#if showIntro}
-    <div
-      class="intro-hint"
-      class:visible={introVisible && !draft.isDirty}
-      class:with-empty-cursor={showCursor && !draft.isDirty}
-      aria-hidden="true"
-    >
-      <span>type anything</span>
-      <span>hold to keep it</span>
-      <span>swipe down to see your story</span>
-    </div>
   {/if}
 
   {#if showHoldHint}
@@ -676,6 +641,7 @@
 </div>
 
 <style>
+  .writing-heading{position:absolute;top:18%;left:var(--gutter);right:var(--gutter);pointer-events:none}.writing-heading h1{font:400 clamp(2.4rem,5vw,4.6rem)/1 var(--font-reading);letter-spacing:-.06em}.writing-heading p{font:1rem var(--font-ui);color:var(--muted);margin-block-start:.7rem}
   .save-thought { position: absolute; bottom: 7rem; left: 50%; transform: translateX(-50%); z-index: 4; min-height: 44px; padding: .65rem 1.2rem; background: var(--bg); border: 1px solid var(--void-text-hint); border-radius: 2rem; color: var(--void-text); font: inherit; cursor: pointer; }
   .save-thought:disabled { opacity: .6; cursor: default; }
   .plan-indicator { position: absolute; top: 1.5rem; width: 100%; text-align: center; font-size: var(--text-xs); color: var(--void-text-hint); }
@@ -707,7 +673,8 @@
     inset: 0;
     pointer-events: none;
     filter: blur(55px) saturate(1.15) url(#glow-refract);
-    mix-blend-mode: screen;
+    mix-blend-mode: multiply;
+    opacity: .28;
     will-change: filter;
   }
 
@@ -850,7 +817,8 @@
     border-radius: 50%;
     transform: translate(-50%, -50%) scale(0);
     pointer-events: none;
-    mix-blend-mode: screen;
+    mix-blend-mode: multiply;
+    opacity: .28;
     /* No blur filter — softness is encoded in the gradient stops. Blurring a
        260vmax element on mobile is extremely expensive on the GPU. */
     will-change: transform, opacity;
@@ -943,39 +911,6 @@
 
   .down-hint.faint {
     opacity: 0.12;
-  }
-
-  .intro-hint {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    color: var(--void-text-hint);
-    font-family: var(--font-serif);
-    font-size: var(--text-sm);
-    line-height: 2.2;
-    letter-spacing: var(--ls-label);
-    pointer-events: none;
-    user-select: none;
-    z-index: 2;
-    opacity: 0;
-    transition: opacity var(--dur-slow) var(--ease-soft);
-  }
-
-  .intro-hint.visible {
-    opacity: 1;
-  }
-
-  .intro-hint.with-empty-cursor {
-    top: calc(50% + 4.5rem);
-  }
-
-  .intro-hint span {
-    display: block;
   }
 
   .hold-hint {

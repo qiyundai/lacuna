@@ -80,11 +80,10 @@
 
 <section class="timeline story-page" aria-label="Your thoughts">
   <header class="story-heading">
-    <p class="whisper">your words, in their own time</p>
-    <h1>The things you’ve held.</h1>
+    <h1>Your journal</h1>
     {#if storyStore.data?.summary.total}
       <p class="quiet">{storyStore.data.summary.total} {storyStore.data.summary.total === 1 ? 'thought' : 'thoughts'} gathered{#if storyStore.data.summary.first_at} since {dateLabel(storyStore.data.summary.first_at, { month: 'long', year: 'numeric' })}{/if}.</p>
-    {:else}<p class="quiet">A place to return to what you meant.</p>{/if}
+    {/if}
   </header>
   <div class="archive-controls">
     <div class="filters" aria-label="Filter thoughts">
@@ -104,8 +103,8 @@
   {:else if !entries.length}
     <div class="empty-story">
       <span class="seed" aria-hidden="true">✧</span>
-      <p>{filtered ? 'No thoughts here yet.' : 'Every story begins with a fragment.'}</p>
-      <p class="quiet">{query ? 'Try another word, or clear your search.' : kept ? 'Open a thought and choose “keep close” to find it here.' : 'Return to the void. Write what’s here, then hold to let it settle.'}</p>
+      <p>{filtered ? 'No thoughts here yet.' : 'Your journal is ready.'}</p>
+      <p class="quiet">{query ? 'Try another word, or clear your search.' : kept ? 'Open a thought and choose “keep close” to find it here.' : 'Write a thought in town to meet its resident. Your original words will appear here.'}</p>
       {#if entriesStore.status === 'error'}<button onclick={loadEntries}>try loading again</button>{/if}
     </div>
   {:else}

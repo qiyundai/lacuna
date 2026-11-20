@@ -1,7 +1,9 @@
 // Browser-native vault. No network calls, persisted keys, or readable journal records.
 import type { EntryData, MemoirEdition, ModelWeights, StoryData } from './api.js';
+import type { RiverClock } from '../../../shared/river.js';
 
 export interface WebJournal {
+  river?: RiverClock;
   format: 'lacuna.web-journal.v1'; revision: number; entries: EntryData[];
   memoirs: MemoirEdition[]; weights: ModelWeights; graph: StoryData['graph'];
 }

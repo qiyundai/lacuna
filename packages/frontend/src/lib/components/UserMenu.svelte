@@ -81,8 +81,6 @@
     return () => { overlayStore.open = false; };
   });
 
-  // Escapes transformed ancestors (space-container uses translateY, which
-  // traps position:fixed children). Appending to body restores true fixed.
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -92,7 +90,7 @@
   onclick={toggle}
   aria-label="Menu"
   aria-expanded={open}
->···</button>
+>Menu</button>
 
 {#if open}
   <div
@@ -107,18 +105,20 @@
     onkeydown={(e) => { if (e.key === 'Escape') close(); }}
   >
     <div class="menu-content">
+      <h2>Journal settings</h2>
       <p class="menu-email">{session.user?.email}</p>
       <nav class="menu-actions">
-        <button class="menu-item" onclick={() => { open = false; confirming = false; showInfo = true; }}>what is this</button>
-        <button class="menu-item" onclick={() => { open = false; confirming = false; showPrivacy = true; }}>data & privacy</button>
-        <button class="menu-item" onclick={() => { open = false; showVault = true; }}>privacy & storage</button>
-        <button class="menu-item" onclick={() => { open = false; showPlan = true; }}>{isCompanion ? 'AI & ChatGPT plan' : 'about AI reflections'}</button>
-        <button class="menu-item" onclick={() => { open = false; showExport = true; }}>take your words with you</button>
-        <button class="menu-item" onclick={handleSignOut}>{isCompanion ? 'sign out' : 'lock this space'}</button>
+        <button class="menu-item" onclick={() => { open = false; confirming = false; showInfo = true; }}>About Lacuna</button>
+        <button class="menu-item" onclick={() => { open = false; confirming = false; showPrivacy = true; }}>Data and privacy</button>
+        <button class="menu-item" onclick={() => { open = false; showVault = true; }}>Privacy &amp; storage</button>
+        <button class="menu-item" onclick={() => { open = false; showPlan = true; }}>{isCompanion ? 'AI & ChatGPT plan' : 'AI reflections'}</button>
+        <button class="menu-item" onclick={() => { open = false; showExport = true; }}>Export journal</button>
+        <button class="menu-item" onclick={handleSignOut}>{isCompanion ? 'Sign out' : 'Lock journal'}</button>
         <button class="menu-item danger" disabled={deleting} onclick={handleDelete}>
-          {confirming ? 'confirm journal deletion' : isCompanion ? 'delete account' : 'delete this browser journal'}
+          {confirming ? 'Confirm journal deletion' : isCompanion ? 'Delete account' : 'Delete this browser journal'}
         </button>
       </nav>
+      <button class="atlas-link" onclick={close}>Close settings</button>
       {#if confirming}<p class="deletion-scope">{isCompanion ? 'This removes the active server account, cloud copy, and this computer’s vault and encrypted conflict backups.' : 'This removes the journal and encrypted restore backups in this browser.'} It cannot be undone here. Downloaded files and other devices are separate. Download a backup first if you want to keep your words.</p>{/if}
       {#if error}<p role="alert">{error}</p>{/if}
     </div>
@@ -133,29 +133,6 @@
 
 <style>
   .deletion-scope { max-width: 40ch; text-align: center; line-height: 1.8; color: var(--void-text-dim); font-size: .85rem; padding: 0 1rem; }
-  .trigger {
-    position: absolute;
-    top: 1.25rem;
-    right: 1.25rem;
-    z-index: 20;
-    background: none;
-    border: none;
-    color: var(--void-text-faint);
-    font-family: var(--font-serif);
-    font-size: 1rem;
-    letter-spacing: 0.1em;
-    cursor: pointer;
-    padding: 0.4rem;
-    line-height: 1;
-    transition: color 0.3s ease;
-  }
-
-  .trigger:hover,
-  .trigger:focus {
-    color: var(--void-text-dim);
-    outline: none;
-  }
-
   .screen-overlay {
     position: fixed;
     inset: 0;
@@ -170,63 +147,11 @@
     cursor: pointer;
   }
 
-  /* ── Menu ─────────────────────────────────── */
-
-  .menu-content {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3rem;
-    cursor: default;
-  }
-
-  .menu-email {
-    color: var(--void-text-faint);
-    font-family: var(--font-serif);
-    font-size: 0.72rem;
-    letter-spacing: 0.06em;
-    margin: 0;
-  }
-
-  .menu-actions {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2rem;
-  }
-
-  .menu-item {
-    background: none;
-    border: none;
-    color: var(--void-text-dim);
-    font-family: var(--font-serif);
-    font-size: 1.15rem;
-    letter-spacing: 0.06em;
-    cursor: pointer;
-    padding: 0;
-    opacity: 0.6;
-    transition: opacity 0.3s ease, color 0.3s ease;
-  }
-
-  .menu-item:hover,
-  .menu-item:focus {
-    opacity: 1;
-    color: var(--void-text);
-    outline: none;
-  }
-
-  .menu-item.danger {
-    color: rgba(220, 110, 100, 0.65);
-    font-size: 0.88rem;
-    letter-spacing: 0.08em;
-  }
-
-  .menu-item.danger:hover,
-  .menu-item.danger:focus {
-    color: rgba(220, 110, 100, 1);
-    opacity: 1;
-  }
-
+  .screen-overlay{overflow:auto;align-items:safe center;background:var(--field);padding:22px}
+  .menu-content{width:min(100%,30rem);margin:auto;display:grid;gap:.8rem;cursor:default}
+  h2{font:400 2.65rem/1.1 var(--font-reading);letter-spacing:-.05em}
+  .menu-email{color:var(--muted);font:.9rem var(--font-ui)}
+  .menu-actions{display:grid;margin:.75rem 0;border-top:1px solid var(--line)}
+  .menu-item{font:500 1rem var(--font-ui);min-height:48px;padding:.6rem .2rem;text-align:left;color:var(--ink);background:transparent;border:0;border-bottom:1px solid var(--line);cursor:pointer}
+  .menu-item:hover{color:var(--river);background:var(--paper)}.menu-item.danger{color:var(--void-danger)}
 </style>

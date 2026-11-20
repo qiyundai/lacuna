@@ -6,13 +6,12 @@
   import Timeline from './Timeline.svelte';
   import SoulMap from './SoulMap.svelte';
   import LivingMemoir from './LivingMemoir.svelte';
-  import UserMenu from './UserMenu.svelte';
   import { overlayStore } from '$lib/stores/overlay.svelte.js';
   import { api, isCompanion } from '$lib/api.js';
   import { loadAI } from '$lib/stores/ai.svelte.js';
   import { loadStory } from '$lib/stores/story.svelte.js';
 
-  let { onSwipeUp, active = false }: { onSwipeUp: () => void; active?: boolean } = $props();
+  let { active = false, initial=0 }: { active?: boolean; initial?:0|1|2 } = $props();
 
   type View = 0 | 1 | 2; // 0=Timeline, 1=SoulMap, 2=LivingMemoir
   let currentView = $state<View>(0);
@@ -34,6 +33,7 @@
   });
 
   onMount(() => {
+    currentView=initial;
     loadEntries();
     loadPatterns();
     loadMemoir();
@@ -68,14 +68,6 @@
   role="region"
   aria-label="Your story"
 >
-  <UserMenu />
-
-  <!-- Up hint -->
-  <button class="up-hint" onclick={onSwipeUp} aria-label="Return to void">
-    <span>↑</span>
-  </button>
-
-  <!-- View container -->
   <div class="views" style="transform: translateX(-{currentView * 100}vw)">
     <div class="view" inert={currentView !== 0}><Timeline /></div>
     {#if isCompanion}
@@ -85,7 +77,7 @@
   </div>
 
   <!-- Dot indicators -->
-  <div class="dots">
+  {#if isCompanion}<div class="dots">
     {#each isCompanion ? [0, 1, 2] : [0] as i}
       <button
         class="dot"
@@ -95,7 +87,7 @@
         aria-current={currentView === i ? 'page' : undefined}
       >{i === 0 ? 'your words' : labels[i]}</button>
     {/each}
-  </div>
+  </div>{/if}
 </div>
 
 <style>
@@ -125,25 +117,6 @@
     height: 100%;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-  }
-
-  .up-hint {
-    position: absolute;
-    top: var(--space-5);
-    left: 50%;
-    transform: translateX(-50%);
-    background: none;
-    border: none;
-    color: var(--void-text-faint);
-    font-size: var(--text-md);
-    cursor: pointer;
-    z-index: 10;
-    padding: var(--space-2);
-  }
-
-  @keyframes bob-up {
-    0%, 100% { transform: translateX(-50%) translateY(0); }
-    50%       { transform: translateX(-50%) translateY(-4px); }
   }
 
   .dots {

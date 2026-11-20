@@ -2,63 +2,36 @@
   import { swipeDetector } from '$lib/gesture.js';
   import Void from '$lib/components/Void.svelte';
   import DownSpace from '$lib/components/DownSpace.svelte';
+  import JournalCity from '$lib/components/JournalCity.svelte';
 
-  let inDownSpace = $state(false);
-  let transitioning = $state(false);
+  import Masthead from '$lib/components/Masthead.svelte';
+  import UserMenu from '$lib/components/UserMenu.svelte';
 
-  function goDown() {
-    if (transitioning || inDownSpace) return;
-    transitioning = true;
-    inDownSpace = true;
-    setTimeout(() => (transitioning = false), 650);
-  }
-
-  function goUp() {
-    if (transitioning || !inDownSpace) return;
-    transitioning = true;
-    inDownSpace = false;
-    setTimeout(() => (transitioning = false), 650);
-  }
+  let busy=$state(false);
+  let view=$state<'town'|'journal'|'quiet'>('town');
+  let section=$state<0|1|2>(0);
+  function archive(next:0|1|2){section=next;view='journal';}
+  const journal=()=>archive(0);
+  const quiet=()=>{view='quiet';};
+  const town=()=>{view='town';};
 </script>
-
-<div
-  class="space-container"
-  class:down={inDownSpace}
-  use:swipeDetector={{ onSwipeDown: goDown, onSwipeUp: goUp }}
->
-  <div class="space-panel void-panel" inert={inDownSpace}>
-    <Void onSwipeDown={goDown} active={!inDownSpace} />
-  </div>
-  <div class="space-panel down-panel" inert={!inDownSpace}>
-    <DownSpace onSwipeUp={goUp} active={inDownSpace} />
+<div class="application">
+  <Masthead>
+    <button aria-current={view==='town'?'page':undefined} disabled={busy} onclick={town}>City</button>
+    <button aria-current={view==='journal'?'page':undefined} disabled={busy} onclick={journal}>Journal</button>
+    <button aria-current={view==='quiet'?'page':undefined} disabled={busy} onclick={quiet}>Quiet writing</button>
+    <UserMenu />
+  </Masthead>
+  <div class="work-area">
+    {#if view==='town'}<JournalCity bind:busy/>
+    {:else}
+      <div class="page" use:swipeDetector={{onSwipeDown:journal,onSwipeUp:town}}>
+        {#if view==='quiet'}<Void onSwipeDown={journal}/>{:else}<DownSpace active initial={section}/>{/if}
+      </div>
+    {/if}
   </div>
 </div>
-
 <style>
-  .space-container {
-    position: fixed;
-    inset: 0;
-    height: 200vh;
-    height: 200dvh;
-    transition: transform 0.65s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    will-change: transform;
-  }
-
-  .space-container.down {
-    transform: translateY(-50%);
-  }
-
-  .space-panel {
-    position: absolute;
-    width: 100%;
-    height: 50%; /* 50% of 200dvh = 100dvh */
-  }
-
-  .void-panel {
-    top: 0;
-  }
-
-  .down-panel {
-    top: 50%;
-  }
+  .application{height:100%;display:grid;grid-template-rows:var(--mast-height) minmax(0,1fr)}
+  .work-area,.page{position:relative;height:100%;min-height:0}
 </style>

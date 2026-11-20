@@ -1,5 +1,7 @@
+import { attachPresence, remember, reviseThread } from '../../../shared/village.js';
 import { browserVault, WebVault, WebVaultError, announceBrowserLock } from './web-vault.js';
 import type { EntryData } from './api.js';
+import { canSettle, isSettlement, morning, nextMorning, population } from '../../../shared/river.js';
 
 function page<T extends { id: string }>(items: T[], cursor: string | null, kind: string, limit: number) {
   let offset = 0;
@@ -16,6 +18,23 @@ export async function webRequest(path: string, method = 'GET', value?: unknown, 
   if (path === '/auth/account' && method === 'DELETE') { await vault.remove(); announceBrowserLock(); return { ok: true }; }
   const data = vault.read(), url = new URL(path, 'https://local.invalid'), body = value as Record<string, unknown>;
   const timestamp = Math.floor(Date.now() / 1000);
+  if (path === '/village' && method === 'GET') return {entries:data.entries};
+  if (path === '/village/thread' && method === 'POST') return vault.update(journal => reviseThread(journal.entries,body));
+  if (path === '/village/encounter' && method === 'POST') return vault.update(journal => remember(journal.entries, body));
+  if(path === '/town' && method === 'GET') {
+    if(data.river) return { entries:data.entries, clock:morning(data,timestamp) };
+    return vault.update(journal=>{
+      journal.river ??= morning(journal,timestamp);
+      return {entries:journal.entries,clock:morning(journal,timestamp)};
+    });
+  }
+  if(path === '/town/day' && method === 'POST') {
+    if(!Number.isSafeInteger(body?.day)) throw new WebVaultError('BAD_DAY','Choose the current town day.');
+    return vault.update(journal=>{
+      journal.river=nextMorning(journal,Number(body.day),timestamp);
+      return {entries:journal.entries,clock:journal.river};
+    });
+  }
   if (url.pathname === '/entries' && method === 'GET') {
     const query = url.searchParams.get('q') ?? '';
     const entries = data.entries.filter(e => e.body.toLowerCase().includes(query.toLowerCase()) && (url.searchParams.get('kept') !== '1' || e.kept_at !== null)).sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id));
@@ -31,6 +50,12 @@ export async function webRequest(path: string, method = 'GET', value?: unknown, 
       const existing = journal.entries.find(e => e.id === body.entry_id);
       if (existing) { if (existing.body !== body.body) throw new WebVaultError('ENTRY_CONFLICT', 'This thought ID already belongs to a different thought.'); return { entry: existing }; }
       const entry: EntryData = { id: body.entry_id as string, user_id: owner, body: body.body as string, created_at: timestamp, solidified_at: body.solidified_at as number, kept_at: null };
+      if(body.settlement !== undefined){
+        if(!isSettlement(body.settlement) || !canSettle(population(journal.entries),body.settlement)) throw new WebVaultError('SITE_TAKEN','Choose a site with room for this trade.');
+        entry.settlement = {site:body.settlement.site,trade:body.settlement.trade};
+      }
+      journal.river=morning(journal,timestamp);
+      if(body.city !== true)attachPresence(journal.entries, entry);
       journal.entries.push(entry); return { entry };
     });
   }
@@ -38,7 +63,7 @@ export async function webRequest(path: string, method = 'GET', value?: unknown, 
   if (entry && (method === 'DELETE' && !entry[2] || method === 'PATCH' && entry[2])) return vault.update(journal => {
     const index = journal.entries.findIndex(e => e.id === entry[1]);
     if (index < 0) throw new WebVaultError('NOT_FOUND', 'This thought is no longer in the archive.');
-    if (method === 'DELETE') { journal.entries.splice(index, 1); journal.memoirs = []; journal.weights = {}; journal.graph = { nodes: [], processed_count: 0 }; return { ok: true }; }
+    if (method === 'DELETE') { journal.river=morning(journal,timestamp); journal.entries.splice(index, 1); journal.memoirs = []; journal.weights = {}; journal.graph = { nodes: [], processed_count: 0 }; return { ok: true }; }
     if (typeof body?.kept !== 'boolean') throw new WebVaultError('BAD_REQUEST', 'Choose whether to keep this thought close.');
     journal.entries[index].kept_at = body.kept ? journal.entries[index].kept_at ?? timestamp : null;
     return { entry: journal.entries[index] };

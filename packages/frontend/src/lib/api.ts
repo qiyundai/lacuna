@@ -1,4 +1,6 @@
+import type { Trace, VillageEntry } from '../../../shared/village.js';
 import { sessionVersion } from './session-version.js';
+import type { RiverClock, Settlement } from '../../../shared/river.js';
 export const isCompanion = typeof document !== 'undefined' && document.querySelector('meta[name="lacuna-companion"]') !== null;
 export const isBrowserApp = typeof document !== 'undefined' && !isCompanion;
 const BASE = isCompanion ? '/api' : import.meta.env.VITE_API_URL ?? (
@@ -33,20 +35,32 @@ async function request<T>(
 }
 
 export const api = {
+  village: {
+    get: () => request<{entries: EntryData[]}>('/village'),
+    revise: (entry:string,separate:boolean) => request<{entries:EntryData[]}>('/village/thread',{method:'POST',body:JSON.stringify({entry,separate})}),
+    remember: (entry: string, action: Trace) => request<{entries: EntryData[]}>('/village/encounter', {method: 'POST', body: JSON.stringify({entry,action})})
+  },
+  town: {
+    get: () => request<{ entries: EntryData[]; clock: RiverClock }>('/town'),
+    nextDay: (day: number) => request<{ entries: EntryData[]; clock: RiverClock }>('/town/day', { method: 'POST', body: JSON.stringify({ day }) })
+  },
   auth: {
     logout: () => request<{ ok: boolean; revoked: boolean; openaiRevoked: boolean }>('/auth/logout', { method: 'POST' }),
     deleteAccount: () =>
       request<{ ok: boolean }>('/auth/account', { method: 'DELETE' }),
+  },
+  city: {
+    write: (body:string, solidified_at:number, entry_id:string) => request<{entry:EntryData}>('/entries', {method:'POST',body:JSON.stringify({body,solidified_at,entry_id,city:true})}),
   },
   entries: {
     list: (cursor?: string, filter: { query?: string; kept?: boolean } = {}) =>
       request<{ entries: EntryData[]; nextCursor: string | null }>(
         `/entries?${new URLSearchParams({ ...(cursor ? { cursor } : {}), ...(filter.query ? { q: filter.query } : {}), ...(filter.kept ? { kept: '1' } : {}) })}`
       ),
-    create: (body: string, solidified_at: number, entry_id: string) =>
+    create: (body: string, solidified_at: number, entry_id: string, settlement?: Settlement) =>
       request<{ entry: EntryData }>('/entries', {
         method: 'POST',
-        body: JSON.stringify({ body, solidified_at, entry_id }),
+        body: JSON.stringify({ body, solidified_at, entry_id, settlement }),
       }),
     delete: (id: string) =>
       request<{ ok: boolean }>(`/entries/${id}`, { method: 'DELETE' }),
@@ -74,7 +88,8 @@ export const api = {
   },
 };
 
-export interface EntryData {
+export interface EntryData extends VillageEntry {
+  settlement?: Settlement;
   id: string;
   user_id: string;
   body: string;

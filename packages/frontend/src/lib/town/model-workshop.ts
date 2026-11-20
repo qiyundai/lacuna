@@ -1,0 +1,123 @@
+import * as T from 'three';
+import { paintMaterial, type Gouache } from './gouache.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { finishBuilding } from './surface-relief.js';
+
+export const colors = {
+  stone: '#c4a78a', lintel: '#dfcbb0', shade: '#9a7969', plaster: '#bd8162',
+  copper: '#487c77', seam: '#78a19a', gold: '#b29461',
+  iron: '#3e5457', glass: '#50666c', seaGlass: '#8da9a7', amber: '#d59b56', glow: '#f2c88a',
+  wood: '#674b3c', recess: '#363a39', slate: '#505b5a', clay: '#a96450',
+  ochre: '#cd9d66', sage: '#93a797', chalk: '#d5c1a6', oxblood: '#97594e',
+  foliage: '#526d55', zinc: '#6d8390', verdigris: '#92aba0', crystal: '#b3d4c9'
+} as const;
+export type Pigment = keyof typeof colors;
+type Finish = 'mineral' | 'metal' | 'glazing' | 'crystal' | 'light';
+const surfaceKinds: Partial<Record<Pigment, number>> = {
+  plaster:1, ochre:1, sage:1, chalk:1, oxblood:1, stone:2, shade:2, lintel:2, slate:3, clay:3
+};
+
+function sculpt(width: number, depth: number, boxShape: T.BufferGeometry, rodShape: T.BufferGeometry, sphere: T.BufferGeometry) {
+  const batches: Record<Finish, T.BufferGeometry[]> = { mineral: [], metal: [], glazing: [], crystal: [], light: [] };
+  let frame = new T.Matrix4();
+  const thresholds: T.Object3D[] = [];
+  function entrance(x: number, y: number, z: number, heading = 0) {
+    const marker = new T.Object3D();
+    marker.name = 'Door threshold';
+    const transform = new T.Matrix4().makeRotationY(heading).setPosition(x,y,z);
+    transform.premultiply(frame).decompose(marker.position, marker.quaternion, marker.scale);
+    thresholds.push(marker);
+  }
+  const vec = (x: number, y: number, z: number) => new T.Vector3(x, y, z);
+  function place(shape: T.BufferGeometry, color: Pigment, transform: T.Matrix4) {
+    const geometry = shape.clone().applyMatrix4(transform.premultiply(frame));
+    geometry.deleteAttribute('uv');
+    const tint = new T.Color(colors[color]);
+    const rgb = new Float32Array(geometry.getAttribute('position').count * 3);
+    const positions = shape.getAttribute('position');
+    const glazing = color === 'glass' || color === 'seaGlass';
+    const pane = glazing || color === 'amber' || color === 'glow';
+    for (let i = 0; i < positions.count; i++) {
+      const lift = pane ? 1 - .32 * (positions.getY(i) + .5) + .12 * positions.getX(i) : 1;
+      rgb[i * 3] = tint.r * lift;
+      rgb[i * 3 + 1] = tint.g * lift;
+      rgb[i * 3 + 2] = tint.b * lift;
+    }
+    geometry.setAttribute('color', new T.BufferAttribute(rgb, 3));
+    const finish = color === 'glow' || color === 'amber' ? 'light'
+      : glazing ? 'glazing' : color === 'crystal' ? 'crystal' : ['copper', 'seam', 'gold', 'iron'].includes(color) ? 'metal' : 'mineral';
+    if(finish==='mineral') geometry.setAttribute('surfaceKind',new T.BufferAttribute(new Float32Array(positions.count).fill(surfaceKinds[color]??0),1));
+    batches[finish].push(geometry);
+  }
+  function box(c: Pigment, x: number, y: number, z: number, w: number, h: number, d: number) {
+    place(boxShape, c, new T.Matrix4().makeScale(w, h, d).setPosition(x, y, z));
+  }
+  function rod(c: Pigment, a: T.Vector3, b: T.Vector3, r: number) {
+    const axis = b.clone().sub(a);
+    const rotation = new T.Quaternion().setFromUnitVectors(vec(0, 1, 0), axis.clone().normalize());
+    place(rodShape, c, new T.Matrix4().compose(a.clone().lerp(b, .5), rotation, vec(r, axis.length(), r)));
+  }
+  function orb(c: Pigment, x: number, y: number, z: number, r: number) {
+    place(sphere, c, new T.Matrix4().makeScale(r, r, r).setPosition(x, y, z));
+  }
+  function relief(c: Pigment, path: T.Shape, thickness: number, x: number, y: number, z: number) {
+    const g = new T.ExtrudeGeometry(path, { depth: thickness, bevelEnabled: false, curveSegments: 12 });
+    place(g, c, new T.Matrix4().makeTranslation(x, y, z));
+    g.dispose();
+  }
+  function face(side: number, fn: () => void, reach = side % 2 ? width / 2 : depth / 2) {
+    const previous = frame;
+    const angle = side * Math.PI / 2;
+    frame = previous.clone().multiply(new T.Matrix4().makeRotationY(angle))
+      .multiply(new T.Matrix4().makeTranslation(0, 0, reach));
+    fn();
+    frame = previous;
+  }
+  return { batches, thresholds, entrance, vec, box, rod, orb, relief, face, place };
+}
+
+export type ModelTools = ReturnType<typeof sculpt>;
+
+export function createModelWorkshop(width: number, depth: number, paint?: Gouache) {
+  const finishes = {
+    mineral: new T.MeshStandardMaterial({ vertexColors: true, roughness: .84 }),
+    metal: new T.MeshStandardMaterial({ vertexColors: true, metalness: .38, roughness: .54 }),
+    glazing: new T.MeshStandardMaterial({ vertexColors: true, metalness: .24, roughness: .22 }),
+    crystal: new T.MeshStandardMaterial({vertexColors:true, transparent:true, opacity:.34, depthWrite:false, roughness:.24}),
+    light: new T.MeshBasicMaterial({ vertexColors: true })
+  };
+  if (paint?.relief) finishBuilding(finishes.mineral,paint.relief);
+  if (paint) {
+    paintMaterial(finishes.mineral, paint);
+    paintMaterial(finishes.metal, paint);
+  }
+  const boxShape = new T.BoxGeometry(1, 1, 1).toNonIndexed();
+  const rodShape = new T.CylinderGeometry(1, 1, 1, 10).toNonIndexed();
+  const sphere = new T.SphereGeometry(1, 12, 8).toNonIndexed();
+  const meshes: T.BufferGeometry[] = [];
+
+  function module(build: (parts: ReturnType<typeof sculpt>) => void) {
+    const parts = sculpt(width, depth, boxShape, rodShape, sphere);
+    build(parts);
+    const group = new T.Group();
+    for (const [finish, pieces] of Object.entries(parts.batches)) {
+      if (!pieces.length) continue;
+      const geometry = mergeGeometries(pieces)!;
+      pieces.forEach(piece => piece.dispose());
+      meshes.push(geometry);
+      const mesh = new T.Mesh(geometry, finishes[finish as Finish]);
+      mesh.castShadow = finish !== 'crystal';
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    }
+    for (const threshold of parts.thresholds) group.add(threshold);
+    return group;
+  }
+
+  return { module, boxShape,
+    dispose() {
+      for (const g of [boxShape, rodShape, sphere, ...meshes]) g.dispose();
+      for (const material of Object.values(finishes)) material.dispose();
+    }
+  };
+}

@@ -1,6 +1,8 @@
+import { attachPresence, remember, reviseThread } from '../../shared/village.ts';
 import { PlanError } from './openai.mjs';
 import { validGraph, validWeights } from '../../worker/src/ai/validation.ts';
 import { validResult } from '../../worker/src/ai/pipeline.ts';
+import { canSettle, isSettlement, morning, nextMorning, population } from '../../shared/river.ts';
 
 const error = (message) => { throw new PlanError('BAD_REQUEST', message); };
 const now = () => Math.floor(Date.now() / 1000);
@@ -53,6 +55,23 @@ function page(items, url, owner, kind, size) {
 }
 export async function journalRequest(vault, path, method, value, url) {
   const d = vault.read();
+  if (path === '/village' && method === 'GET') return {entries:d.entries};
+  if (path === '/village/thread' && method === 'POST') return vault.update(journal => reviseThread(journal.entries,value));
+  if (path === '/village/encounter' && method === 'POST') return vault.update(journal => remember(journal.entries, value));
+  if(path === '/town' && method === 'GET'){
+    if(d.river) return {entries:d.entries,clock:morning(d,now())};
+    return vault.update(data=>{
+      data.river ??= morning(data,now());
+      return {entries:data.entries,clock:morning(data,now())};
+    });
+  }
+  if(path === '/town/day' && method === 'POST'){
+    if(!Number.isSafeInteger(value?.day)) error('Choose the current town day.');
+    return vault.update(data=>{
+      data.river=nextMorning(data,value.day,now());
+      return {entries:data.entries,clock:data.river};
+    });
+  }
   if (path === '/entries' && method === 'GET') {
     const query = url.searchParams.get('q') ?? '';
     if (query.length > 200) error('Search must be at most 200 characters.');
@@ -69,6 +88,12 @@ export async function journalRequest(vault, path, method, value, url) {
       const existing = data.entries.find(e => e.id === value.entry_id);
       if (existing) { if (existing.body !== value.body) error('This thought ID was already used.'); return { entry: existing }; }
       const entry = { id: value.entry_id, user_id: vault.owner, body: value.body, created_at: now(), solidified_at: value.solidified_at, kept_at: null };
+      if(value.settlement !== undefined){
+        if(!isSettlement(value.settlement) || !canSettle(population(data.entries),value.settlement)) error('Choose a site with room for this trade.');
+        entry.settlement = {site:value.settlement.site,trade:value.settlement.trade};
+      }
+      data.river=morning(data,now());
+      if(value.city !== true)attachPresence(data.entries, entry);
       data.entries.push(entry); data.version++; return { entry };
     });
   }
@@ -78,7 +103,7 @@ export async function journalRequest(vault, path, method, value, url) {
     return vault.update(data => {
       const index = data.entries.findIndex(e => e.id === match[1]);
       if (index < 0) throw new PlanError('NOT_FOUND', 'Thought not found.');
-      if (method === 'DELETE') { data.entries.splice(index, 1); data.version++; clearDerived(data); return { ok: true }; }
+      if (method === 'DELETE') { data.river=morning(data,now()); data.entries.splice(index, 1); data.version++; clearDerived(data); return { ok: true }; }
       data.entries[index].kept_at = value.kept ? data.entries[index].kept_at ?? now() : null;
       return { entry: data.entries[index] };
     });

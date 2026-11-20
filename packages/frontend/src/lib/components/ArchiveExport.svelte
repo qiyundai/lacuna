@@ -23,16 +23,15 @@
 </script>
 {#if show}
   <div class="export-screen" use:modal={{ dismiss: () => show = false }} role="dialog" aria-modal="true" aria-label="Take your words with you" tabindex="-1" onclick={e => { if (e.target === e.currentTarget) show = false; }} onkeydown={e => { if (e.key === 'Escape') show = false; }} transition:fade={{ duration: 400 }}>
-    <div class="export-content">
-      <span class="seed" aria-hidden="true">✧</span>
-      <h2>Your words belong to you.</h2>
+    <div class="export-content journal-sheet">
+      <h2>Export journal</h2>
       <p>Take a copy of every saved thought and every memoir edition. These downloads are readable plaintext, outside your encrypted vault. Anyone who can open the file can read it. Keep it somewhere private.</p>
-      <button disabled={busy} onclick={() => take('markdown')}>a readable book · Markdown</button>
-      <button disabled={busy} onclick={() => take('json')}>the complete archive · JSON</button>
+      <button disabled={busy} onclick={() => take('markdown')}>A readable book · Markdown</button>
+      <button disabled={busy} onclick={() => take('json')}>The complete archive · JSON</button>
       <p class="quiet">The complete archive also includes your concept map and generated reflections.</p>
       {#if done}<p role="status" class="quiet">Your archive is ready in your downloads.</p>{/if}
       {#if error}<p role="alert">{error}</p>{/if}
-      <button class="return" onclick={() => show = false}>return</button>
+      <button class="return" onclick={() => show = false}>Return</button>
     </div>
   </div>
 {/if}
