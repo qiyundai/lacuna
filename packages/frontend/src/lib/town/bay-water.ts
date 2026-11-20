@@ -52,34 +52,59 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
     uniform highp sampler2DShadow shadowDepth;
     uniform float clock;
     ${afterglow?sunbreak:''}
+    float cellValue(vec2 cell){
+      vec3 h=fract(vec3(cell.xyx)*vec3(.1031,.1030,.0973));
+      h+=dot(h,h.yzx+33.33);
+      return fract((h.x+h.y)*h.z);
+    }
+    float flowNoise(vec2 p){
+      vec2 cell=floor(p),f=fract(p);
+      f=f*f*(3.-2.*f);
+      return mix(mix(cellValue(cell),cellValue(cell+vec2(1.,0.)),f.x),
+                 mix(cellValue(cell+vec2(0.,1.)),cellValue(cell+1.),f.x),f.y);
+    }
     void main(){
       vec2 p=surface.xz;
       vec3 eye=cameraPosition-surface;
       float range=length(eye);eye/=range;
-      vec2 warped=p+2.8*sin(p.yx*.058+sin(p*.027))+1.7*cos(p*vec2(.078,.052));
-      vec2 swell=vec2(.031,.051)*cos(dot(warped,vec2(.32,.60))-clock*.89)
-                +vec2(-.039,.026)*cos(dot(warped,vec2(-.63,.42))-clock*1.18);
-      vec2 cap=(texture2D(slopes,p*.114+clock*vec2(.009,-.021)).rg-.5)*.38;
-      vec2 crossSea=(texture2D(slopes,vec2(p.y,-p.x)*.24+clock*vec2(-.023,.015)).gr-.5)*vec2(-.13,.13);
-      vec2 slope=(swell+cap+crossSea)*(1.-.94*smoothstep(105.,480.,range));
-      vec3 n=normalize(vec3(slope.x,1.,slope.y));
-      vec3 varyNormal=mat3(viewMatrix)*vec3(n.x,0.,n.z);
-      vec2 uv=vUv.xy/vUv.w;
-      float fresnel=.024+.92*pow(1.-clamp(dot(eye,n),0.,1.),4.);
-      vec2 distortion=varyNormal.xy*vec2(.096,.17)*min(1.,24./max(range,1.))+.032*n.z*vec2(0.,1.);
-      distortion*=1.-smoothstep(160.,1100.,range);
-      vec3 reflected=texture2D(tDiffuse,clamp(uv+distortion,.001,.999)).rgb;
       float station=${valleyOrigin.z}.-p.y;
       float edge=8.+19.*sin(station*.012+.65)+8.*sin(station*.029)-2.4*cos(station*.056);
+      float width=24.+5.*sin(station*.017)+4.*cos(station*.031);
       float shore=p.x-${valleyOrigin.x}.-edge;
+      float bankDistance=min(shore,width-shore);
+      float channel=smoothstep(-.5,width*.44,bankDistance);
+      float bend=.228*cos(station*.012+.65)+.232*cos(station*.029)+.1344*sin(station*.056);
+      vec2 downstream=normalize(vec2(bend,-1.)),across=vec2(-downstream.y,downstream.x);
+      vec2 reach=vec2(shore,station);
+      float breeze=flowNoise(reach*vec2(.083,.039)-vec2(.014,.028)*clock);
+      vec2 field=vec2(flowNoise(reach*vec2(.12,.061)+vec2(9.,-clock*.034)),
+                      flowNoise(reach*vec2(.089,.074)+vec2(clock*.018,31.)))-.5;
+      vec2 drift=reach+vec2(3.8,5.6)*field;
+      vec2 slowUv=vec2(drift.x*.074+drift.y*.028,drift.y*.105)-vec2(.012,.038)*clock;
+      vec2 fastUv=vec2(drift.x*.133-drift.y*.053,drift.y*.162+drift.x*.081)-vec2(-.017,.105)*clock;
+      vec2 sheltered=texture2D(slopes,slowUv).rg-.5;
+      vec2 current=texture2D(slopes,fastUv+field.yx*.62).rg-.5;
+      float riffle=channel*smoothstep(.22,.77,breeze);
+      vec2 fine=sheltered*vec2(.18,.23)+riffle*current*vec2(.35,.52);
+      float swell=.060*(.32+riffle)*sin(drift.y*.51+drift.x*.23+6.*field.x-clock*.66);
+      float footprint=max(length(dFdx(p)),length(dFdy(p)));
+      vec2 detail=(across*fine.x+downstream*fine.y)*(1.-smoothstep(.4,2.7,footprint));
+      vec2 slope=detail+(downstream*swell+across*field.x*.035)*(1.-smoothstep(2.,9.,footprint));
+      vec3 n=normalize(vec3(slope.x,1.,slope.y));
+      vec2 uv=vUv.xy/vUv.w;
+      float fresnel=.024+.92*pow(1.-clamp(dot(eye,n),0.,1.),4.);
+      vec3 reflectedBend=mat3(viewMatrix)*(reflect(-eye,n)-reflect(-eye,vec3(0.,1.,0.)));
+      vec2 distortion=reflectedBend.xy*vec2(.13,.21)*min(1.,48./max(range,1.));
+      distortion*=1.-smoothstep(160.,1100.,range);
+      vec3 reflected=texture2D(tDiffuse,clamp(uv+distortion,.001,.999)).rgb;
       float coast=(1.-smoothstep(0.,14.,max(bounds.x-station,station-bounds.y)));
-      float shallow=coast*exp(-.20*max(0.,shore))*smoothstep(-6.,-1.,shore);
-      vec3 body=mix(vec3(.017,.080,.113),vec3(.071,.245,.214),shallow);
+      float shallow=exp(-.16*max(0.,bankDistance))*(.68+.32*field.y);
+      vec3 body=mix(vec3(.017,.080,.113),vec3(.062,.171,.146),shallow);
       vec3 halfAngle=normalize(eye+sunDirection);
-      float rough=.095+.030*smoothstep(20.,140.,range);
+      float rough=.079+.045*riffle+.027*smoothstep(.25,1.9,footprint);
       float a2=rough*rough, nh=max(dot(n,halfAngle),0.);
       float denom=(1.-nh*nh)+a2*nh*nh;
-      float glint=.010*a2/max(.00001,denom*denom);
+      float glint=.0058*a2/max(.00001,denom*denom);
       vec3 sc=(shadowFrame*vec4(surface,1.)).xyz;
       float sunlight=1.;
       if(all(greaterThan(sc,vec3(0.)))&&all(lessThan(sc,vec3(1.))))
@@ -87,11 +112,9 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
       vec3 color=mix(body*(.74+.26*sunlight),reflected,clamp(fresnel+.21,0.,1.))
         +sunlight*glint*vec3(2.1,1.21,.52);
       ${afterglow?`
-      float facets=dot(cap+crossSea+swell*.3,vec2(.72,-.69));
-      float spark=sunbreakAt(surface,clock,sunDirection)*sunlight*smoothstep(.025,.085,facets);
-      color+=vec3(1.45,.97,.44)*spark;`:''}
-      float foam=coast*exp(-.98*abs(shore-1.1-.45*sin(clock*.73+p.x*.71)-cap.y*4.));
-      color=mix(color,vec3(.55,.67,.58),foam*smoothstep(.01,.12,cap.y)*.60);
+      color+=sunbreakAt(surface,clock,sunDirection)*sunlight*glint*vec3(1.45,.97,.44);`:''}
+      float foam=coast*exp(-1.9*abs(bankDistance-.5-field.x))*smoothstep(.52,.82,breeze);
+      color=mix(color,vec3(.55,.67,.58),foam*.36);
       gl_FragColor=vec4(color,1.);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>

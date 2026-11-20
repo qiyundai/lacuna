@@ -7,6 +7,7 @@ import { createBayAtmosphere } from './bay-atmosphere.js';
 import { harborWorkshop, landHeight, shoreline, siteHeading, sitePoint, type Workshop } from './harbor-workshop.js';
 import { buildingArrival } from './building-arrival.js';
 import { connectDoors, hillsidePassage, placeLot, streetFurniture, streetLine } from './harbor-streets.js';
+import { cutBuildingPlots, gardenClearance, landscapeWaterfront, loadGardenPlants } from './waterfront-gardens.js';
 import { createBayWorld } from './bay-world.js';
 import { ferryBerthOffset } from './ferry-hall.js';
 import { hashPage } from './city-growth.js';
@@ -107,15 +108,19 @@ function ferryCourse(wharf: Site) {
 
 export type ValleyView='City'|'Overlook';
 export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=>void,afterglow=false){
-  const shop = await harborWorkshop();
+  const [shop,gardens]=await Promise.all([harborWorkshop(),loadGardenPlants()]);
   const renderer=new T.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
-  const valley=await createGreenCorridor(shop.materials.heath.map!);
+  const trees=[0,1,2].map(seed=>{
+    const model=new T.Group();shop.tree(model,0,0,0,1,seed);return model;
+  });
+  const scene=new T.Scene();
+  const world=createBayWorld(scene,afterglow);
+  const valley=await createGreenCorridor(shop.materials.heath.map!,trees,renderer,world.lighting);
   renderer.localClippingEnabled=true;
   renderer.setPixelRatio(Math.min(devicePixelRatio,1.65));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFShadowMap;
   renderer.shadowMap.autoUpdate=false;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;
-  const scene=new T.Scene(),camera=new T.PerspectiveCamera(47,1,.30,valley.far);
+  const camera=new T.PerspectiveCamera(47,1,.30,valley.far);
   scene.fog=new T.FogExp2('#66827f',.00014);
-  const world = createBayWorld(scene,afterglow);
   const sea=createBayWater(world.sunDirection,world.sun,renderer.extensions.has('EXT_color_buffer_float'),afterglow),water=sea.water;
   const atmosphere=createBayAtmosphere(renderer,scene,camera,world.sun,world.sunDirection,afterglow);
   scene.add(water,valley.root);
@@ -235,7 +240,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     water.position.z=camera.position.z;
     shop.breezeTime.value=time;
     city.worldToLocal(localEye.copy(camera.position));meadow?.view();
-    valley.tick(time);sea.clock.value=time;atmosphere.render(time);
+    valley.tick(time,camera.position);sea.clock.value=time;atmosphere.render(time);
     if(!paused)schedule();
   }
   function fit(glide=false){
@@ -291,9 +296,10 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       return streetLine(neighbors,lane,Array.from(inlets,i=>edges.get(i)!));
     });
     meadow?.clearPaths();
+    const reserved=gardenClearance();
     for (const line of streets) {
       if (!line.length) continue;
-      for(const q of line)meadow?.mow(q.x,q.z,.78);
+      for(const q of line){meadow?.mow(q.x,q.z,.78);reserved.mark(q.x,q.z,1.03);}
       paths.add(streetDeck(shop,line,1.34));
       streetFurniture(shop,cluster,line);
     }
@@ -321,13 +327,18 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
         if(Math.abs(a.x-x)<.5 && Math.abs(b.x-x)<.5)hillsidePassage(shop,cluster,a,b);
       }
     }
+    function clearWalk(part:T.Object3D){
+      if(!(part instanceof T.Mesh)||part.material!==shop.materials.coping)return;
+      const radius=part.scale.x*.54;
+      meadow?.mow(part.position.x,part.position.z,radius);reserved.mark(part.position.x,part.position.z,radius+.16);
+    }
     parcels.length=0;
     for(const lot of lots) {
       const {model,site,doors}=lot;
       parcels.push({site,box:new T.Box3().setFromObject(model)});
       const access=new T.Group();
       connectDoors(shop,access,lot,streets[laneOf(site)]!);
-      access.traverse(part=>{if(part instanceof T.Mesh && part.material===shop.materials.coping)meadow?.mow(part.position.x,part.position.z,part.scale.x*.54);});
+      access.traverse(clearWalk);
       model.attach(access);
       if(reveal && site===next.latest && !paused && site.lights===0) {
         const addition=bake(model);
@@ -335,7 +346,10 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
         construction={arrival:buildingArrival(addition,model.position.y,Math.min(model.position.y-.65,...doors.map(door=>landHeight(door.exit.x,door.exit.z)))),start:time,site};
       } else cluster.add(model);
     }
-    for(const item of cluster.children)if(item instanceof T.Mesh && item.material===shop.materials.coping)meadow?.mow(item.position.x,item.position.z,item.scale.x*.54);
+    for(const item of cluster.children)clearWalk(item);
+    const grade=cutBuildingPlots(lots,reserved);
+    valley.gradeTown(grade);
+    landscapeWaterfront(shop,gardens.plants,lots,reserved,grade,parcels.map(p=>p.box),paths,cluster,structures,(x,z,r)=>meadow?.mow(x,z,r));
     structures.add(bake(cluster));
     const positions:number[]=[],radii:number[]=[];
     for(const subset of structures.children){
@@ -413,6 +427,6 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     dead=true;cancelAnimationFrame(frame);observer.disconnect();signals.abort();orbit.dispose();releaseInstances(structures);releaseInstances(scenery);
     for(const p of paths.children)if(p instanceof T.Mesh)p.geometry.dispose();
     const hull=boat.children[0];if(hull instanceof T.Mesh)hull.geometry.dispose();
-    beamGeometry.dispose();beamMaterial.dispose();wakeMat.dispose();wakeGeo.dispose();glows.geometry.dispose();glows.material.dispose();valley.dispose();atmosphere.dispose();world.dispose();sea.dispose();shop.dispose();renderer.dispose();
+    beamGeometry.dispose();beamMaterial.dispose();wakeMat.dispose();wakeGeo.dispose();glows.geometry.dispose();glows.material.dispose();valley.dispose();atmosphere.dispose();world.dispose();sea.dispose();gardens.dispose();shop.dispose();renderer.dispose();
   }};
 }

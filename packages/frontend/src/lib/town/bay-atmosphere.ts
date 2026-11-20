@@ -3,7 +3,7 @@ import {sunbreak} from './sunbreak.js';
 import {createSunlitPollen} from './sunlit-pollen.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { worldGradeMaterial } from './world-grade.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 
@@ -16,7 +16,24 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
   sun:T.DirectionalLight,direction:T.Vector3,afterglow=false){
   const hdr=renderer.extensions.has('EXT_color_buffer_float');
   if(!hdr&&!afterglow){
-    return {render(_seconds:number){renderer.render(scene,camera);},resize(_w:number,_h:number){},dispose(){}};
+    const material=worldGradeMaterial(true),quad=new FullScreenQuad(material);
+    const size=new T.Vector2();
+    let frame=new T.FramebufferTexture(1,1);
+    return {
+      render(_seconds:number){
+        renderer.render(scene,camera);
+        renderer.copyFramebufferToTexture(frame);
+        material.uniforms.tDiffuse!.value=frame;
+        quad.render(renderer);
+      },
+      resize(_w:number,_h:number){
+        renderer.getDrawingBufferSize(size);
+        if(frame.image.width===size.x && frame.image.height===size.y)return;
+        frame.dispose();
+        frame=new T.FramebufferTexture(size.x,size.y);
+      },
+      dispose(){frame.dispose();quad.dispose();material.dispose();}
+    };
   }
   const targetType=hdr?T.HalfFloatType:T.UnsignedByteType;
   const beauty=new T.WebGLRenderTarget(1,1,{type:targetType,samples:Math.min(2,renderer.capabilities.maxSamples)});
@@ -89,7 +106,7 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
         float shade=1.;
         if(all(greaterThan(sc,vec3(0.)))&&all(lessThan(sc,vec3(1.)))) shade=texture(shadowDepth,vec3(sc.xy,sc.z-.0004));
         pool*=shade*(1.-smoothstep(45.,100.,p.y));
-        return color*(1.+pool*vec3(.70,.49,.20));
+        return color*(1.+pool*vec3(.24,.17,.07));
       }`:''}
       void main(){
         vec3 lit=texture2D(beauty,screenUv).rgb;
@@ -115,7 +132,7 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
         gl_FragColor=vec4(lit+flare*visibility,1.);
       }`}));
   const composer=new EffectComposer(renderer,hdr?undefined:new T.WebGLRenderTarget(1,1,{type:targetType}));
-  const bloom=new UnrealBloomPass(new T.Vector2(1,1),afterglow ? .36 : .23,.48,afterglow ? 1.24 : 1.12),output=new OutputPass();
+  const bloom=new UnrealBloomPass(new T.Vector2(1,1),afterglow ? .36 : .23,.48,afterglow ? 1.24 : 1.12),output=new ShaderPass(worldGradeMaterial());
   composer.addPass(combine);if(hdr)composer.addPass(bloom);composer.addPass(output);
   return {
     resize(w:number,h:number){

@@ -1,4 +1,5 @@
 import * as T from 'three';
+import type { ValleyLighting } from './bay-world.js';
 import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js';
 
 const noise=new ImprovedNoise();
@@ -50,20 +51,6 @@ function* densityField(seed:number){
     }
     yield;
   }
-  for(let z=0;z<d;z++){
-    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-      const index=at(x,y,z);
-      if(!voxels[index])continue;
-      let depth=0;
-      for(let s=1;s<=20;s++){
-        const ix=x+s,iy=y+Math.round(s*.65),iz=z-Math.round(s*.48);
-        if(ix>=w||iy>=h||iz<0)break;
-        depth+=voxels[at(ix,iy,iz)]!/255;
-      }
-      voxels[index+1]=Math.round(255*Math.exp(-depth*.24));
-    }
-    yield;
-  }
   const tex=new T.Data3DTexture(voxels,w,h,d);tex.format=T.RGBAFormat;
   tex.minFilter=tex.magFilter=T.LinearFilter;tex.unpackAlignment=1;tex.needsUpdate=true;
   return tex;
@@ -75,17 +62,21 @@ function complete(field:ReturnType<typeof densityField>){
   return slice.value;
 }
 
-function cloudMaterial(volume:T.Data3DTexture){
+function cloudMaterial(volume:T.Data3DTexture,lighting:ValleyLighting){
   const clock={value:0},humidity={value:1};
-  const mat=new T.ShaderMaterial({glslVersion:T.GLSL3,uniforms:{volume:{value:volume},clock,humidity},transparent:true,
+  const mat=new T.ShaderMaterial({glslVersion:T.GLSL3,uniforms:{volume:{value:volume},clock,humidity,
+    sunDirection:{value:lighting.direction},sunColor:{value:lighting.direct}},transparent:true,
     side:T.BackSide,depthWrite:false,vertexShader:`
-      out vec3 cell;flat out vec3 eye;
-      void main(){cell=position;eye=(inverse(modelMatrix)*vec4(cameraPosition,1.)).xyz;
+      uniform vec3 sunDirection;
+      out vec3 cell;flat out vec3 eye,lightStep;
+      void main(){cell=position;mat4 local=inverse(modelMatrix);eye=(local*vec4(cameraPosition,1.)).xyz;
+        lightStep=(local*vec4(sunDirection*8.,0.)).xyz;
         gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
     fragmentShader:`
       precision highp sampler3D;
       uniform sampler3D volume;uniform float clock,humidity;uniform mat4 projectionMatrix,modelViewMatrix;
-      in vec3 cell;flat in vec3 eye;out vec4 outColor;
+      uniform vec3 sunColor;
+      in vec3 cell;flat in vec3 eye,lightStep;out vec4 outColor;
       void main(){
         vec3 ray=normalize(cell-eye),inv=1./(ray+vec3(.000001));
         vec3 a=(-.5-eye)*inv,b=(.5-eye)*inv;
@@ -106,8 +97,11 @@ function cloudMaterial(volume:T.Data3DTexture){
           if(front<0. && opacity>.0002)front=t;
           float sky=.5+.5*p.y;
           vec3 shade=vec3(.054,.086,.105)*sky;
-          float sunlight=mix(1.,pow(weather.g,1.2),condensed*humidity);
-          vec3 sun=vec3(1.18,.96,.66)*sunlight;
+          if(opacity<.00001)continue;
+          float depth=texture(volume,p+lightStep*.5).r
+            +texture(volume,p+lightStep*1.5).r+texture(volume,p+lightStep*3.).r;
+          float sunlight=exp(-depth*condensed*1.35);
+          vec3 sun=sunColor*.43*sunlight;
           light+=transmission*opacity*(shade+sun);
           transmission*=1.-opacity;
           if(transmission<.012)break;
@@ -124,11 +118,11 @@ type CloudBank={
   anchor:T.Vector3;size:T.Vector3;drift:T.Vector3;heading:number;rate:number;offset:number;
 };
 
-function cloudLayer(geometry:T.BoxGeometry,seed:number,bank:CloudBank){
+function cloudLayer(geometry:T.BoxGeometry,seed:number,bank:CloudBank,lighting:ValleyLighting){
   let generation=0;
   const seedFor=(index:number)=>(seed+Math.imul(index,0x9e3779b9))>>>0;
   let volume=complete(densityField(seed));
-  const material=cloudMaterial(volume),mesh=new T.Mesh(geometry,material);
+  const material=cloudMaterial(volume,lighting),mesh=new T.Mesh(geometry,material);
   mesh.renderOrder=3;
   const origin=new T.Vector3();
   function place(index:number){
@@ -167,14 +161,14 @@ function cloudLayer(geometry:T.BoxGeometry,seed:number,bank:CloudBank){
   return {mesh,tick,dispose(){material.dispose();volume.dispose();upcoming?.dispose();preparing=undefined;}};
 }
 
-export function createLowCloud(){
+export function createLowCloud(lighting:ValleyLighting){
   const seeds=crypto.getRandomValues(new Uint32Array(2)),geometry=new T.BoxGeometry(1,1,1);
   const near=cloudLayer(geometry,seeds[0]!,{
     anchor:new T.Vector3(121,47,-192),size:new T.Vector3(259,104,94),drift:new T.Vector3(3.6,0,0),heading:0,rate:.023,offset:.32
-  });
+  },lighting);
   const far=cloudLayer(geometry,seeds[1]!,{
     anchor:new T.Vector3(35,78,1210),size:new T.Vector3(305,77,151),drift:new T.Vector3(0,0,8),heading:2.48,rate:.013,offset:.66
-  });
+  },lighting);
   const sky=new T.Group();sky.add(near.mesh,far.mesh);
   return {cloud:sky,tick(t:number){near.tick(t);far.tick(t);},
     dispose(){near.dispose();far.dispose();geometry.dispose();}};

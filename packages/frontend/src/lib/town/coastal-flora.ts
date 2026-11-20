@@ -112,9 +112,7 @@ export async function loadCoastalTrees(materials:{leaf:T.MeshStandardMaterial;ne
     material.onBeforeCompile=(shader,renderer)=>{
       prepare(shader,renderer);
       shader.fragmentShader=shader.fragmentShader.replace('#include <normal_fragment_begin>',
-        '#include <normal_fragment_begin>\n normal*=faceDirection;')
-        .replace('#include <opaque_fragment>',
-        'outgoingLight+=diffuseColor.rgb*vec3(.11,.15,.12);\n #include <opaque_fragment>');
+        '#include <normal_fragment_begin>\n normal*=faceDirection;');
     };
     material.alphaTest=.30;
     material.shadowSide=T.DoubleSide;

@@ -11,8 +11,8 @@ import { createTideHouseKit } from './tide-house.js';
 import { hashPage } from './city-growth.js';
 import type { Site } from './painted-coast.js';
 
-const surfaceNames=['cliff','masonry','heath'] as const;
-type Skin=typeof surfaceNames[number]|'copper'|'iron'|'lamp'|'bark'|'needle'|'leaf'|'glass'|'cream'|'hull'|'ashlar'|'coping'|'pebble'|'gravel';
+const surfaceNames=['cliff','masonry','heath','paving'] as const;
+type Skin=typeof surfaceNames[number]|'copper'|'iron'|'lamp'|'bark'|'needle'|'leaf'|'glass'|'cream'|'hull'|'ashlar'|'coping'|'pebble'|'gravel'|'gardenEarth'|'court'|'shingle';
 type Part=T.Object3D;
 
 export function sitePoint(s:Site){
@@ -38,6 +38,9 @@ export async function harborWorkshop(){
     materials[name as Skin]=new T.MeshStandardMaterial({color,roughness:name==='glass'?.28:.78,metalness:name==='copper'?.35:0});
   }
   materials.pebble=new T.MeshStandardMaterial({color:'#a79c91',roughness:.89,vertexColors:true});
+  for(const [key,color] of [['court','#e5d7be'],['gardenEarth','#9fce87'],['shingle','#cfbe9e']] as const){
+    materials[key]=new T.MeshStandardMaterial({map:key==='gardenEarth'?materials.heath.map:materials.paving.map,color,roughness:.98});
+  }
   materials.bark.color.set('#87735a');
   materials.gravel=new T.MeshStandardMaterial({color:'#b7a692',roughness:.97});
   for(const key of ['needle','leaf'] as const){
@@ -170,6 +173,7 @@ export async function harborWorkshop(){
     paintMaterial(materials.coping, paint);
     paintMaterial(materials.gravel, paint);
     paintMaterial(materials.pebble, paint);
+    for(const name of ['gardenEarth','court','shingle'] as const)paintMaterial(materials[name],paint);
     for (const name of ['masonry','copper','bark','cream','hull','iron'] as const) paintMaterial(materials[name], paint, 'architecture', true);
   }
   const buildings = createHarborBuildings(paint);

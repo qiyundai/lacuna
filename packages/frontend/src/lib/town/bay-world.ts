@@ -160,6 +160,8 @@ function headlands(sector: number) {
   return geometry;
 }
 
+export type ValleyLighting = { direction:T.Vector3; direct:T.Color; sky:T.Color; ground:T.Color };
+
 export function createBayWorld(scene: T.Scene, throughCorridor=false) {
   const noise = cloudNoise();
   const sunDirection = new T.Vector3();
@@ -182,13 +184,14 @@ export function createBayWorld(scene: T.Scene, throughCorridor=false) {
   const range = new T.Group();
   const mountain = new T.MeshLambertMaterial({vertexColors:true,fog:false});
   mountain.onBeforeCompile = shader => {
+    shader.uniforms.sunDirection = {value: sunDirection};
     shader.uniforms.bayPigment = {value: noise};
     shader.vertexShader = 'varying float bayDistance; varying vec3 bayPosition;\n'+shader.vertexShader.replace('#include <project_vertex>',
       '#include <project_vertex>\n bayDistance = length(mvPosition.xyz); bayPosition = position;');
-    shader.fragmentShader = 'varying float bayDistance; varying vec3 bayPosition; uniform sampler2D bayPigment;\n'+shader.fragmentShader.replace('#include <opaque_fragment>', `
+    shader.fragmentShader = 'varying float bayDistance; varying vec3 bayPosition; uniform sampler2D bayPigment; uniform vec3 sunDirection;\n'+shader.fragmentShader.replace('#include <opaque_fragment>', `
       vec2 slope = vec2(bayPosition.x*.007 + bayPosition.z*.004, bayPosition.z*.004 - bayPosition.y*.008);
       float pigment = texture2D(bayPigment,slope).r;
-      float face = dot(normalize(cross(dFdx(bayPosition),dFdy(bayPosition))),normalize(vec3(.77,.57,-.28)));
+      float face = dot(normalize(cross(dFdx(bayPosition),dFdy(bayPosition))),sunDirection);
       outgoingLight *= .91 + .31*smoothstep(.21,.68,pigment) + .32*face;
       outgoingLight += vec3(.019,.013,.008)*smoothstep(.46,.76,pigment)*max(0.,face);
       outgoingLight = mix(outgoingLight,vec3(.40,.404,.49),smoothstep(230.,1320.,bayDistance)*.81);
@@ -197,15 +200,16 @@ export function createBayWorld(scene: T.Scene, throughCorridor=false) {
   const tiles = new Map<number,T.Mesh<T.BufferGeometry,T.MeshLambertMaterial>>();
   let centerSector: number | undefined;
   const sun = new T.DirectionalLight('#ffddac',1.98);
-  const ambient = new T.HemisphereLight('#cbdaf5','#a88b83',1.08);
-  const waterFill=new T.DirectionalLight('#c6dfed',.82);
-  waterFill.position.set(-.72,.44,.65);
+  const ambient = new T.HemisphereLight('#cbdaf5','#a88b83',.84);
+  const lighting:ValleyLighting={direction:sunDirection,direct:new T.Color(),
+    sky:ambient.color.clone().multiplyScalar(ambient.intensity),
+    ground:ambient.groundColor.clone().multiplyScalar(ambient.intensity)};
   sun.castShadow=true;
   sun.shadow.mapSize.set(2048,2048);
   sun.shadow.normalBias=.052;
   sun.shadow.bias=-.00028;
   Object.assign(sun.shadow.camera,{left:-82,right:82,top:73,bottom:-73,near:1,far:270});
-  scene.add(sky,range,sun,sun.target,ambient,waterFill);
+  scene.add(sky,range,sun,sun.target,ambient);
   function setTime(seconds: number, focusX: number, cameraX: number, focusZ=0) {
     const sector = Math.floor(cameraX/sectorWidth);
     if (centerSector!==sector) {
@@ -224,22 +228,23 @@ export function createBayWorld(scene: T.Scene, throughCorridor=false) {
       centerSector=sector;
     }
     const phase = seconds * Math.PI / 720;
-    const bearing = throughCorridor ? -.026+.012*Math.sin(phase) : -1.91+.22*Math.sin(phase);
-    const elevation = .52 + .09*Math.sin(phase*.5);
+    const bearing = throughCorridor ? -.026+.012*Math.sin(phase) : Math.PI+.072+.019*Math.sin(phase);
+    const elevation = (throughCorridor ? .52 : .83) + .09*Math.sin(phase*.5);
     sunDirection.set(Math.sin(bearing),elevation,-Math.cos(bearing)).normalize();
     skyMaterial.uniforms.seconds!.value=seconds;
     sun.target.position.set(focusX,4,focusZ);
     sun.position.copy(sun.target.position).addScaledVector(sunDirection,112);
-    sun.intensity = 3.00 + elevation*2.5;
+    sun.intensity = 2.38 + elevation*.52;
+    lighting.direct.copy(sun.color).multiplyScalar(sun.intensity);
   }
   return {
-    sun, sunDirection,
+    sun, sunDirection, lighting,
     setTime,
     setPainted(enabled: boolean) {
       skyMaterial.uniforms.gouache!.value = Number(enabled);
     },
     dispose() {
-      scene.remove(sky, range, sun, sun.target, ambient,waterFill);
+      scene.remove(sky, range, sun, sun.target, ambient);
       for (const tile of tiles.values()) tile.geometry.dispose();
       tiles.clear();
       mountain.dispose();

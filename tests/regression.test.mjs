@@ -929,9 +929,15 @@ test('coastal groves have clearings and clustered saplings that persist across i
 
 test('the low cloud thins to clear air before a new formation gathers',async()=>{
   const {createLowCloud}=await import('../packages/frontend/src/lib/town/low-cloud.ts');
-  const sky=createLowCloud(),near=sky.cloud.children[0],far=sky.cloud.children[1];
+  const T=await import('three');
+  const {createBayWorld}=await import('../packages/frontend/src/lib/town/bay-world.ts');
+  const scene=new T.Scene(),world=createBayWorld(scene);
+  const sky=createLowCloud(world.lighting),near=sky.cloud.children[0],far=sky.cloud.children[1];
   try{
     const uniforms=near.material.uniforms,old=uniforms.volume.value;
+    assert.deepEqual(scene.children.filter(object=>object.isDirectionalLight),[world.sun]);
+    assert.equal(uniforms.sunDirection.value,world.sunDirection);
+    assert.equal(far.material.uniforms.sunColor.value,world.lighting.direct);
     let retired=false;old.addEventListener('dispose',()=>{retired=true;});
     assert.notEqual(old,far.material.uniforms.volume.value);
     sky.tick(32);assert.equal(uniforms.humidity.value,1);
@@ -946,7 +952,47 @@ test('the low cloud thins to clear air before a new formation gathers',async()=>
     assert.ok(near.visible && growing>0 && growing<1);
     sky.tick(245);assert.equal(uniforms.humidity.value,growing);assert.deepEqual(near.position,position);
     sky.tick(298);assert.equal(uniforms.humidity.value,1);
-  }finally{sky.dispose();}
+  }finally{sky.dispose();world.dispose();}
+});
+
+test('waterfront earthworks cut into the uphill plot and preserve its walk and the surrounding meadow',async()=>{
+  const T=await import('three');
+  const {gardenClearance,cutBuildingPlots}=await import('../packages/frontend/src/lib/town/waterfront-gardens.ts');
+  const model=new T.Group();model.position.set(12,5,-3);model.rotation.y=.46;
+  const lot={model,site:{kind:'houses',width:110}},walk=gardenClearance();
+  walk.mark(14,-3,.65);
+  const grade=cutBuildingPlots([lot],walk);
+  assert.ok(grade(12,-3,6.1)<5);
+  assert.equal(grade(14,-3,6.1),6.1);
+  assert.equal(grade(12,-3,4),4);
+  assert.equal(grade(38,0,7),7);
+  assert.equal(cutBuildingPlots([],walk)(12,-3,6.1),6.1);
+});
+
+test('corridor trees and grass follow a distant visit and regrow in the same places',async()=>{
+  const T=await import('three');
+  const {corridorForest,corridorGrass,woodlandAt}=await import('../packages/frontend/src/lib/town/corridor-vegetation.ts');
+  const eye=new T.Vector3(20,6,80),trunk=new T.BoxGeometry(),leaves=new T.MeshLambertMaterial();
+  const model=new T.Group();model.add(new T.Mesh(trunk,leaves));
+  const forest=corridorForest([model],()=>5,(x,z,y)=>woodlandAt(x,z,y,144),0,45);
+  const lawn=corridorGrass(()=>5,(x)=>x<10,0,45,{value:0},eye);
+  const roots=()=>Array.from(lawn.group.children[0].geometry.getAttribute('growth').array.slice(0,12));
+  try{
+    lawn.view(eye);forest.view(eye);
+    const original=roots(),firstTree=forest.group.children[0];
+    eye.z=-4300;lawn.view(eye);forest.view(eye);
+    assert.ok(!forest.group.children.includes(firstTree));
+    const instances=forest.group.children.flatMap(tile=>tile.children);
+    assert.ok(instances.reduce((sum,mesh)=>sum+mesh.count,0)>80);
+    assert.ok(instances.every(mesh=>mesh.geometry===trunk && mesh.material===leaves));
+    assert.ok(lawn.group.children.some(mesh=>mesh.visible&&mesh.geometry.instanceCount>100));
+    for(const mesh of lawn.group.children){
+      const r=mesh.geometry.getAttribute('growth');
+      for(let i=0;i<r.count;i++){assert.ok(r.getX(i)>=10);assert.ok(Math.abs(r.getZ(i)-eye.z)<120);}
+    }
+    eye.z=80;lawn.view(eye);forest.view(eye);
+    assert.deepEqual(roots(),original);
+  }finally{lawn.dispose();forest.clear();trunk.dispose();leaves.dispose();}
 });
 
 test('the lawn roots blades on every grassy terrain triangle and tapers detail with viewing distance',async()=>{

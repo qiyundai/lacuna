@@ -3,6 +3,11 @@ import type * as T from 'three';
 export const coastalBreeze = `
   uniform float breezeTime;
   const vec2 breezeDirection=vec2(.923,.385);
+  float meadowWave(vec2 ground,float seconds){
+    float front=dot(ground,vec2(.058,-.092))-seconds*.86
+      +1.08*sin(ground.x*.034+ground.y*.021)+.63*sin(ground.y*.047-seconds*.14);
+    return smoothstep(-.60,.88,sin(front))*(.73+.27*cos(ground.x*.052-ground.y*.031));
+  }
   float breezeAt(vec2 ground,float seconds) {
     float along=dot(ground,breezeDirection)-seconds*3.35;
     float across=dot(ground,vec2(-breezeDirection.y,breezeDirection.x));
@@ -10,7 +15,7 @@ export const coastalBreeze = `
     float crest=.5+.5*cos(front);
     float shoulder=.5+.5*cos(front*2.12+.32*across);
     float pocket=smoothstep(-.84,.75,sin(.27*across+.12*along)+.40*cos(.18*along-.14*across));
-    return (.78*smoothstep(.12,.94,crest)+.22*shoulder)*(.46+.54*pocket);
+    return .57*meadowWave(ground,seconds)+.43*(.78*smoothstep(.12,.94,crest)+.22*shoulder)*(.46+.54*pocket);
   }
 `;
 

@@ -91,7 +91,7 @@ export function createMeadow(ground:T.BufferGeometry,rows:number,eye:T.Vector3,h
         vec3 root=corner+edgeB*bary.y+edgeC*bary.z;
         bladeUv=root.xz*.43;
         float stand=dot(treeCover,bary);
-        float gust=breezeAt(root.xz,breezeTime)*(1.-.32*stand);
+        float gust=breezeAt((modelMatrix*vec4(root,1.)).xz,breezeTime)*(1.-.32*stand);
         float angle=max(.001,(.23+1.91*gust)*bladeSection);
         float curl=sin(angle);
         vec3 groundNormal=normalize(cross(edgeB,edgeC));
@@ -106,7 +106,8 @@ export function createMeadow(ground:T.BufferGeometry,rows:number,eye:T.Vector3,h
         float lengthScale=(.85+.54*drift-.22*stand)*growth;
         vec2 lean=mat2(scatter.z,scatter.w,-scatter.w,scatter.z)*position.xz;
         float up=max(position.y,0.);
-        vec2 wind=normalize(breezeDirection+vec2(-breezeDirection.y,breezeDirection.x)*fold*.22);
+        vec2 localWind=(vec3(breezeDirection.x,0.,breezeDirection.y)*mat3(modelMatrix)).xz;
+        vec2 wind=normalize(localWind+vec2(-localWind.y,localWind.x)*fold*.22);
         vec2 bend=lean*growth+wind*(up*lengthScale*(1.-cos(angle))/angle);
         vec3 transformed=root+vec3(bend.x,position.y*lengthScale*curl/angle-.009,bend.y);
         vec3 lawn=mix(vec3(.158,.280,.105),vec3(.291,.373,.132),drift);
