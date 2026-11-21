@@ -890,7 +890,7 @@ test('city saves on both vaults preserve words and skip the legacy story classif
     const value={...thought(948,'A page with no particular theme.'),city:true};
     const {entry}=await send(value);
     assert.equal(entry.body,value.body);
-    assert.equal(entry.riverEdition,2);
+    assert.equal(entry.riverEdition,3);
     assert.equal(entry.presence,undefined);
     assert.deepEqual((await send(value)).entry,entry);
   }
@@ -955,6 +955,101 @@ test('new pages settle connected neighborhoods across the ferry while older jour
     assert.ok(plan.sites.filter(s=>s.bank===1 && s.lane<3).length>=5);
     assert.ok(plan.sites.some(s=>s.bank===1 && s.ferryTerminal));
     assert.equal(plan.addresses.size,prefix.length+additions.length);
+  }
+});
+
+test('mixed river editions keep archived addresses and append neighborhoods deterministically',async()=>{
+  const {paintedCoast}=await import('../packages/frontend/src/lib/town/painted-coast.ts');
+  const archive=Array.from({length:96},(_,i)=>({id:'river-archive-'+i,riverEdition:2,created_at:i}));
+  const old=paintedCoast(archive);
+  const signature=Array.from(old.addresses,([id,s])=>[id,s.id,s.bank,s.kind,s.x,s.lane,s.width,s.mirror,s.lights]);
+  assert.equal(createHash('sha256').update(JSON.stringify(signature)).digest('hex'),'6b5c25bde4c357c72a76fdd11156d240515427132e1a01ac7799739cc2c17952');
+  for(let seed=0;seed<12;seed++){
+    const pages=Array.from({length:250},(_,i)=>({id:seed+'-district-'+i,created_at:100+Math.floor(i/2),riverEdition:3}));
+    const past=seed%2?archive:[];
+    const early=paintedCoast([...past,...pages.slice(0,80)]),full=paintedCoast([...past,...pages]);
+    const address=s=>[s.id,s.kind,s.bank,s.x,s.lane,s.setback,s.width,s.district];
+    for(const [id,s] of early.addresses)assert.deepEqual(address(full.addresses.get(id)),address(s));
+    for(const page of past)assert.deepEqual(address(full.addresses.get(page.id)),address(old.addresses.get(page.id)));
+    assert.ok([0,1].every(bank=>full.sites.filter(s=>s.bank===bank).length>35));
+    assert.ok(new Set(full.sites.map(s=>s.district).filter(Boolean)).size>=3);
+    const pairs=plan=>plan.ferries.filter(r=>r.arrival).map(r=>[r.departure.id,r.arrival.id]);
+    assert.ok(pairs(full).length>=2);
+    for(const pair of pairs(early))assert.ok(pairs(full).some(p=>p[0]===pair[0] && p[1]===pair[1]));
+    const endpoints=full.ferries.flatMap(r=>r.arrival?[r.departure,r.arrival]:[r.departure]);
+    assert.equal(new Set(endpoints).size,full.sites.filter(s=>s.ferryTerminal).length);
+    assert.ok(full.ferries.every(r=>!r.arrival || r.arrival.bank!==r.departure.bank));
+    assert.deepEqual(early,paintedCoast([...past,...pages.slice(0,80)].map(p=>({...p,body:'Different words',created_at:p.created_at*86400}))));
+  }
+});
+
+test('shared places follow their neighbors and mature from activity on the same bank',async()=>{
+  const {districtKey,districtOf,influenceAround,sharedPlace}=await import('../packages/frontend/src/lib/town/river-neighborhoods.ts');
+  const p={column:4,lane:2,bank:0},key=districtKey(p),other=districtKey({...p,bank:1});
+  const site=(kind,column,lane=2)=>({id:kind+column,kind,x:132+column*157+lane*8,lane,bank:0,lights:0,ferryTerminal:kind==='wharf'});
+  for(const [first,second,place] of [['houses','terraces','courtyard'],['pines','houses','allotment'],['market','houses','marketCourt'],['warehouse','market','goodsYard'],['station','terraces','waitingGarden']]){
+    const cells=new Map(),a=site(first,4),b=site(second,5);
+    influenceAround(cells,a);assert.equal(sharedPlace(cells.get(key)),undefined);
+    influenceAround(cells,b);assert.deepEqual(sharedPlace(cells.get(key)),{place,stage:1});
+    influenceAround(cells,a,true);influenceAround(cells,b,true);
+    assert.equal(sharedPlace(cells.get(key)).stage,2);
+    influenceAround(cells,site(first,3));influenceAround(cells,site(second,4,1));influenceAround(cells,site(first,4,3));
+    assert.deepEqual(sharedPlace(cells.get(key)),{place,stage:3});
+    assert.equal(cells.get(other),undefined);
+  }
+  const cells=new Map();
+  influenceAround(cells,site('houses',4));
+  influenceAround(cells,site('wharf',4,3));
+  assert.equal(districtOf(cells.get(key)),'exchange');
+  assert.ok(cells.get(key).access>cells.get(districtKey({...p,column:2})).access);
+});
+
+test('new inland addresses use the gentlest surveyed shelf and stay clear of the river',async()=>{
+  const {paintedCoast}=await import('../packages/frontend/src/lib/town/painted-coast.ts');
+  const {columnOf,parcelShelf}=await import('../packages/frontend/src/lib/town/river-neighborhoods.ts');
+  const {sitePoint}=await import('../packages/frontend/src/lib/town/harbor-workshop.ts');
+  const {bankEdge,bankPosition,landHeight,laneDepth}=await import('../packages/frontend/src/lib/town/valley-river.ts');
+  const plan=paintedCoast(Array.from({length:180},(_,i)=>({id:'shelf-'+i,created_at:i,riverEdition:3})));
+  const offsets=new Set();
+  for(const site of plan.sites.filter(s=>s.lane<3)){
+    const column=columnOf(site),{bank,lane}=site,point=sitePoint(site),shelf=parcelShelf({column,lane,bank});
+    assert.equal(site.setback,shelf.setback);offsets.add(shelf.setback);
+    const x=(132+column*157+lane*8-900)/12.5,z=bankPosition(x,bank,laneDepth(x,lane));
+    const heights=[landHeight(x-3,z),landHeight(x+3,z),landHeight(x,z-2),landHeight(x,z+2)];
+    assert.ok(shelf.relief<=Math.max(...heights)-Math.min(...heights));
+    assert.equal(point.z,bankPosition(point.x,bank,laneDepth(point.x,lane)+shelf.setback));
+    assert.ok((point.z-bankEdge(point.x,bank))*(bank?1:-1)>4);
+  }
+  assert.ok(offsets.has(1.4) && offsets.has(-1.4));
+});
+
+test('short waterfront passages follow gentle gaps and prioritize ferry access',async()=>{
+  const {neighborhoodPassages}=await import('../packages/frontend/src/lib/town/harbor-streets.ts');
+  const station=c=>(132+(c+.5)*157+12-900)/12.5;
+  const lots=[3,4,5].flatMap(column=>[2,3].map(lane=>({site:{kind:'houses',bank:0,lane,x:132+column*157+lane*8}})));
+  const left=station(3)-1;
+  const street=Array.from({length:69},(_,i)=>({x:left+i*.4,y:0,z:0}));
+  const upper=street.map(p=>({...p,y:Math.abs(p.x-station(5))<1?1:3,z:10}));
+  const streets=[[],[],upper,street];
+  const chosen=()=>neighborhoodPassages(lots,streets).map(p=>p.x);
+  assert.deepEqual(chosen(),[station(5)]);
+  lots[1].site.ferryTerminal=true;
+  assert.deepEqual(chosen(),[station(3)]);
+});
+
+test('door approaches retain the least-cost accessible landing on long streets',async()=>{
+  const {doorRoute}=await import('../packages/frontend/src/lib/town/harbor-streets.ts');
+  const {bankPosition,landHeight}=await import('../packages/frontend/src/lib/town/valley-river.ts');
+  for(const bank of [0,1]){
+    const line=Array.from({length:300},(_,i)=>{
+      const x=i*.5-60,z=bankPosition(x,bank,5);
+      return {x,z,y:landHeight(x,z)+.2};
+    });
+    for(const x of [-52,4,72]){
+      const z=bankPosition(x,bank,13),door={x,z,y:landHeight(x,z)+.6};
+      const expected=line.map(point=>doorRoute(door,[point])).reduce((a,b)=>a.cost<=b.cost?a:b);
+      assert.deepEqual(doorRoute(door,line),expected);
+    }
   }
 });
 

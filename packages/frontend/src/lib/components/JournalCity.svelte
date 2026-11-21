@@ -31,7 +31,7 @@
     'The bread was warm all the way home.', 'Walked the long way for once.'
   ];
   function examples():EntryData[] {
-    return notes.map((body,i)=>({id:hashPage('lacuna-coast-'+i).toString(16).padStart(32,'0'),riverEdition:2 as const,user_id:'guest',body,
+    return notes.map((body,i)=>({id:hashPage('lacuna-coast-'+i).toString(16).padStart(32,'0'),riverEdition:3 as const,user_id:'guest',body,
       created_at:1609459200+i*49171,solidified_at:1609459200+i*49171,kept_at:null}));
   }
   let canvas:HTMLCanvasElement,dialog:HTMLDialogElement;
@@ -92,7 +92,7 @@
     const version=sessionVersion.value;busy=true;error='';
     try{
       const now=Math.floor(Date.now()/1000);
-      const entry=guest?{id:draftId,riverEdition:2 as const,body,user_id:'guest',created_at:now,solidified_at:now,kept_at:null}:(await api.city.write(body,now,draftId)).entry;
+      const entry=guest?{id:draftId,riverEdition:3 as const,body,user_id:'guest',created_at:now,solidified_at:now,kept_at:null}:(await api.city.write(body,now,draftId)).entry;
       if(!alive||version!==sessionVersion.value)return;
       if(!guest)prependEntry(entry);
       reveal=true;entries=[...entries.filter(e=>e.id!==entry.id),entry];draft='';draftId='';dialog.close();

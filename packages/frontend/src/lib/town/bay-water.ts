@@ -35,8 +35,9 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
   water.rotation.x=-Math.PI/2;water.position.y=.01;water.renderOrder=1;
   const material=water.material as T.ShaderMaterial,slopes=capillarySlopes();
   const bounds=new T.Vector2(),clock={value:0};
-  const wake=ferryWake();
-  Object.assign(material.uniforms,{wakeTrail:wake.trail,wakeCount:wake.count,wakeBounds:wake.bounds});
+  const wakes=[ferryWake(),ferryWake()];
+  const wakeCounts=new Int32Array(wakes.length);
+  Object.assign(material.uniforms,{wakeTrail:{value:wakes.flatMap(w=>w.trail.value)},wakeCount:{value:wakeCounts},wakeBounds:{value:wakes.map(w=>w.bounds.value)}});
   Object.assign(material.uniforms,{slopes:{value:slopes},sunDirection:{value:sunDirection},bounds:{value:bounds},clock});
   material.uniforms.shadowFrame={value:sun.shadow.matrix};
   material.uniforms.shadowDepth={value:null};
@@ -69,8 +70,8 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
     uniform mat4 shadowFrame;
     uniform highp sampler2DShadow shadowDepth;
     uniform float clock;
-    uniform int wakeCount;
-    uniform vec4 wakeTrail[${wakeSamples}],wakeBounds;
+    uniform int wakeCount[${wakes.length}];
+    uniform vec4 wakeTrail[${wakeSamples*wakes.length}],wakeBounds[${wakes.length}];
     ${afterglow?sunbreak:''}
     float cellValue(vec2 cell){
       vec3 h=fract(vec3(cell.xyx)*vec3(.1031,.1030,.0973));
@@ -114,13 +115,16 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
       vec2 detail=(across*fine.x+downstream*fine.y)*(1.-smoothstep(.4,2.7,footprint));
       vec2 slope=detail+(downstream*swell+across*field.x*.035)*(1.-smoothstep(2.,9.,footprint));
       float propWash=0.;
-      if(wakeCount>1 && all(greaterThan(p,wakeBounds.xy-7.)) && all(lessThan(p,wakeBounds.zw+7.))){
+      for(int route=0;route<${wakes.length};route++){
+        vec4 region=wakeBounds[route];
+        if(wakeCount[route]<2 || any(lessThan(p,region.xy-7.)) || any(greaterThan(p,region.zw+7.)))continue;
         float closest=1e5;
         vec2 radial=vec2(0.);
         float age=0.,power=0.;
         for(int i=1;i<${wakeSamples};i++){
-          if(i>=wakeCount)break;
-          vec4 a=wakeTrail[i-1],b=wakeTrail[i];
+          if(i>=wakeCount[route])break;
+          int index=route*${wakeSamples}+i;
+          vec4 a=wakeTrail[index-1],b=wakeTrail[index];
           vec2 segment=b.xy-a.xy;
           float t=clamp(dot(p-a.xy,segment)/max(dot(segment,segment),.00001),0.,1.);
           vec4 samplePoint=mix(a,b,t);
@@ -135,7 +139,7 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
         float crest=closest-.38-.44*age+.12*field.x;
         float envelope=exp(-crest*crest/(.28+.12*age));
         slope+=radial*.43*cos(crest*6.)*envelope*energy*(1.-smoothstep(.18,1.,footprint));
-        propWash=energy*(.32*envelope+.6*exp(-closest*closest/(.28+.08*age)-age*.60))*(.54+.46*breeze);
+        propWash+=energy*(.32*envelope+.6*exp(-closest*closest/(.28+.08*age)-age*.60))*(.54+.46*breeze);
       }
       vec3 n=normalize(vec3(slope.x,1.,slope.y));
       vec2 uv=vUv.xy/vUv.w;
@@ -168,5 +172,5 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`;
-  return {water,bounds,clock,wake,dispose(){water.dispose();geometry.dispose();slopes.dispose();}};
+  return {water,bounds,clock,wakes,wakeCounts,dispose(){water.dispose();geometry.dispose();slopes.dispose();}};
 }

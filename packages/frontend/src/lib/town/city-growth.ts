@@ -1,4 +1,4 @@
-export type CityPage = { id: string; created_at: number; riverEdition?: 2 };
+export type CityPage = { id: string; created_at: number; riverEdition?: 2 | 3 };
 export type CityBlock = { x: number; z: number; seed: number; levels: number; green: boolean };
 
 export function hashPage(value: string) {

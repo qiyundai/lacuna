@@ -87,7 +87,7 @@ export async function journalRequest(vault, path, method, value, url) {
     return vault.update(data => {
       const existing = data.entries.find(e => e.id === value.entry_id);
       if (existing) { if (existing.body !== value.body) error('This thought ID was already used.'); return { entry: existing }; }
-      const entry = { id: value.entry_id, riverEdition: 2, user_id: vault.owner, body: value.body, created_at: now(), solidified_at: value.solidified_at, kept_at: null };
+      const entry = { id: value.entry_id, riverEdition: 3, user_id: vault.owner, body: value.body, created_at: now(), solidified_at: value.solidified_at, kept_at: null };
       if(value.settlement !== undefined){
         if(!isSettlement(value.settlement) || !canSettle(population(data.entries),value.settlement)) error('Choose a site with room for this trade.');
         entry.settlement = {site:value.settlement.site,trade:value.settlement.trade};

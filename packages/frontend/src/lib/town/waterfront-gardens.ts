@@ -3,8 +3,41 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { hashPage } from './city-growth.js';
 import type { Bank } from './painted-coast.js';
 import type { Workshop } from './harbor-workshop.js';
-import type { WaterfrontLot } from './harbor-streets.js';
+import { pavedRun, type WaterfrontLot } from './harbor-streets.js';
 import { landHeight, laneDepth, bankPosition } from './valley-river.js';
+import { districtKey, sharedPlace, type Neighborhoods, type SharedPlace } from './river-neighborhoods.js';
+
+const yardProps={
+  stall:'/town/village/stall-red.glb', canopy:'/town/village/stall-green.glb', cart:'/town/village/cart.glb',
+  timber:'/town/land/log_stack.glb', rows:'/town/land/crops_wheatStageB.glb', fence:'/town/land/fence_simple.glb'
+};
+type YardPiece=keyof typeof yardProps|'studio'|'shed'|'pergola'|'lantern';
+const yards:Record<SharedPlace,readonly [YardPiece,YardPiece,YardPiece]>={
+  courtyard:['lantern','studio','fence'],allotment:['rows','pergola','rows'],
+  marketCourt:['stall','canopy','cart'],goodsYard:['timber','shed','cart'],waitingGarden:['lantern','pergola','canopy']
+};
+
+const widths:Record<YardPiece,number>={
+  studio:3.2,pergola:3.15,shed:4.1,cart:1.65,stall:2.4,canopy:2.4,timber:2.2,rows:1.6,fence:2,lantern:.36
+};
+const courtLocations=[[.30,.56],[.75,.52],[.51,.73],[.51,.30],[.19,.40],[.83,.37]] as const;
+
+export function courtTemplates(shop:Workshop,props:Map<keyof typeof yardProps,T.Group>){
+  const templates=new Map<YardPiece,{model:T.Group; width:number; depth:number}>();
+  for(const kind of Object.keys(widths) as YardPiece[]){
+    const source=kind==='pergola'||kind==='studio'||kind==='shed'?shop.outbuilding(kind):kind==='lantern'?new T.Group():props.get(kind)?.clone();
+    if(!source)continue;
+    if(kind==='lantern')shop.lantern(source,0,0,0,1.65);
+    const bounds=new T.Box3().setFromObject(source),size=bounds.getSize(new T.Vector3()),mid=bounds.getCenter(new T.Vector3());
+    const scale=widths[kind]/Math.max(size.x,size.z);
+    const model=new T.Group();
+    model.add(source);
+    source.position.sub(new T.Vector3(mid.x,bounds.min.y,mid.z));
+    model.scale.setScalar(scale);
+    templates.set(kind,{model,width:size.x*scale+.15,depth:size.z*scale+.15});
+  }
+  return templates;
+}
 
 export async function loadGardenPlants(){
   const loader=new GLTFLoader();
@@ -32,7 +65,31 @@ export async function loadGardenPlants(){
     for(const material of original)material.dispose();
     return plant;
   }));
-  return {plants,dispose(){for(const g of geometries)g.dispose();for(const m of pigments.values())m.dispose();}};
+  const props=new Map<keyof typeof yardProps,T.Group>(),skins=new Set<T.Material>(),maps=new Set<T.Texture>();
+  await Promise.all((Object.entries(yardProps) as [keyof typeof yardProps,string][]).map(async ([key,path])=>{
+    const gltf=await loader.loadAsync(path).catch(()=>undefined);
+    if(!gltf)return;
+    const prop=gltf.scene;
+    prop.traverse(node=>{
+      if(!(node instanceof T.Mesh))return;
+      geometries.add(node.geometry);
+      for(const m of Array.isArray(node.material)?node.material:[node.material]){
+        skins.add(m);
+        if(m instanceof T.MeshStandardMaterial){
+          m.metalness=0;m.roughness=.95;
+          if(key==='rows')m.color.set('#bdab66');
+          if(key==='timber')m.color.set(m.name==='woodInner'?'#c19e76':'#795b46');
+        }
+        if(m.map)maps.add(m.map);
+      }
+    });
+    props.set(key,prop);
+  }));
+  return {plants,props,dispose(){
+    for(const g of geometries)g.dispose();
+    for(const m of [...pigments.values(),...skins])m.dispose();
+    for(const map of maps)map.dispose();
+  }};
 }
 
 type Strip={position:number[];uv:number[];index:number[]};
@@ -57,7 +114,14 @@ export function gardenClearance(){
       for(let j=Math.floor(z-radius);j<=Math.floor(z+radius);j++)row.add(j);
     }
   }
-  return {mark,has:(x:number,z:number)=>occupied.get(Math.floor(x))?.has(Math.floor(z))??false};
+  function overlaps(x:number,z:number,rx:number,rz:number){
+    for(let i=Math.floor(x-rx);i<=Math.floor(x+rx);i++){
+      const row=occupied.get(i);
+      if(row)for(let j=Math.floor(z-rz);j<=Math.floor(z+rz);j++)if(row.has(j))return true;
+    }
+    return false;
+  }
+  return {mark,overlaps,has:(x:number,z:number)=>occupied.get(Math.floor(x))?.has(Math.floor(z))??false};
 }
 
 export function cutBuildingPlots(lots:WaterfrontLot[],walks:ReturnType<typeof gardenClearance>){
@@ -85,9 +149,22 @@ export function cutBuildingPlots(lots:WaterfrontLot[],walks:ReturnType<typeof ga
   };
 }
 
-export function landscapeWaterfront(shop:Workshop,plants:T.Group[],bankSide:Bank,from:number,to:number,lots:WaterfrontLot[],
+export function landscapeWaterfront(shop:Workshop,plants:T.Group[],templates:ReturnType<typeof courtTemplates>,neighborhoods:Neighborhoods,bankSide:Bank,from:number,to:number,lots:WaterfrontLot[],streets:T.Vector3[][],
   reserved:ReturnType<typeof gardenClearance>,grade:ReturnType<typeof cutBuildingPlots>,buildings:T.Box3[],ground:T.Group,planting:T.Group,details:T.Group,mow:(x:number,z:number,r:number)=>void){
   const outward=bankSide===0?1:-1;
+  const fixtures=gardenClearance();
+  const approaches=new Map<number,T.Vector3[]>();
+  for(const line of streets)for(let i=0;i<line.length;i+=3){
+    const p=line[i]!,tile=Math.floor(p.x/8);
+    const bucket=approaches.get(tile)??[];bucket.push(p);approaches.set(tile,bucket);
+  }
+  const footprints=new Map<number,T.Box3[]>();
+  for(const box of buildings){
+    for(let tile=Math.floor((box.min.x-3)/12);tile<=Math.floor((box.max.x+3)/12);tile++){
+      const bucket=footprints.get(tile)??[];
+      bucket.push(box);footprints.set(tile,bucket);
+    }
+  }
   const batches=new Map<T.Material,Strip>();
   function surface(material:T.Material,rows:T.Vector3[][]){
     let batch=batches.get(material);
@@ -95,7 +172,27 @@ export function landscapeWaterfront(shop:Workshop,plants:T.Group[],bankSide:Bank
     strip(batch,bankSide===0?rows:rows.map(row=>[...row].reverse()));
   }
   function open(x:number,z:number,r:number){
-    return !reserved.has(x,z)&&!buildings.some(b=>x>b.min.x-r&&x<b.max.x+r&&z>b.min.z-r&&z<b.max.z+r);
+    return !reserved.has(x,z)&&!fixtures.overlaps(x,z,r,r)&&!footprints.get(Math.floor(x/12))?.some(b=>x>b.min.x-r&&x<b.max.x+r&&z>b.min.z-r&&z<b.max.z+r);
+  }
+  function courtWalk(q:T.Vector3,angle:number,width:number,depth:number){
+    const tile=Math.floor(q.x/8),cs=Math.cos(angle),sn=Math.sin(angle);
+    const options=[...(approaches.get(tile-1)??[]),...(approaches.get(tile)??[]),...(approaches.get(tile+1)??[])]
+      .filter(p=>p.distanceToSquared(q)<64).sort((a,b)=>a.distanceToSquared(q)-b.distanceToSquared(q));
+    for(const target of options){
+      const dx=target.x-q.x,dz=target.z-q.z,length=Math.hypot(dx,dz);
+      const edge=Math.min(width/(2*Math.abs(dx*cs-dz*sn)),depth/(2*Math.abs(dx*sn+dz*cs)));
+      if(edge>=1 || (1-edge)*length<.3 || Math.abs(q.y-target.y)>(1-edge)*length*.55)continue;
+      const start=new T.Vector3(q.x+edge*dx,q.y,q.z+edge*dz),steps=Math.ceil((1-edge)*length/.42);
+      const points=Array.from({length:steps},(_,i)=>start.clone().lerp(target,i/steps));
+      if(points.some(p=>{
+        const natural=landHeight(p.x,p.z);
+        return natural<.08 || grade(p.x,p.z,natural)>p.y+.04 || fixtures.has(p.x,p.z) ||
+          footprints.get(Math.floor(p.x/12))?.some(b=>p.x>b.min.x-.35&&p.x<b.max.x+.35&&p.z>b.min.z-.35&&p.z<b.max.z+.35);
+      }))continue;
+      pavedRun(shop,planting,start,target,true,.68);
+      for(const p of points){fixtures.mark(p.x,p.z,.35);mow(p.x,p.z,.45);}
+      return;
+    }
   }
   const patches=new Map<number,T.Matrix4[][]>(),sprig=new T.Object3D();
   function plant(kind:number,x:number,y:number,z:number,size:number,seed:number){
@@ -123,14 +220,15 @@ export function landscapeWaterfront(shop:Workshop,plants:T.Group[],bankSide:Bank
     const nearby=buildings.filter(b=>b.max.x>=center-10&&b.min.x<=center+10);
     const depth=(x:number)=>lane<0?43+.9*Math.sin(x*.11):laneDepth(x,lane);
     const quay=lane===3, garden=!lot||lot.site.kind==='pines';
-    if(quay && !lot)continue;
+    const shared=sharedPlace(neighborhoods.get(districtKey({column,lane,bank:bankSide})));
+    if(quay && !lot && !shared)continue;
     const west=cells.has((column-1)+','+lane),east=cells.has((column+1)+','+lane);
     const rows:T.Vector3[][]=[],faces:T.Vector3[][]=[],caps:T.Vector3[][]=[],verges:T.Vector3[][]=[];
     const point=(u:number,v:number)=>{
       const x=center+(u-.5)*12.56;
       const bend=Math.sin(x*.22+lane*.9)*.64+Math.sin(x*.49)*.25;
       const taper=garden?Math.min(west?1:.18+.82*T.MathUtils.smootherstep(u,0,.92),east?1:.18+.82*T.MathUtils.smootherstep(1-u,0,.92)):1;
-      const inner=quay?-3.6:-5.15*taper+bend;
+      const inner=quay?(lot?-3.6:-5.7):-5.15*taper+bend;
       const outer=quay?(lot?1.2:3.2)+bend:(garden?4.7:3.85)*taper+bend;
       const z=bankPosition(x,bankSide,depth(x)-T.MathUtils.lerp(inner,outer,v));
       const natural=grade(x,z,landHeight(x,z));
@@ -157,12 +255,54 @@ export function landscapeWaterfront(shop:Workshop,plants:T.Group[],bankSide:Bank
       for(const p of verges[i]!)p.y+=.035;
       if(!garden)for(let j=0;j<row.length;j+=2)mow(row[j]!.x,row[j]!.z,1.05);
     }
-    surface(garden&&!quay?shop.materials.gardenEarth:shop.materials.court,rows);
+    if(!quay||lot)surface(garden&&!quay?shop.materials.gardenEarth:shop.materials.court,rows);
     if(!quay||lot){
       surface(shop.materials.ashlar,faces);
       surface(shop.materials.coping,caps);
     }
     if(garden&&!quay)surface(shop.materials.gravel,verges);
+    function surfacePoint(u:number,v:number){
+      const along=T.MathUtils.clamp(u,0,1)*16,across=T.MathUtils.clamp(v,0,1)*8;
+      const i=Math.min(15,Math.floor(along)),j=Math.min(7,Math.floor(across));
+      const a=along-i,b=across-j;
+      const left=rows[i]!,right=rows[i+1]!;
+      if(bankSide===1){
+        if(a<b)return left[j]!.clone().multiplyScalar(1-b).addScaledVector(left[j+1]!,b-a).addScaledVector(right[j+1]!,a);
+        return left[j]!.clone().multiplyScalar(1-a).addScaledVector(right[j]!,a-b).addScaledVector(right[j+1]!,b);
+      }
+      if(a+b<=1)return left[j]!.clone().multiplyScalar(1-a-b).addScaledVector(right[j]!,a).addScaledVector(left[j+1]!,b);
+      return right[j+1]!.clone().multiplyScalar(a+b-1).addScaledVector(left[j+1]!,1-a).addScaledVector(right[j]!,1-b);
+    }
+    if(shared && ((column+lane)%2===0 || quay || shared.place==='marketCourt' || shared.place==='goodsYard')){
+      for(const [index,kind] of yards[shared.place].slice(0,shared.stage).entries()){
+        const template=templates.get(kind);
+        if(!template)continue;
+        for(let i=0;i<courtLocations.length;i++){
+          const [u,v]=courtLocations[(i+index*2+seed%courtLocations.length)%courtLocations.length]!;
+          const q=surfacePoint(u,v);
+          const angle=(bankSide?Math.PI:0)-Math.atan(bankPosition(q.x+.5,bankSide,0)-bankPosition(q.x-.5,bankSide,0));
+          const cs=Math.abs(Math.cos(angle)),sn=Math.abs(Math.sin(angle));
+          const rx=(cs*template.width+sn*template.depth)/2,rz=(sn*template.width+cs*template.depth)/2;
+          if(q.y<.4 || reserved.overlaps(q.x,q.z,rx,rz) || fixtures.overlaps(q.x,q.z,rx,rz))continue;
+          if(nearby.some(b=>q.x+rx>b.min.x && q.x-rx<b.max.x && q.z+rz>b.min.z && q.z-rz<b.max.z))continue;
+          const du=rx/12.56,dv=rz/Math.max(1,Math.abs(surfacePoint(u,1).z-surfacePoint(u,0).z));
+          if(u-du<0 || u+du>1 || v-dv<0 || v+dv>1)continue;
+          const heights=[q.y];
+          for(const a of [-1,1])for(const b of [-1,1])heights.push(surfacePoint(u+a*du,v+b*dv).y);
+          const high=Math.max(...heights),low=Math.min(...heights);
+          if(high-low>.85 || (quay && low<.45))continue;
+          const group=new T.Group();
+          group.add(template.model.clone());group.rotation.y=angle;group.position.set(q.x,high+.05,q.z);
+          const foundation=high-low+.17;
+          const groundSkin=kind==='rows'?'gardenEarth':kind==='timber'||kind==='cart'?'gravel':'ashlar';
+          shop.box(group,groundSkin,0,-foundation/2,0,template.width,foundation,template.depth);
+          if(kind==='stall'||kind==='canopy'||kind==='studio'||kind==='shed'||kind==='pergola')
+            courtWalk(group.position,angle,template.width,template.depth);
+          planting.add(group);fixtures.mark(q.x,q.z,Math.max(rx,rz));mow(q.x,q.z,Math.max(rx,rz));
+          break;
+        }
+      }
+    }
     if(lot&&!quay){
       let best:T.Vector3|undefined,bestRadius=0;
       for(let i=1;i<16;i++)for(let j=1;j<8;j++){
@@ -194,7 +334,7 @@ export function landscapeWaterfront(shop:Workshop,plants:T.Group[],bankSide:Bank
     for(let i=0;i<(garden?70:22);i++){
       const bits=Math.imul(hashPage(seed+'/'+i),0x85ebca6b);
       const h=(bits^(bits>>>16))>>>0,u=(.5+(h&1023))/1024,v=(.5+((h>>>10)&1023))/1024;
-      const q=point(u,v);
+      const q=surfacePoint(u,v);
       if(!open(q.x,q.z,.24)||q.y<-.28)continue;
       if(!garden && v>.86)continue;
       if(garden && !quay && i<6 && v>.15 && open(q.x,q.z,1.3)){
@@ -205,7 +345,7 @@ export function landscapeWaterfront(shop:Workshop,plants:T.Group[],bankSide:Bank
         const kind=quay||i%4===0?1:0;
         const scale=kind===1?.84+(h>>>24)/450:1.25+(h>>>24)/245;
         for(let k=0;k<4;k++){
-          const s=point(T.MathUtils.clamp(u+.026*Math.sin(h+k*2),0,1),T.MathUtils.clamp(v+.053*Math.cos(h+k*2),0,1));
+          const s=surfacePoint(u+.026*Math.sin(h+k*2),v+.053*Math.cos(h+k*2));
           if(open(s.x,s.z,.1))plant(kind,s.x,s.y,s.z,scale,h+k);
         }
       }

@@ -2,6 +2,7 @@ import {bankEdge,bankPosition,laneDepth} from './valley-river.js';
 import * as T from 'three';
 import { landHeight, type Workshop } from './harbor-workshop.js';
 import type { Bank, Site } from './painted-coast.js';
+import { columnOf } from './river-neighborhoods.js';
 
 export type DoorApproach = { threshold: T.Vector3; landing: T.Vector3; exit: T.Vector3 };
 export type WaterfrontLot = { site: Site; model: T.Group; doors: DoorApproach[]; gallery: T.Vector3[] };
@@ -72,6 +73,35 @@ export function streetLine(lots: WaterfrontLot[], lane: number, junctions: numbe
 }
 
 
+export function neighborhoodPassages(lots:WaterfrontLot[],streets:T.Vector3[][]){
+  const blocks=new Map<number,Map<number,Site>>();
+  for(const {site} of lots){
+    const column=columnOf(site),lanes=blocks.get(column)??new Map<number,Site>();
+    lanes.set(site.kind==='wharf'?3:site.lane,site);blocks.set(column,lanes);
+  }
+  const candidates:{lane:number;x:number;above:T.Vector3;below:T.Vector3;cost:number}[]=[];
+  for(const [column,lanes] of blocks)for(const [lane,site] of lanes){
+    const neighbor=lanes.get(lane+1);
+    if(!neighbor)continue;
+    const x=(132+(column+.5)*157+12-900)/12.5;
+    const nearest=(line:T.Vector3[])=>{
+      const first=line[0]!,last=line.at(-1)!;
+      const index=Math.round((line.length-1)*(x-first.x)/(last.x-first.x));
+      return line[T.MathUtils.clamp(index,0,line.length-1)]!;
+    };
+    const above=nearest(streets[lane]!),below=nearest(streets[lane+1]!);
+    if(Math.abs(above.x-x)>.5 || Math.abs(below.x-x)>.5)continue;
+    const rise=Math.abs(above.y-below.y),run=Math.max(1,Math.abs(above.z-below.z));
+    const busy=neighbor.ferryTerminal||site.kind==='station'||neighbor.kind==='market';
+    candidates.push({lane,x,above,below,cost:rise/run-(busy?.45:0)});
+  }
+  const selected:typeof candidates=[];
+  for(const candidate of candidates.sort((a,b)=>a.cost-b.cost||a.x-b.x)){
+    if(!selected.some(other=>other.lane===candidate.lane && Math.abs(other.x-candidate.x)<30))selected.push(candidate);
+  }
+  return selected;
+}
+
 function horizontal(a: T.Vector3, b: T.Vector3) {
   return Math.hypot(b.x-a.x,b.z-a.z);
 }
@@ -108,7 +138,7 @@ function landingArcade(shop: Workshop, group: T.Group, a: T.Vector3, b: T.Vector
   return true;
 }
 
-function pavedRun(shop: Workshop, group: T.Group, a: T.Vector3, b: T.Vector3, steps: boolean, walkWidth=.79) {
+export function pavedRun(shop: Workshop, group: T.Group, a: T.Vector3, b: T.Vector3, steps: boolean, walkWidth=.79) {
   const length = horizontal(a,b);
   if (length < .015) return;
   const direction = new T.Vector3(b.x-a.x,0,b.z-a.z).normalize();
@@ -156,8 +186,7 @@ function pavedRun(shop: Workshop, group: T.Group, a: T.Vector3, b: T.Vector3, st
 }
 
 export function doorRoute(exit: T.Vector3, street: T.Vector3[]) {
-  let best=street[0]!, cost=Infinity;
-  for(const point of street) {
+  function approachCost(point:T.Vector3){
     const run=horizontal(exit,point);
     const rise=Math.abs(exit.y-point.y);
     const steps=Math.ceil(rise/.145);
@@ -167,8 +196,16 @@ export function doorRoute(exit: T.Vector3, street: T.Vector3[]) {
       const x=T.MathUtils.lerp(exit.x,point.x,t), z=T.MathUtils.lerp(exit.z,point.z,t);
       buried=Math.max(buried,landHeight(x,z)+.06-T.MathUtils.lerp(exit.y,point.y,t));
     }
-    const score=run+100*steepness+75*buried;
-    if(score<cost) {best=point;cost=score;}
+    return run+100*steepness+75*buried;
+  }
+  let best=street[0]!;
+  for(const point of street)if(Math.abs(point.x-exit.x)<Math.abs(best.x-exit.x))best=point;
+  const upperBound=best?approachCost(best):Infinity;
+  let cost=Infinity;
+  for(const point of street){
+    if(Math.abs(point.x-exit.x)>Math.min(cost,upperBound))continue;
+    const score=approachCost(point);
+    if(score<cost){best=point;cost=score;}
   }
   return {origin:exit,target:best,cost};
 }

@@ -17,7 +17,7 @@ type Part=T.Object3D;
 
 export function sitePoint(s:Site){
   const x=(s.x-900)/12.5;
-  const depth=s.kind==='wharf'?-.25:laneDepth(x,s.lane);
+  const depth=s.kind==='wharf'?-.25:laneDepth(x,s.lane)+(s.setback??0);
   const z=bankPosition(x,s.bank,depth);return new T.Vector3(x,Math.max(.75,landHeight(x,z)),z);
 }
 export function siteHeading(site: Site, x: number) {
@@ -180,7 +180,7 @@ export async function harborWorkshop(){
     }else if(k==='pines'){
       for(let i=0;i<6;i++)tree(g,Math.sin(i*2.4)*w*.33,0,Math.cos(i*2.4)*2,3.1+i%3,seed+i);
     }else{
-      g.add(buildings.build(k, seed, w,s.lights));
+      g.add(buildings.build(k, seed, w,s.lights,s.district));
       if (k === 'terraces' || k === 'crescent' || k === 'glasshouse' || k === 'houses') {
         tree(g,w*.46,0,-2.04,2.36+(seed%10)*.09,seed);
       }
@@ -197,7 +197,7 @@ export async function harborWorkshop(){
     for(let i=0;i<8;i++)for(const z of [-.48,.48])box(g,i%3?'lamp':'glass',-1.5+i*.36,.77,z,.19,.23,.035);
     box(g,'cream',.83,1.23,0,.95,.37,.73);pole(g,'iron',-.49,1.45,0,.28,.8);return g;
   }
-  return {paint,breezeTime,materials,piece,box,pole,tree,treeModels,site,ferry,lantern,geometries,dispose(){
+  return {paint,breezeTime,materials,piece,box,pole,tree,treeModels,site,ferry,outbuilding:buildings.outbuilding,lantern,geometries,dispose(){
     forest.dispose();
     paint?.dispose();
     tideHouse?.dispose();

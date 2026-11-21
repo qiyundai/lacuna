@@ -4,9 +4,13 @@ import { around, chimneypot, foundation, roof, storey, tileCourses, type WindowS
 import * as landmarks from './harbor-landmarks.js';
 import type { Gouache } from './gouache.js';
 import type { Site } from './painted-coast.js';
+import type { RiverDistrict } from './river-neighborhoods.js';
 type Street = 'houses' | 'steps' | 'terraces' | 'crescent' | 'apartments';
 type Building = Exclude<Site['kind'], 'pines' | 'towers' | 'wharf'>;
 const streetColors: readonly Pigment[] = ['plaster', 'chalk', 'sage', 'ochre', 'oxblood'];
+const districtColors:Record<RiverDistrict,readonly number[]>={
+  residential:[0,1,3],gardens:[2,2,1],exchange:[3,4,3],works:[4,4,0],civic:[1,1,0]
+};
 const floorHeight = 1.46;
 const upperWindows: Record<Street, readonly [WindowStyle, WindowStyle]> = {
   houses: ['sash', 'oriel'],
@@ -149,7 +153,7 @@ export function createHarborBuildings(paint?: Gouache) {
     }
     return g;
   }
-  function street(kind: Street, seed: number, width: number, additions:number) {
+  function street(kind: Street, seed: number, width: number, additions:number,district?:RiverDistrict) {
     const g = new T.Group(), apartments = kind === 'apartments';
     const pitch = apartments ? 4.87 : kind === 'steps' ? 4.0 : 3.28;
     const count = Math.max(1, Math.min(3, Math.round(width / pitch)));
@@ -160,7 +164,9 @@ export function createHarborBuildings(paint?: Gouache) {
       const y = kind === 'steps' ? i * .33 : 0;
       const z = kind === 'crescent' ? centered * centered * .39 : (n % 3) * .15;
       const angle = kind === 'crescent' ? centered * .24 : (n % 3 - 1) * .033;
-      add(g, dwelling(kind, floors+additions, kind === 'crescent' ? (seed % 5) : n % 5, (seed >>> (i*5+3)) % 6), centered * pitch, y, z, angle);
+      const tint=kind==='crescent'?seed:n,palette=district && districtColors[district];
+      const color=palette?palette[tint%palette.length]!:tint%5;
+      add(g, dwelling(kind, floors+additions, color, (seed >>> (i*5+3)) % 6), centered * pitch, y, z, angle);
       if (kind === 'steps')
         add(g, part('stair', stair), centered * pitch + 1.88, y, z + .05);
     }
@@ -175,7 +181,7 @@ export function createHarborBuildings(paint?: Gouache) {
     }
     return g;
   }
-  function build(kind: Building, seed: number, width: number, additions=0) {
+  function build(kind: Building, seed: number, width: number, additions=0,district?:RiverDistrict) {
     const g = new T.Group();
     switch (kind) {
       case 'houses':
@@ -183,7 +189,7 @@ export function createHarborBuildings(paint?: Gouache) {
       case 'terraces':
       case 'crescent':
       case 'apartments':
-        return street(kind, seed, width, additions);
+        return street(kind, seed, width, additions,district);
       case 'market': {
         const bays = Math.max(3, Math.min(6, Math.round(width / 1.54)));
         const awning = (['ochre', 'sage', 'clay'] as const)[seed % 3]!;
@@ -211,5 +217,10 @@ export function createHarborBuildings(paint?: Gouache) {
     }
     return g;
   }
-  return { build, dispose() { templates.clear(); workshop.dispose(); } };
+  function outbuilding(kind:'studio'|'pergola'|'shed'){
+    if(kind==='pergola')return part('pergola',plantedTerrace);
+    if(kind==='shed')return part('warehouse',landmarks.warehouse);
+    return dwelling('houses',1,1,2);
+  }
+  return { build, outbuilding, dispose() { templates.clear(); workshop.dispose(); } };
 }
