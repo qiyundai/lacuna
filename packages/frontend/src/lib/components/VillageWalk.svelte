@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { aiAvailable } from '../../../../shared/ai-release.js';
   import { onMount, tick } from 'svelte';
   import { api, isCompanion, type EntryData, type MemoirEdition, type ModelWeights } from '$lib/api.js';
   import { companionRequest } from '$lib/stores/ai.svelte.js';
@@ -130,7 +131,7 @@
       if(!guest)prependEntry(saved);
       entries=[...entries.filter(e=>e.id!==saved.id),saved];selected=saved.presence??saved.id;draft='';draftId='';doorOpen=false;
       close();notice=guest?'Page saved for this visit.':'Page saved.';
-      if(!guest && isCompanion && sharePage && vaultStore.status?.aiAllowed)void interpret(saved.id,version);
+      if(aiAvailable && !guest && isCompanion && sharePage && vaultStore.status?.aiAllowed)void interpret(saved.id,version);
       sharePage=false;
     }catch{if(alive)error='Your page is still here. Try saving again.';}
     finally{if(alive)busy=false;}
@@ -185,7 +186,7 @@
           <form onsubmit={e=>{e.preventDefault();void save();}}>
             <label for="village-page">What’s on your mind?</label>
             <textarea id="village-page" bind:value={draft} oninput={()=>draftId=''} maxlength="500" rows="5" required></textarea>
-            {#if !guest && isCompanion && vaultStore.status?.aiAllowed}
+            {#if aiAvailable && !guest && isCompanion && vaultStore.status?.aiAllowed}
               <label><input type="checkbox" bind:checked={sharePage}/> Let ChatGPT read this page and up to six earlier excerpts to shape its encounter.</label>
             {/if}
             <button class="ink" disabled={!draft.trim()||busy}>{busy?'Saving…':'Save page'}</button>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { aiAvailable } from '../../../../shared/ai-release.js';
   import { untrack, tick } from 'svelte';
   import { fade } from 'svelte/transition';
   import { memoirStore, loadMemoir } from '$lib/stores/memoir.svelte.js';
@@ -90,8 +91,8 @@
     <div class="empty-story memoir-seed">
       <div class="gathering" aria-hidden="true">{#each Array.from({ length: 20 }) as _, i}<span class:held={i < count} style={`--i:${i}`}></span>{/each}</div>
       <p>There’s room for the unfinished.</p>
-      <p class="quiet">{count < 20 ? `Your first memoir begins with 20 thoughts. You’ve held ${count}. For now, let the fragments be fragments.` : 'Your words are ready to gather into a first telling. Let ChatGPT reflect when you’re ready.'}</p>
-      {#if count >= 20 && isCompanion}<button class="quiet-button" disabled={refreshing} onclick={reflect}>{refreshing ? 'beginning…' : 'gather a first telling'}</button>{/if}
+      <p class="quiet">{!aiAvailable ? 'Living Memoir · Coming soon' : count < 20 ? `Your first memoir begins with 20 thoughts. You’ve held ${count}. For now, let the fragments be fragments.` : 'Your words are ready to gather into a first telling. Let ChatGPT reflect when you’re ready.'}</p>
+      {#if aiAvailable && count >= 20 && isCompanion}<button class="quiet-button" disabled={refreshing} onclick={reflect}>{refreshing ? 'beginning…' : 'gather a first telling'}</button>{/if}
     </div>
   {/if}
   {#if error}<p role="alert" class="quiet">{error} <button class="quiet-button" onclick={() => history()}>try again</button></p>{/if}

@@ -252,7 +252,8 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     shop.breezeTime.value=time;
     city.worldToLocal(localEye.copy(camera.position));meadow?.view();
     valley.tick(time,camera.position);sea.clock.value=time;atmosphere.render(time);
-    if(onMarkers)pageTargets.update((selectedPage&&plan.addresses.get(selectedPage))||plan.latest,selectedPage);
+    const selected=selectedPage?plan.addresses.get(selectedPage):undefined;
+    if(onMarkers)pageTargets.update(selected??plan.latest,selected?selectedPage:undefined);
     if(!paused)schedule();
   }
   function fit(glide=false){
@@ -395,10 +396,10 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       });
     }
     glows.geometry.dispose();glows.geometry=new T.BufferGeometry();glows.geometry.setAttribute('position',new T.Float32BufferAttribute(positions,3));glows.geometry.setAttribute('radius',new T.Float32BufferAttribute(radii,1));glows.visible=positions.length>0;
-    const beacon=visible.filter(s=>s.kind==='beacon').sort((a,b)=>Math.abs(sitePoint(a).x-focusX)-Math.abs(sitePoint(b).x-focusX))[0];
+    const beacon=visible.filter(s=>s.kind==='beacon'&&!s.quiet).sort((a,b)=>Math.abs(sitePoint(a).x-focusX)-Math.abs(sitePoint(b).x-focusX))[0];
     beamReady=!!beacon;if(beacon){beam.position.copy(lots.find(lot=>lot.site===beacon)!.model.position);beam.position.y+=8.61;}
     sailings(start,end);
-    rail=visible.find(s=>s.kind==='arches');tramReady=!!rail;
+    rail=visible.find(s=>s.kind==='arches'&&!s.quiet);tramReady=!!rail;
     renderer.shadowMap.needsUpdate=true;
     if(viewInlet===undefined){
       if(reveal && next.latest){
@@ -434,7 +435,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     const start=press;press=undefined;
     if(!onPage||!start||start.id!==e.pointerId||Math.hypot(start.x-e.clientX,start.y-e.clientY)>5)return;
     const found=pageTargets.pick(e.clientX,e.clientY);
-    if(found)onPage(selectedPage&&plan.addresses.get(selectedPage)===found?selectedPage:found.id);
+    if(found)onPage(selectedPage&&plan.addresses.get(selectedPage)===found?selectedPage:found.readableId??found.id);
   },options);
   orbit.addEventListener('start',()=>{inspected=true;framing=undefined;});orbit.addEventListener('change',schedule);
   canvas.addEventListener('keydown',e=>{

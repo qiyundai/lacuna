@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { aiAvailable } from '../../../../shared/ai-release.js';
   import { onMount, untrack } from 'svelte';
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { isCompanion } from '$lib/api.js';
   import { aiStore, loadAI, companionRequest } from '$lib/stores/ai.svelte.js';
   import { modal } from '$lib/modal.js';
+  import ReflectionAccount from './ReflectionAccount.svelte';
   import { loadPatterns } from '$lib/stores/patterns.svelte.js';
   import { loadMemoir } from '$lib/stores/memoir.svelte.js';
   let { show = $bindable(false) }: { show: boolean } = $props();
@@ -25,23 +27,27 @@
     if (!revoked) error = 'Disconnected here. Remote revocation was not confirmed; disconnect Lacuna in ChatGPT settings.';
   }
   $effect(() => {
-    if (!show) return;
+    if (!show || !aiAvailable) return;
     untrack(() => run(async () => {
       await loadAI();
       if (isCompanion && aiStore.companion?.connected) models = await companionRequest('models');
     }));
   });
   onMount(() => {
+    if(!aiAvailable)return;
     const timer = setInterval(() => { if (show) loadAI().then(() => { if (aiStore.companion?.state === 'complete') { loadPatterns(); loadMemoir(); } }).catch(() => {}); }, 5000);
     return () => clearInterval(timer);
   });
 </script>
 {#if show}
-  <div class="plan-screen" use:modal={{ dismiss: () => show = false }} role="dialog" aria-modal="true" aria-label="AI and ChatGPT plan" tabindex="-1"
+  <div class="plan-screen" use:modal={{ dismiss: () => show = false }} role="dialog" aria-modal="true" aria-label="AI reflections" tabindex="-1"
     onclick={(event) => { if (event.target === event.currentTarget) show = false; }} onkeydown={(event) => { if (event.key === 'Escape') show = false; }} transition:fade={{ duration: 500, easing: cubicOut }}>
     <div class="plan-content journal-sheet">
       <h2>AI reflections</h2>
-      {#if isCompanion}
+      {#if !aiAvailable}
+        <p>Coming soon</p>
+        <p>The Soul Map will trace recurring threads in your pages. The Living Memoir will gather them into chapters.</p>
+      {:else if isCompanion}
         <p>using your ChatGPT plan. eligible requests use your plan allowance or credits. enable journal sharing in privacy & storage before refreshing reflections.</p>
         {#if aiStore.companion?.connected}
           <p>{aiStore.companion.email}</p>
@@ -64,10 +70,9 @@
         {/if}
         {#if aiStore.companion?.message}<p role="status">{aiStore.companion.message}</p>{/if}
       {:else}
-        <p>ChatGPT reflections are not connected in the browser app yet. You can write, search, keep thoughts close, and back up your journal here without connecting an account.</p>
-        <p>Your words are not sent to AI. A future connection will ask for your permission before sharing journal context.</p>
+        <ReflectionAccount/>
       {/if}
-      {#if isCompanion}<a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">Manage usage</a>{/if}
+      {#if aiAvailable && isCompanion}<a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">Manage usage</a>{/if}
       {#if error}<p role="alert">{error}</p>{/if}
       <button onclick={() => show = false}>Return</button>
     </div>

@@ -185,7 +185,11 @@ export async function harborWorkshop(){
         tree(g,w*.46,0,-2.04,2.36+(seed%10)*.09,seed);
       }
     }
-    for(let i=0;i<s.lights;i++)lantern(g,-w*.36+i*1.9,.1,2.5);
+    for(let i=0;i<(s.litAdditions??s.lights);i++)lantern(g,-w*.36+i*1.9,.1,2.5);
+    if(s.quiet)g.traverse(part=>{
+      if(part instanceof T.Mesh && (part.material instanceof T.MeshBasicMaterial || part.material===materials.lamp))
+        part.material=materials.iron;
+    });
     return g;
   }
   function ferry(){

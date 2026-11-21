@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { aiAvailable } from '../../../../shared/ai-release.js';
   import { untrack } from 'svelte';
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
@@ -36,11 +37,13 @@
       <p class="quiet">The backup stays encrypted outside this app. Restore it from the lock screen with {isCompanion ? 'the same ChatGPT identity and ' : ''}your passphrase.</p>
       {#if isCompanion}
       <section>
+        {#if aiAvailable}
         <h3>Choose what leaves this computer.</h3>
         <p>Reflections send journal context directly to OpenAI: thoughts being analyzed, up to 20 recent thoughts for a reflection, and accumulated concepts, summaries, and an earlier memoir where needed. Generated writing returns to your encrypted vault. This sharing is separate from signing in.</p>
         <label><input type="checkbox" checked={vaultStore.status?.aiAllowed ?? false} disabled={busy} onchange={e => run(() => preferences(e.currentTarget.checked, false))} /> Allow journal context to be sent to OpenAI for reflections</label>
         <label><input type="checkbox" checked={vaultStore.status?.automaticAI ?? false} disabled={busy || !vaultStore.status?.aiAllowed} onchange={e => run(() => preferences(true, e.currentTarget.checked))} /> Reflect automatically after I save a thought</label>
         <p class="quiet">Both start off. With sharing on and automatic reflections off, use “refresh reflections” in AI & ChatGPT plan. OpenAI must read the shared context to respond. Requests use store: false; this is not a promise of zero retention.</p>
+        {:else}<h3>AI reflections · Coming soon</h3>{/if}
       </section>
       <section>
         <h3>An optional encrypted cloud copy.</h3>
@@ -63,8 +66,8 @@
       {/if}
       {:else}
         <section>
-          <h3>Only on this device.</h3>
-          <p>Your journal is saved in this browser’s storage. No journal content or passphrase is sent to Lacuna or OpenAI. This browser version does not currently sync to a cloud account or generate ChatGPT reflections.</p>
+          <h3>Your encrypted journal</h3>
+          <p>Your journal and book are saved in this browser. AI reflections are coming soon.</p>
           <p>Clearing site data, using a private tab, losing your device, or browser storage cleanup can erase the only copy. Keep an encrypted backup somewhere safe. You can restore a browser backup on another phone or computer using its original passphrase.</p>
           <p class="quiet">Browser backups and desktop companion backups have different formats. Existing companion journals remain on the computer that holds them.</p>
           {#if recoveryCopies.length}<h3>Copies kept before a restore.</h3><p>These files remain encrypted with their original passphrase.</p>{/if}

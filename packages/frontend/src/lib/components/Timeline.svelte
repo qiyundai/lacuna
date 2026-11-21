@@ -10,6 +10,7 @@
   import { modal } from '$lib/modal.js';
   import { overlayStore } from '$lib/stores/overlay.svelte.js';
   import { sessionVersion } from '$lib/session-version.js';
+  import { resetJournalData } from '$lib/stores/session.svelte.js';
 
   let query = $state(''), kept = $state(false), searching = $state(false);
   let results = $state<EntryData[]>([]), nextCursor = $state<string | null>(null);
@@ -62,18 +63,19 @@
     } catch { detailError = 'Could not change this thought. Try again.'; }
     finally { busy = false; }
   }
-  async function removeThought() {
+  async function forgetThought() {
     if (!selected || busy) return;
     const id = selected.id, version = sessionVersion.value;
     busy = true; detailError = '';
     try {
-      await api.entries.delete(id);
+      await api.entries.forget(id);
       if (version !== sessionVersion.value) return;
-      entriesStore.entries = entriesStore.entries.filter(e => e.id !== id);
+      resetJournalData();requestId++;
       results = results.filter(e => e.id !== id);
       selected = null;
-      void loadStory(); void loadPatterns(); void loadMemoir();
-    } catch { detailError = 'Could not delete this thought. Try again.'; }
+      if(filtered)void searchEntries(query.trim(),kept,requestId);
+      void loadEntries();void loadStory(); void loadPatterns(); void loadMemoir();
+    } catch { detailError = 'Could not forget this page. Try again.'; }
     finally { busy = false; }
   }
 </script>
@@ -134,13 +136,13 @@
       <p class="held-words">{selected.body}</p>
       <div class="thought-actions">
         <button disabled={busy} aria-pressed={!!selected.kept_at} onclick={keepThought}>{selected.kept_at ? '✧ kept close' : '✧ keep close'}</button>
-        <button disabled={busy} onclick={() => confirming = !confirming}>let this go</button>
+        <button disabled={busy} onclick={() => confirming = !confirming}>Forget this page</button>
       </div>
       {#if confirming}
         <div class="release" transition:fade={{ duration: 250 }}>
-          <p>This permanently deletes this thought and clears reflections that may contain it. Your other thoughts stay.</p>
-          <button class="danger" disabled={busy} onclick={removeThought}>delete this thought</button>
-          <button disabled={busy} onclick={() => confirming = false}>keep it here</button>
+          <p>The words will be permanently removed from this journal. Its address will stay. Readings and memoir passages that drew on this page will disappear.</p>
+          <button disabled={busy} onclick={() => confirming = false}>Keep this page</button>
+          <button class="danger" disabled={busy} onclick={forgetThought}>Forget page</button>
         </div>
       {/if}
       {#if detailError}<p role="alert" class="quiet">{detailError}</p>{/if}

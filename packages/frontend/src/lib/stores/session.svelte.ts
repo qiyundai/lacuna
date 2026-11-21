@@ -8,12 +8,16 @@ import { sessionVersion } from '../session-version.js';
 import { aiStore } from './ai.svelte.js';
 import { storyStore } from './story.svelte.js';
 
-export function resetData() {
+export function resetJournalData() {
   sessionVersion.value++;
   entriesStore.entries = []; entriesStore.nextCursor = null; entriesStore.status = 'idle';
   patternsStore.model_weights = null; patternsStore.last_updated = null; patternsStore.status = 'idle';
   memoirStore.prose = null; memoirStore.generated_at = null; memoirStore.status = 'idle';
   storyStore.data = null; storyStore.status = 'idle';
+}
+
+export function resetData() {
+  resetJournalData();
   clearDraft(); overlayStore.open = false;
   aiStore.provider = 'chatgpt'; aiStore.entryCount = 0; aiStore.pending = false; aiStore.companion = null;
 }

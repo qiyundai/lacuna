@@ -1,4 +1,10 @@
-# Privacy release 0.3
+# Browser journal and hosted reflections
+
+The browser vault is authoritative for the current product. A free journal has no inference connection. The paid browser flow uses an email-code Lacuna account and Stripe entitlement, and requires a separate opt-in bound to this vault and account. Only the inputs for a single observation or passage pass through the Worker to the OpenAI Responses API. The Worker stores billing state, consent, revocable sessions, opaque request identifiers, and usage reservations. Journal text and generated writing stay out of its database and logs. The browser checks its unlocked session, revision and entitlement before accepting output. Restoration clears sharing consent.
+
+The following notes describe the older development builds and the separate companion vault.
+
+## Privacy release 0.3
 
 Release 0.4 adds a separate browser-native local journal for phone onboarding. It uses Web Crypto AES-256-GCM, PBKDF2-HMAC-SHA256 with 600,000 iterations and a random 256-bit salt, and IndexedDB atomic compare-and-replace transactions. The derived CryptoKey is non-extractable and is never persisted; reload/idle/manual lock drop it. Browser passphrases and journal content do not reach any server. Browser sync and inference are unavailable pending a registered hosted integration; existing desktop features remain. Browser encrypted backups have their own versioned format. Before overwriting on restore, the browser saves an encrypted recovery copy that can be downloaded in privacy & storage. Explicit deletion clears active/recovery records. Site-data clearing, private browsing, quota/eviction, device compromise, and malicious same-origin code remain boundaries. See MOBILE-ONBOARDING.md and the declaration for user-facing behavior.
 

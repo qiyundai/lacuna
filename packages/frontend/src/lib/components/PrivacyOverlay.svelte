@@ -36,13 +36,13 @@
       <h2>Data and privacy</h2>
       {#if isCompanion}
       <p>New journal content is encrypted in a passphrase-protected vault on this computer. Cloud sync and AI sharing start off.</p>
-      <p>ChatGPT signs you in. Lacuna verifies an identity token. Access and refresh tokens stay in the local companion. If you allow reflections, journal context goes directly to OpenAI using your plan allowance or credits.</p>
+      <p>ChatGPT signs you in. Lacuna verifies an identity token. Access and refresh tokens stay in the local companion. AI reflections are coming soon.</p>
       <p>Optional cloud sync stores an encrypted copy. Older cloud journals need a verified migration before their active plaintext records are removed. Deletion does not instantly erase provider backups or copies you exported.</p>
       <a class="hint" href="/privacy">Read the full privacy declaration</a>
       <p class="hint">Disconnecting ChatGPT removes credentials here. Manage app access and usage in ChatGPT settings.</p>
       {:else}
         <p>Your journal is encrypted in this browser. Your passphrase and encryption key are never saved or sent to a server.</p>
-        <p>This browser journal does not currently connect to a cloud account or ChatGPT. Your words stay on this device. Lock your space from the menu when you’re done.</p>
+        <p>AI reflections are coming soon. Journal pages stay in your browser.</p>
         <p>Clearing browser storage or losing your device can erase the only copy. Download an encrypted backup from privacy & storage and keep its passphrase safe. There is no password reset.</p>
         <a class="hint" href="/privacy">Read the full privacy declaration</a>
       {/if}

@@ -1,4 +1,5 @@
-export type CityPage = { id: string; created_at: number; riverEdition?: 2 | 3 };
+import type { CityPage } from '../../../../shared/city-address.js';
+export type { CityPage };
 export type CityBlock = { x: number; z: number; seed: number; levels: number; green: boolean };
 
 export function hashPage(value: string) {

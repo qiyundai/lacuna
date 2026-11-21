@@ -19,6 +19,13 @@ export function archiveMarkdown(archive: ArchiveData) {
   for (const entry of archive.entries) lines.push(`### ${dateLabel(entry.created_at)}${entry.kept_at ? ' · Kept close' : ''}`, '', entry.body, '');
   if (archive.memoirs.length) lines.push('## Living memoir editions', '', 'Generated reflections, shaped from your entries.', '');
   for (const edition of archive.memoirs) lines.push(`### ${dateLabel(edition.generated_at)}`, '', edition.prose, '');
+  for(const chapter of archive.book?.chapters??[]){
+    const passages=chapter.passages.filter(p=>p.prose);
+    if(!passages.length)continue;
+    const first=archive.entries.find(e=>e.id===passages[0]!.pages[0]);
+    lines.push('## '+(passages[0]!.title || (first?dateLabel(first.created_at):'Living memoir')),'');
+    for(const passage of passages)lines.push(passage.prose,'');
+  }
   return lines.join('\n');
 }
 export function downloadFile(text: string, filename: string, type: string) {

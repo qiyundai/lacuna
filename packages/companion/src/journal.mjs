@@ -1,4 +1,5 @@
 import { attachPresence, remember, reviseThread } from '../../shared/village.ts';
+import { forgetPageAt } from '../../shared/city-address.ts';
 import { PlanError } from './openai.mjs';
 import { validGraph, validWeights } from '../../worker/src/ai/validation.ts';
 import { validResult } from '../../worker/src/ai/pipeline.ts';
@@ -21,9 +22,10 @@ export async function applyAnalysis(vault, source, result) {
 export async function importLegacy(vault, legacy) {
   if (!Array.isArray(legacy.entries) || !Array.isArray(legacy.memoirs) || !Array.isArray(legacy.summaries)) throw new Error('Invalid legacy archive');
   await vault.update(d => {
-    const hadEntries = d.entries.length > 0;
+    const hadEntries = d.entries.length > 0 || !!d.forgotten?.length;
     for (const entry of legacy.entries) {
       if (entry.user_id !== vault.owner || typeof entry.body !== 'string' || !/^[a-f0-9]{32}$/.test(entry.id)) throw new Error('Invalid legacy entry');
+      if(d.forgotten?.some(a=>a.id===entry.id))continue;
       const existing = d.entries.find(e => e.id === entry.id);
       if (existing && JSON.stringify(existing) !== JSON.stringify(entry)) throw new PlanError('MIGRATION_CONFLICT', 'An entry differs between this device and the old cloud archive. Export both copies before resolving it.');
       if (!existing) d.entries.push(entry);
@@ -56,6 +58,7 @@ function page(items, url, owner, kind, size) {
 export async function journalRequest(vault, path, method, value, url) {
   const d = vault.read();
   if (path === '/village' && method === 'GET') return {entries:d.entries};
+  if (path === '/city' && method === 'GET') return {entries:d.entries,forgotten:d.forgotten??[]};
   if (path === '/village/thread' && method === 'POST') return vault.update(journal => reviseThread(journal.entries,value));
   if (path === '/village/encounter' && method === 'POST') return vault.update(journal => remember(journal.entries, value));
   if(path === '/town' && method === 'GET'){
@@ -85,6 +88,7 @@ export async function journalRequest(vault, path, method, value, url) {
   if (path === '/entries' && method === 'POST') {
     if (typeof value.body !== 'string' || !value.body.trim() || value.body.length > 500 || !/^[a-f0-9]{32}$/.test(value.entry_id) || !Number.isSafeInteger(value.solidified_at) || value.solidified_at < 0 || value.solidified_at > now() + 300) error('Invalid thought. Use up to 500 characters.');
     return vault.update(data => {
+      if(data.forgotten?.some(a=>a.id===value.entry_id))error('This page has already been forgotten.');
       const existing = data.entries.find(e => e.id === value.entry_id);
       if (existing) { if (existing.body !== value.body) error('This thought ID was already used.'); return { entry: existing }; }
       const entry = { id: value.entry_id, riverEdition: 3, user_id: vault.owner, body: value.body, created_at: now(), solidified_at: value.solidified_at, kept_at: null };
@@ -102,8 +106,15 @@ export async function journalRequest(vault, path, method, value, url) {
     if (method === 'PATCH' && typeof value.kept !== 'boolean') error('Invalid kept value.');
     return vault.update(data => {
       const index = data.entries.findIndex(e => e.id === match[1]);
+      const previous=data.forgotten?.find(a=>a.id===match[1]);
+      if(method==='DELETE' && previous)return {ok:true,address:previous};
       if (index < 0) throw new PlanError('NOT_FOUND', 'Thought not found.');
-      if (method === 'DELETE') { data.river=morning(data,now()); data.entries.splice(index, 1); data.version++; clearDerived(data); return { ok: true }; }
+      if (method === 'DELETE') {
+        data.river=morning(data,now());
+        const address=forgetPageAt(data,index);
+        data.version++; clearDerived(data);
+        return {ok:true,address};
+      }
       data.entries[index].kept_at = value.kept ? data.entries[index].kept_at ?? now() : null;
       return { entry: data.entries[index] };
     });

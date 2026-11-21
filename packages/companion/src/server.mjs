@@ -17,7 +17,10 @@ export function allowedRequest(req, origin) {
     (!req.url.startsWith('/api/') && !req.url.startsWith('/companion/') || req.headers['sec-fetch-site'] !== 'cross-site') &&
     (['GET', 'HEAD'].includes(req.method) || req.headers.origin === origin);
 }
+import { aiAvailable } from '../../shared/ai-release.ts';
+
 export async function startCompanion(options = {}) {
+  const reflectionsEnabled=options.reflectionsEnabled??aiAvailable;
   const root = fileURLToPath(new URL('../../../', import.meta.url));
   const port = options.port ?? Number(process.env.LACUNA_PORT ?? 1455);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid LACUNA_PORT');
@@ -180,6 +183,7 @@ export async function startCompanion(options = {}) {
         } catch (err) { browserSession.error = err instanceof PlanError ? err.message : 'ChatGPT identity could not be verified. Connect again.'; }
         res.writeHead(303, { Location: '/' }); return res.end();
       }
+      if (!reflectionsEnabled && ['/companion/village/interpret','/companion/test','/companion/reflect','/companion/models','/companion/model','/api/ai/refresh'].includes(url.pathname)) return json(res,{error:{code:'COMING_SOON',message:'AI reflections are coming soon.'}},503);
       if (url.pathname.startsWith('/companion/')) {
         if (url.pathname === '/companion/session' && req.method === 'GET') {
           const result = browserSession.auth ? await identity(req) : null;
@@ -211,6 +215,7 @@ export async function startCompanion(options = {}) {
         if (url.pathname === '/companion/vault/backup' && req.method === 'GET') { vault.read(); return json(res, await vault.envelope()); }
         if (url.pathname === '/companion/vault/preferences' && req.method === 'PATCH') {
           const value = await body(req);
+          if (!reflectionsEnabled && value.aiAllowed === true) return json(res,{error:{code:'COMING_SOON',message:'AI reflections are coming soon.'}},503);
           if (typeof value.aiAllowed !== 'boolean' || typeof value.automaticAI !== 'boolean') throw new PlanError('BAD_REQUEST', 'Invalid privacy preferences.');
           if (!value.aiAllowed) jobs.get(user.id)?.controller.abort();
           await vault.update(d => { d.aiAllowed = value.aiAllowed; d.automaticAI = value.aiAllowed && value.automaticAI; });
@@ -317,7 +322,7 @@ export async function startCompanion(options = {}) {
         const result = await journalRequest(vault, path, req.method, payload, url);
         json(res, result);
         if (!['GET', 'HEAD'].includes(req.method)) syncLater(user.id, token);
-        if (req.method === 'POST' && path === '/entries' && vault.read().aiAllowed && vault.read().automaticAI) queueJob(user.id, token);
+        if (reflectionsEnabled && req.method === 'POST' && path === '/entries' && vault.read().aiAllowed && vault.read().automaticAI) queueJob(user.id, token);
         return;
       }
       if (!['GET', 'HEAD'].includes(req.method)) return json(res, { error: { code: 'NOT_FOUND', message: 'Not found' } }, 404);

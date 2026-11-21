@@ -10,6 +10,8 @@ import { memoirRoute } from './routes/memoir.js';
 import { aiRoute } from './routes/ai.js';
 import { storyRoute } from './routes/story.js';
 import { privacyRoute } from './routes/privacy.js';
+import reflections from './routes/reflections.js';
+import { aiAvailable } from '../../shared/ai-release.js';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -52,6 +54,8 @@ app.route('/memoir', memoirRoute);
 app.route('/ai', aiRoute);
 app.route('/story', storyRoute);
 app.route('/privacy', privacyRoute);
+if (aiAvailable) app.route('/reflections', reflections);
+else app.all('/reflections/*', c => c.json({code:'COMING_SOON',error:'AI reflections are coming soon.'},503));
 
 app.onError((err, c) => {
   if (err instanceof SyntaxError) return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid JSON' } }, 400);

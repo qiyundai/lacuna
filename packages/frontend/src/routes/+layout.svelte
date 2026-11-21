@@ -1,6 +1,8 @@
 <script lang="ts">
   import '../app.css';
   import { onMount } from 'svelte';
+  import { aiAvailable } from '../../../shared/ai-release.js';
+  import { backgroundBook } from '$lib/reflection-service.js';
   import { session, hydrateSession, setAuthed, signOut } from '$lib/stores/session.svelte.js';
   import { initWeather } from '$lib/stores/weather.svelte.js';
   import { page } from '$app/state';
@@ -31,6 +33,7 @@
   onMount(() => {
     document.getElementById('initial-arrival')?.remove();
     hydrateSession();
+    const stopBook=aiAvailable && !isCompanion?backgroundBook():undefined;
     initWeather();
     const stored = readLocal('lacuna_consented');
     consentGiven = !!stored;
@@ -62,6 +65,7 @@
     for (const event of activityEvents) window.addEventListener(event, activity, { passive: true });
     const timer = setInterval(() => { if (session.status === 'authed') loadVault().catch(() => {}); }, 5000);
     return () => {
+      stopBook?.();
       clearInterval(timer); window.removeEventListener('lacuna:unauthorized', signOut); window.removeEventListener('lacuna:locked', didLock);
       for (const event of activityEvents) window.removeEventListener(event, activity);
     };

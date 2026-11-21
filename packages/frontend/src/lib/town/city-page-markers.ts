@@ -21,7 +21,7 @@ export function cityPageMarkers(canvas:HTMLCanvasElement,camera:T.PerspectiveCam
       const next=point.distanceToSquared(ray.origin);
       if(next<distance){distance=next;found=site;}
     }
-    return found;
+    return found?.quiet?undefined:found;
   }
   function hover(site?:Site){
     if(site===hovered)return;
@@ -35,11 +35,12 @@ export function cityPageMarkers(canvas:HTMLCanvasElement,camera:T.PerspectiveCam
     dirty=false;width=w;height=h;previous.copy(projection);
     const candidates=[];
     for(const {box,site} of parcels){
+      if(site.quiet)continue;
       box.getCenter(point);point.y=box.max.y;point.applyMatrix4(projection);
       const x=Math.round((point.x+1)*w/2),y=Math.round((1-point.y)*h/2);
       if(point.z<=-1||point.z>=1||x<66||x>w-66||y<94||y>h-100)continue;
       const priority=site===hovered?0:site===preferred?1:2;
-      const id=site===preferred&&pageId?pageId:site.id;
+      const id=site===preferred&&pageId?pageId:site.readableId??site.id;
       candidates.push({id,x,y,priority,distance:Math.hypot(x-w*.5,y-h*.5)});
     }
     candidates.sort((a,b)=>a.priority-b.priority||a.distance-b.distance);

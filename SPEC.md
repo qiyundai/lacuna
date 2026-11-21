@@ -90,7 +90,9 @@ The visual language is a nocturnal reading room: the existing dark surface, ivor
 
 The AI reads the nature of each entry and weights mental models dynamically. The user never sees model names in the reflection space — only plain language reflections of their patterns.
 
-### Mental Models
+The browser book keeps the six perspectives below but grounds each published reading in specific passages from at least two writing days. New reflections use dated observations, not numeric lens weights. Subscription and consent are separate. The memoir grows in independently sourced passages organized by period. Forgetting withdraws all outputs whose supplied context included that page while preserving independent prose, including in earlier tellings.
+
+### Original mental models
 
 | Model | Plain Language Label | Activates When |
 |---|---|---|

@@ -2,6 +2,7 @@ import { scrypt, randomBytes, createCipheriv, createDecipheriv, timingSafeEqual 
 import { promisify } from 'node:util';
 import { readFile, mkdir, open, rename, rm, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { validCityHistory } from '../../shared/city-address.ts';
 import { PlanError } from './openai.mjs';
 
 const derive = promisify(scrypt);
@@ -30,6 +31,7 @@ function decrypt(envelope, owner, key) {
   const bytes = Buffer.concat([cipher.update(Buffer.from(envelope.ciphertext, 'base64')), cipher.final()]);
   const value = JSON.parse(bytes.toString('utf8'));
   if (value.format !== 'lacuna.journal.v1' || !Number.isSafeInteger(value.revision) || !Array.isArray(value.entries) || !Array.isArray(value.memoirs) || !Array.isArray(value.summaries) || !value.graph) fail('INVALID_VAULT', 'The decrypted journal is damaged.');
+  if(!validCityHistory(value.entries,value.forgotten))fail('INVALID_VAULT','The city addresses are damaged.');
   return value;
 }
 async function keyFor(passphrase, salt) {

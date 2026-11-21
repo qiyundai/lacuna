@@ -1,11 +1,12 @@
 import { hashPage, type CityPage } from './city-growth.js';
+import { citySequence, type ForgottenAddress } from '../../../../shared/city-address.js';
 
 import { districtFrontage, districtKey, districtOf, ferryServices, influenceAround, parcelShelf, type FerryService, type Neighborhoods, type RiverDistrict, type RiverParcel } from './river-neighborhoods.js';
 
 export const frontage = ['houses','steps','terraces','crescent','apartments','market','warehouse','crane','pines','glasshouse','station','civic','belfry','towers','arches','wharf','beacon'] as const;
 export type Bank = 0 | 1;
 type Architecture = typeof frontage[number];
-export type Site = { id:string; kind:Architecture; bank:Bank; ferryTerminal?:boolean; setback?:number; district?:RiverDistrict; x:number; y:number; width:number; mirror:boolean; lane:number; lights:number; predecessor?:Site };
+export type Site = { id:string; kind:Architecture; bank:Bank; ferryTerminal?:boolean; setback?:number; district?:RiverDistrict; x:number; y:number; width:number; mirror:boolean; lane:number; lights:number; quiet?:boolean; readableId?:string; litAdditions?:number; predecessor?:Site };
 export type Coast = { neighborhoods:Neighborhoods; ferries:FerryService[]; sites:Site[]; addresses:Map<string,Site>; latest?:Site; service:number; start:number; end:number };
 
 const lanes:readonly Architecture[][] = [
@@ -27,10 +28,14 @@ type Parcel=RiverParcel;
 const neighbors=[[-1,0],[1,0],[0,-1],[0,1]] as const;
 const key=(column:number,lane:number,bank:Bank)=>column*8+bank*4+lane;
 
-export function paintedCoast(entries:readonly CityPage[]):Coast {
+export function paintedCoast(entries:readonly CityPage[],forgotten:readonly ForgottenAddress[]=[]):Coast {
   const sites:Site[]=[],addresses=new Map<string,Site>(),occupied=new Map<number,Site>(),front=new Map<number,Parcel>();
   const neighborhoods:Neighborhoods=new Map(),shelves=new Map<number,ReturnType<typeof parcelShelf>>();
-  const pages=[...entries].sort((a,b)=>a.created_at-b.created_at);
+  const sequence=citySequence(entries,forgotten);
+  const positions=new Map(sequence.map((page,i)=>[page.id,i]));
+  const forgottenAfter=new Map(forgotten.map(a=>[a.id,a.forgottenAfter]));
+  const occupiedUntil=new Map<Site,number>();
+  const pages=sequence.sort((a,b)=>a.created_at-b.created_at);
   let latest:Site|undefined,service=0,end=1800;
   if(!pages.length)return {sites,addresses,neighborhoods,ferries:[],service,start:0,end};
   const seed=hashPage(pages[0]!.id);
@@ -52,9 +57,12 @@ export function paintedCoast(entries:readonly CityPage[]):Coast {
     const salt=hashPage(page.id),last=sites.length;
     const twoBanks=page.riverEdition===2 || page.riverEdition===3;
     const emerging=page.riverEdition===3;
-    const recent=sites.slice(-14).filter(site=>site.lights<3 && site.kind!=='pines');
+    const position=positions.get(page.id)!;
+    const until=forgottenAfter.get(page.id)??Infinity;
+    const recent=sites.slice(-14).filter(site=>site.lights<3 && site.kind!=='pines' && occupiedUntil.get(site)!>position);
     if(last>5 && salt%8===2 && recent.length){
       latest=recent[(salt>>>9)%recent.length]!;
+      occupiedUntil.set(latest,Math.max(occupiedUntil.get(latest)!,until));
       latest.lights++;influenceAround(neighborhoods,latest,true);addresses.set(page.id,latest);service++;continue;
     }
     let choice:Parcel|undefined,score=-Infinity,adjacent=0;
@@ -109,6 +117,7 @@ export function paintedCoast(entries:readonly CityPage[]):Coast {
     const x=132+column*157+((salt>>>12)%19)-9+lane*8;
     latest={id:page.id,kind,lane,bank,x,y:0,width:101+(salt>>>18)%45,mirror:!!(salt&1),lights:0,ferryTerminal:kind==='wharf'};
     if(district)latest.district=district;
+    occupiedUntil.set(latest,until);
     if(emerging && lane!==3)latest.setback=shelves.get(districtKey(choice!))!.setback;
     influenceAround(neighborhoods,latest);
     sites.push(latest);addresses.set(page.id,latest);occupied.set(key(column,lane,bank),latest);front.delete(key(column,lane,bank));
@@ -123,5 +132,22 @@ export function paintedCoast(entries:readonly CityPage[]):Coast {
     edge[bank]=Math.max(edge[bank]!,column);end=Math.max(end,Math.ceil((x+latest.width*.5)/1800)*1800);
     if(latest.ferryTerminal)service++;
   }
-  return {sites,latest,addresses,neighborhoods,ferries:ferryServices(sites),service,start:0,end};
+  const ferries=ferryServices(sites);
+  if(forgotten.length){
+    const residents=new Map<Site,string[]>();
+    for(const [id,site] of addresses){
+      if(forgottenAfter.has(id)){addresses.delete(id);continue;}
+      const ids=residents.get(site)??[];ids.push(id);residents.set(site,ids);
+    }
+    neighborhoods.clear();service=0;
+    for(const site of sites){
+      const ids=residents.get(site);
+      if(!ids){site.quiet=true;site.litAdditions=0;continue;}
+      site.readableId=ids[0];site.litAdditions=ids.length-1;
+      influenceAround(neighborhoods,site);
+      for(let i=1;i<ids.length;i++)influenceAround(neighborhoods,site,true);
+      service+=site.litAdditions+Number(site.ferryTerminal);
+    }
+  }
+  return {sites,latest,addresses,neighborhoods,ferries:ferries.filter(r=>!r.departure.quiet&&!r.arrival?.quiet),service,start:0,end};
 }

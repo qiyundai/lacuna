@@ -13,11 +13,21 @@ The browser encrypts the journal using Web Crypto AES-256-GCM and PBKDF2-HMAC-SH
 
 Restore `.lacuna-web-vault` backups in another browser with their original passphrase. An existing encrypted copy is kept before replacement and can be downloaded under privacy & storage. Deleting this browser journal removes its active copy and those restore copies, not downloaded backups or other devices.
 
-**Browser ChatGPT/cloud connections are not configured yet.** Phone writing works independently. OpenAI's [hosted application registration path](https://developers.openai.com/siwc/website) and [hosted plan-access requirement](https://developers.openai.com/siwc/token-sharing-open-source) must be completed before offering a hosted ChatGPT-plan connection. Do not adapt the local OAuth flow into a public website or put OAuth refresh tokens in browser storage. No hosted connection, account sync, or inference is claimed in release 0.4.0.
+## Living memoir subscriptions · Coming soon
 
-The optional Node companion retains the ChatGPT sign-in/inference and encrypted cloud-copy features described below. Its journal and backup format are separate from the browser journal. Existing companion data is not automatically moved, replaced, or merged.
+The public release disables background analysis and subscription endpoints. The following describes the implementation reserved for launch.
 
-Find a word across your story, keep thoughts close, explore recurring concepts, and revisit memoir editions. Release **0.3.0** makes encrypted local storage the default. AI sharing, automatic reflections, and encrypted cloud sync start off. Read the public [privacy declaration](https://lacuna-app.pages.dev/privacy), also available at `/privacy` in the companion. Deploy migration `0006_private_vault.sql` with the matching app and companion.
+The browser is the product client. Free journals can write, read, export, and forget offline. In **Menu → AI reflections**, writers can sign in with an email code, purchase a subscription, and independently allow analysis of past and future pages. Background work resumes in an unlocked browser. Published chapters and the Soul Map stay in the encrypted vault after cancellation.
+
+The Pages function proxies `/reflections/*` to the Worker on the same origin as the browser session. For development run the frontend and Wrangler on port 8787 and set `FRONTEND_ORIGIN` to the exact frontend origin. Set `REFLECTION_WORKER_ORIGIN` on Pages when using a different Worker host. Both deployments must use HTTPS in production.
+
+Configure Worker secrets `JWT_SECRET`, `RESEND_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `OPENAI_API_KEY`. Set `EMAIL_FROM` to a verified sender, `STRIPE_PRICE_ID` to a recurring price, and `OPENAI_MODEL` to the evaluated Responses model. Enable the Stripe billing portal, apply migration 0007, and register the Worker's `/reflections/webhook` for checkout completion, subscription creation/update/deletion, and invoice paid/payment-failed events. Use test credentials and a test price before activating live billing.
+
+Set `REFLECTION_ACCOUNT_MICROS` and `REFLECTION_GLOBAL_MICROS` to monthly spending limits in millionths of a US dollar. Set `MODEL_INPUT_MICROS_PER_TOKEN` and `MODEL_OUTPUT_MICROS_PER_TOKEN` to the configured model's uncached rates in the same units per token. The Worker reserves a conservative request budget before sending excerpts and reconciles it against returned usage. Missing limits or credentials disable generation.
+
+Run `node scripts/evaluate-memoir.mjs` to list the synthetic review journals. With a model key, token rates and an explicit `EVAL_BUDGET_USD`, add `--live` to generate blinded comparisons and cost measurements under `.test-output`. Score the outputs before opening the answer key. The previous pipeline remains available for comparison.
+
+The sections below document the separate legacy development companion. Existing desktop vaults stay in place.
 
 ## ChatGPT plan companion
 

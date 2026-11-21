@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { aiAvailable } from '../../../../shared/ai-release.js';
   import { onMount, untrack } from 'svelte';
   import { loadEntries } from '$lib/stores/entries.svelte.js';
   import { loadPatterns } from '$lib/stores/patterns.svelte.js';
@@ -6,6 +7,7 @@
   import Timeline from './Timeline.svelte';
   import SoulMap from './SoulMap.svelte';
   import LivingMemoir from './LivingMemoir.svelte';
+  import BookReader from './BookReader.svelte';
   import { overlayStore } from '$lib/stores/overlay.svelte.js';
   import { api, isCompanion } from '$lib/api.js';
   import { loadAI } from '$lib/stores/ai.svelte.js';
@@ -20,7 +22,7 @@
   let touchStartY = 0;
 
   $effect(() => {
-    if (!active) return;
+    if (!active || !aiAvailable) return;
     untrack(() => { loadPatterns(); loadMemoir(); loadStory(); loadAI().catch(() => {}); });
     let polling = false;
     const timer = setInterval(async () => {
@@ -41,14 +43,12 @@
   });
 
   function touchStart(e: TouchEvent) {
-    if (!isCompanion) return;
     if ((e.target as Element).closest('button, input, textarea, a') || e.touches.length !== 1) { touchStartX = NaN; return; }
     touchStartX = e.touches[0]!.clientX;
     touchStartY = e.touches[0]!.clientY;
   }
 
   function touchEnd(e: TouchEvent) {
-    if (!isCompanion) return;
     if (!Number.isFinite(touchStartX) || !e.changedTouches[0]) return;
     const deltaX = touchStartX - e.changedTouches[0]!.clientX;
     if (Math.abs(touchStartY - e.changedTouches[0]!.clientY) >= Math.abs(deltaX)) return;
@@ -73,21 +73,24 @@
     {#if isCompanion}
       <div class="view" inert={currentView !== 1}><SoulMap /></div>
       <div class="view" inert={currentView !== 2}><LivingMemoir active={active && currentView === 2} /></div>
+    {:else}
+      <div class="view" inert={currentView !== 1}>{#if currentView===1}<BookReader map/>{/if}</div>
+      <div class="view" inert={currentView !== 2}>{#if currentView===2}<BookReader/>{/if}</div>
     {/if}
   </div>
 
   <!-- Dot indicators -->
-  {#if isCompanion}<div class="dots">
-    {#each isCompanion ? [0, 1, 2] : [0] as i}
+  <div class="dots">
+    {#each [0, 1, 2] as i}
       <button
         class="dot"
         class:active={currentView === i}
         onclick={() => (currentView = i as View)}
-        aria-label={labels[i]}
+        aria-label={labels[i]+(!aiAvailable && i?' · Coming soon':'')}
         aria-current={currentView === i ? 'page' : undefined}
-      >{i === 0 ? 'your words' : labels[i]}</button>
+      >{i === 0 ? 'your words' : labels[i]}{#if !aiAvailable && i}<small>Coming soon</small>{/if}</button>
     {/each}
-  </div>{/if}
+  </div>
 </div>
 
 <style>

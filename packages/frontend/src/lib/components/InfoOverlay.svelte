@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { aiAvailable } from '../../../../shared/ai-release.js';
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { modal } from '$lib/modal.js';
@@ -25,11 +26,11 @@
   >
     <div class="info-content journal-sheet">
       <h2>About Lacuna</h2>
-      <p>Open the journal at the cabin desk. Step outside to visit the river, open the sliding screen, or walk on. The birds carry the words that brought them here.</p>
-      <p>Visit the gardener for recurring threads and the bookbinder for memoir editions. Open the journal archive to find any original page.</p>
+      <p>Each page has an address in the city. Select its building to read it again.</p>
+      <p>Soul Map and Living Memoir · Coming soon. Your journal already holds every saved page.</p>
       <p>Quiet writing gives you a blank page. Hold to save, or press Control or Command and Enter.</p>
       <p>Manage encryption, backups, and exports in the menu.</p>
-      {#if isCompanion}<div class="lenses-section">
+      {#if aiAvailable && isCompanion}<div class="lenses-section">
         <p class="lenses-intro">as you write, we read through six lenses — not to label you, but to find the shape of what keeps returning.</p>
 
         <ul class="lenses">

@@ -1,4 +1,6 @@
 import type { Trace, VillageEntry } from '../../../shared/village.js';
+import type { ForgottenAddress } from '../../../shared/city-address.js';
+import type { Book } from '../../../shared/living-book.js';
 import { sessionVersion } from './session-version.js';
 import type { RiverClock, Settlement } from '../../../shared/river.js';
 export const isCompanion = typeof document !== 'undefined' && document.querySelector('meta[name="lacuna-companion"]') !== null;
@@ -50,6 +52,7 @@ export const api = {
       request<{ ok: boolean }>('/auth/account', { method: 'DELETE' }),
   },
   city: {
+    get: () => request<{entries:EntryData[];forgotten:ForgottenAddress[]}>('/city'),
     write: (body:string, solidified_at:number, entry_id:string) => request<{entry:EntryData}>('/entries', {method:'POST',body:JSON.stringify({body,solidified_at,entry_id,city:true})}),
   },
   entries: {
@@ -62,8 +65,8 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ body, solidified_at, entry_id, settlement }),
       }),
-    delete: (id: string) =>
-      request<{ ok: boolean }>(`/entries/${id}`, { method: 'DELETE' }),
+    forget: (id: string) =>
+      request<{ ok: boolean; address:ForgottenAddress }>(`/entries/${id}`, { method: 'DELETE' }),
     keep: (id: string, kept: boolean) => request<{ entry: EntryData }>(`/entries/${id}/keep`, { method: 'PATCH', body: JSON.stringify({ kept }) }),
   },
   patterns: {
@@ -89,6 +92,7 @@ export const api = {
 };
 
 export interface EntryData extends VillageEntry {
+  writingDay?:number;
   riverEdition?: 2 | 3;
   settlement?: Settlement;
   id: string;
@@ -105,7 +109,7 @@ export interface StoryData {
   summary: { total: number; kept: number; first_at: number | null; last_at: number | null };
   graph: { nodes: MemoryNode[]; processed_count: number };
 }
-export interface ArchiveData { format: string; exported_at: string; entries: EntryData[]; memoirs: MemoirEdition[]; [key: string]: unknown }
+export interface ArchiveData { format: string; exported_at: string; entries: EntryData[]; memoirs: MemoirEdition[]; book?:Book; [key: string]: unknown }
 
 export interface ModelWeights {
   story_thread?: number;

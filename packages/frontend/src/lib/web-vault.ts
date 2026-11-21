@@ -1,8 +1,13 @@
 // Browser-native vault. No network calls, persisted keys, or readable journal records.
 import type { EntryData, MemoirEdition, ModelWeights, StoryData } from './api.js';
 import type { RiverClock } from '../../../shared/river.js';
+import { validBook, type Book } from '../../../shared/living-book.js';
+import { validCityHistory, type ForgottenAddress } from '../../../shared/city-address.js';
 
 export interface WebJournal {
+  book?: Book;
+  reflectionConsent?: {account:string; epoch:number};
+  forgotten?: ForgottenAddress[];
   river?: RiverClock;
   format: 'lacuna.web-journal.v1'; revision: number; entries: EntryData[];
   memoirs: MemoirEdition[]; weights: ModelWeights; graph: StoryData['graph'];
@@ -55,6 +60,10 @@ async function open(envelope: WebEnvelope, key: CryptoKey): Promise<WebJournal> 
   const data = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(plaintext));
   if (data?.format !== 'lacuna.web-journal.v1' || !Number.isSafeInteger(data.revision) || !Array.isArray(data.entries) || !Array.isArray(data.memoirs) || !data.graph || !Array.isArray(data.graph.nodes) || !data.weights || typeof data.weights !== 'object' || Array.isArray(data.weights)) throw new Error('Invalid journal');
   if (!data.entries.every((e: EntryData) => e && typeof e.id === 'string' && /^[a-f0-9]{32}$/.test(e.id) && typeof e.user_id === 'string' && typeof e.body === 'string' && e.body.length <= 500 && Number.isSafeInteger(e.created_at) && e.created_at >= 0 && e.created_at < 1e12 && (e.solidified_at === null || Number.isSafeInteger(e.solidified_at)) && (e.kept_at === null || Number.isSafeInteger(e.kept_at))) || !data.memoirs.every((m: MemoirEdition) => m && typeof m.id === 'string' && typeof m.prose === 'string' && m.prose.length <= 30000 && Number.isSafeInteger(m.generated_at))) throw new Error('Invalid journal records');
+  if(!validCityHistory(data.entries,data.forgotten))throw new Error('Invalid city addresses');
+  if(data.entries.some((e:EntryData)=>e.writingDay!==undefined &&
+      (!Number.isSafeInteger(e.writingDay) || Math.abs(e.writingDay-Math.floor(e.created_at/86400))>1)))throw new Error('Invalid writing day');
+  if(data.book!==undefined && !validBook(data.book,data.entries))throw new Error('Invalid memoir');
   return data;
 }
 export function indexedVaultStorage(name = 'lacuna-private-journal'): EncryptedStorage {
@@ -118,7 +127,20 @@ export class WebVault {
   private pending: Promise<unknown> = Promise.resolve();
   private lastActive = 0;
   private failures: number[] = [];
-  constructor(private storage: EncryptedStorage, private now = Date.now) {}
+  constructor(private storage: EncryptedStorage, private now = Date.now, private changed = (_saved?:boolean) => {}) {}
+  get sessionGeneration() { return this.generation; }
+  async current() { return this.unlocked && envelopeToken(this.envelope)===envelopeToken(await this.storage.read()); }
+  async refresh() {
+    await this.serial(async()=>{
+      if(!this.unlocked || !this.key)return;
+      const generation=this.generation, key=this.key;
+      const latest=await this.storage.read();
+      if(envelopeToken(latest)===envelopeToken(this.envelope))return;
+      if(!latest || latest.owner!==this.envelope?.owner || latest.salt!==this.envelope.salt){this.lock();return;}
+      const data=await open(latest,key);
+      if(this.unlocked && generation===this.generation){this.data=data;this.envelope=latest;this.changed();}
+    });
+  }
   private serial<T>(action: () => Promise<T>): Promise<T> {
     const next = this.pending.catch(() => {}).then(action);
     // The serialization tail must not retain a saved thought as its result.
@@ -128,7 +150,7 @@ export class WebVault {
   get unlocked() { if (this.key && this.now() - this.lastActive >= LOCK_AFTER) this.lock(); return !!this.key; }
   async status() { const envelope = await this.storage.read(); return { exists: !!envelope, locked: !this.unlocked, owner: envelope?.owner ?? null }; }
   activity() { if (this.unlocked) this.lastActive = this.now(); }
-  lock() { this.generation++; this.key = null; this.data = null; }
+  lock() { this.generation++; this.key = null; this.data = null; this.changed(); }
   read(): WebJournal { if (!this.unlocked || !this.data) throw new WebVaultError('VAULT_LOCKED', 'Unlock your private space first.'); return structuredClone(this.data); }
   async unlock(passphrase: string, create = false) {
     const generation = this.generation;
@@ -148,6 +170,7 @@ export class WebVault {
         if (!existing) await this.storage.replace(null, envelope);
         if (generation !== this.generation) throw new WebVaultError('VAULT_LOCKED', 'Your encrypted copy is saved and remains locked.');
         this.key = key; this.data = data; this.envelope = envelope; this.lastActive = this.now();
+        this.changed();
       } catch (e) { this.failures.push(this.now()); if (e instanceof WebVaultError) throw e; throw new WebVaultError('UNLOCK_FAILED', 'Could not unlock your space. Check the passphrase. A damaged backup can also cause this error.'); }
     });
   }
@@ -158,7 +181,7 @@ export class WebVault {
       const envelope = await seal(data, key, previous.owner, previous.salt);
       if (generation !== this.generation || !this.unlocked) throw new WebVaultError('VAULT_LOCKED', 'Your space locked before saving.');
       await this.storage.replace(envelopeToken(previous), envelope);
-      if (generation === this.generation && this.unlocked) { this.data = data; this.envelope = envelope; }
+      if (generation === this.generation && this.unlocked) { this.data = data; this.envelope = envelope; this.changed(true); }
       return result;
     });
   }
@@ -178,9 +201,15 @@ export class WebVault {
       catch (e) { if (e instanceof WebVaultError) throw e; throw new WebVaultError('UNLOCK_FAILED', 'The backup could not be unlocked. Your current copy has been kept.'); }
       const previous = await this.storage.read();
       if (generation !== this.generation) throw new WebVaultError('VAULT_LOCKED', 'Restore was cancelled. Your current copy has been kept.');
+      if(data.reflectionConsent){
+        delete data.reflectionConsent;
+        value=await seal(data,key,value.owner,value.salt);
+        validateEnvelope(value);
+      }
       await this.storage.replace(envelopeToken(previous), value, true);
       if (generation !== this.generation) throw new WebVaultError('VAULT_LOCKED', 'Your encrypted copy is saved and remains locked.');
       this.key = key; this.data = data; this.envelope = value; this.lastActive = this.now();
+      this.changed();
     });
   }
   async remove() { this.lock(); await this.pending.catch(() => {}); const current = await this.storage.read(); await this.storage.replace(envelopeToken(current), null); this.envelope = null; }
@@ -189,10 +218,16 @@ let instance: WebVault | undefined;
 let channel: BroadcastChannel | undefined;
 export function browserVault() {
   if (!instance) {
-    instance = new WebVault(indexedVaultStorage());
+    instance = new WebVault(indexedVaultStorage(),Date.now,saved=>{
+      window.dispatchEvent(new Event('lacuna:journal-changed'));
+      if(saved)channel?.postMessage('saved');
+    });
     if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
       channel = new BroadcastChannel('lacuna-private-vault');
-      channel.onmessage = event => { if (event.data === 'lock') { instance?.lock(); window.dispatchEvent(new Event('lacuna:locked')); } };
+      channel.onmessage = event => {
+        if(event.data==='saved')void instance?.refresh().catch(()=>instance?.lock());
+        if(event.data==='lock'){instance?.lock();window.dispatchEvent(new Event('lacuna:locked'));}
+      };
     }
   }
   return instance;

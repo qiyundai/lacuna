@@ -4,6 +4,8 @@
   import { api, type EntryData } from '$lib/api.js';
   import { sessionVersion } from '$lib/session-version.js';
   import { prependEntry } from '$lib/stores/entries.svelte.js';
+  import { resetJournalData } from '$lib/stores/session.svelte.js';
+  import { forgetAddress, type ForgottenAddress } from '../../../../shared/city-address.js';
   import { hashPage } from '$lib/town/city-growth.js';
   import { paintedCoast, type Site } from '$lib/town/painted-coast.js';
   import type { createHarbor } from '$lib/town/harbor.js';
@@ -36,25 +38,29 @@
   }
   let canvas:HTMLCanvasElement,dialog:HTMLDialogElement;
   let entries=$state.raw<EntryData[]>([]),scene=$state.raw<Awaited<ReturnType<typeof createHarbor>>|null>(null);
+  let forgotten=$state.raw<ForgottenAddress[]>([]);
   let ready=$state(false),paused=$state(false),graphicsError=$state(false),error=$state(''),notice=$state('');
   let painted=$state(true),readId=$state('');
   let markers=$state.raw<PageMarker[]>([]),writingDate=$state(new Date());
   const valleyViews=['City','Overlook'] as const;
-  let panel=$state<'write'|'pages'|'read'>('write'),draft=$state(''),draftId='',alive=false,reveal=false;
+  let panel=$state<'write'|'pages'|'read'|'forget'>('write'),draft=$state(''),draftId='',alive=false,reveal=false;
   const ordered=$derived([...entries].sort((a,b)=>b.created_at-a.created_at||b.id.localeCompare(a.id)));
   const latest=$derived(ordered[0]);
-  const plan=$derived(paintedCoast(entries));
+  const plan=$derived(paintedCoast(entries,forgotten));
   const openedPage=$derived(entries.find(entry=>entry.id===readId));
   const site=$derived(plan.addresses.get(readId));
   const neighbors=$derived(site?ordered.filter(page=>plan.addresses.get(page.id)===site):[]);
   const room=$derived(neighbors.findIndex(page=>page.id===readId));
-  const folios=$derived(new Map(ordered.map((page,i)=>[page.id,ordered.length-i])));
+  const folios=$derived(new Map([...entries,...forgotten].sort((a,b)=>a.created_at-b.created_at||a.id.localeCompare(b.id)).map((page,i)=>[page.id,i+1])));
   const fullDate=new Intl.DateTimeFormat(undefined,{month:'long',day:'numeric',year:'numeric'});
   const weekday=new Intl.DateTimeFormat(undefined,{weekday:'long'});
   const opening=$derived((!ready||!scene)&&!error&&!graphicsError);
   const date=new Intl.DateTimeFormat(undefined,{year:'numeric',month:'short',day:'numeric'});
   async function read(){
-    try{const pages=guest?examples():(await api.village.get()).entries;if(alive){entries=pages;ready=true;error='';}}
+    try{
+      const journal=guest?{entries:examples(),forgotten:[]}:await api.city.get();
+      if(alive){entries=journal.entries;forgotten=journal.forgotten;ready=true;error='';}
+    }
     catch{if(alive)error='Your journal could not be opened.';}
   }
   async function graphics(){
@@ -75,16 +81,30 @@
   $effect(()=>{scene?.pause(paused);});
   $effect(()=>{scene?.setPainted(painted);});
   $effect(()=>{const current=scene;if(current){current.update(plan,reveal);reveal=false;}});
-  async function open(which:'write'|'pages'|'read'){
+  async function open(which:typeof panel){
     if(busy)return;
     panel=which;error='';if(which==='write')writingDate=new Date();
     await tick();if(!alive)return;
     if(!dialog.open)dialog.showModal();
     dialog.scrollTop=0;
-    dialog.querySelector<HTMLElement>(which==='write'?'textarea':'#journal-heading')?.focus({preventScroll:true});
+    dialog.querySelector<HTMLElement>(which==='write'?'textarea':which==='forget'?'[data-keep-page]':'#journal-heading')?.focus({preventScroll:true});
   }
   function readPage(id:string){
     readId=id;scene?.visit('Page',id);void open('read');
+  }
+  async function forgetPage(){
+    if(busy || panel!=='forget' || !openedPage)return;
+    const id=openedPage.id,version=sessionVersion.value;
+    busy=true;error='';
+    try{
+      const address=guest?forgetAddress(entries,forgotten,entries.findIndex(e=>e.id===id)):(await api.entries.forget(id)).address;
+      if(!alive||version!==sessionVersion.value)return;
+      if(!guest)resetJournalData();
+      forgotten=[...forgotten.filter(a=>a.id!==id),address].sort((a,b)=>a.position-b.position);
+      entries=entries.filter(e=>e.id!==id);
+      readId='';dialog.close();notice='Page forgotten. Its address remains.';
+    }catch{error='Could not forget this page. Try again.';}
+    finally{if(alive)busy=false;}
   }
   async function save(){
     const body=draft.trim();if(!body||busy||!ready)return;
@@ -138,9 +158,9 @@
           {#each valleyViews as view}<button onclick={()=>scene?.visit(view)}>{view}</button>{/each}
         </nav>
       {/if}
-      <h1>{entries.length?'The valley city':'An unwritten valley'}</h1>
+      <h1>{plan.sites.length?'The valley city':'An unwritten valley'}</h1>
       {#if latest}<p class="detail">{entries.length} {entries.length===1?'page':'pages'} <span>·</span> Last written {date.format(latest.created_at*1000)}</p>
-      {:else if ready}<p class="detail">Your first page begins the city.</p>{/if}
+      {:else if ready}<p class="detail">{forgotten.length?'No pages left to read.':'Your first page begins the city.'}</p>{/if}
     </div>
     <div class="actions">
       {#if graphicsError}<button onclick={graphics}>Retry city</button>{/if}
@@ -150,9 +170,9 @@
   </div>
   <dialog bind:this={dialog} aria-labelledby="journal-heading" oncancel={e=>{if(busy)e.preventDefault();}}
     onclose={()=>{if(document.activeElement===document.body)canvas.focus({preventScroll:true});}}>
-    <div class="folio" class:reading={panel==='read'}>
-      <aside class="cover" aria-label={panel==='read'?'Page location':'Journal cover'}>
-        {#if panel==='read' && site}
+    <div class="folio" class:reading={panel==='read'||panel==='forget'}>
+      <aside class="cover" aria-label={site && (panel==='read'||panel==='forget')?'Page location':'Journal cover'}>
+        {#if (panel==='read'||panel==='forget') && site}
           <div class="plate"><img src={'/city/paint/'+site.kind+'.webp'} alt=""/></div>
           <div class="imprint"><span>{site.bank===0?'West bank':'East bank'}</span><strong>{buildings[site.kind]}</strong></div>
         {:else}
@@ -161,7 +181,7 @@
       </aside>
       <div class="leaf">
         <header class="leaf-head">
-          <span>{panel==='write'?'Page '+(entries.length+1):panel==='read'?'Page '+(folios.get(readId)??''):'Journal index'}</span>
+          <span>{panel==='write'?'Page '+(folios.size+1):panel==='pages'?'Journal index':'Page '+(folios.get(readId)??'')}</span>
           <button class="close" aria-label="Close" disabled={busy} onclick={()=>dialog.close()}>×</button>
         </header>
         {#if panel==='write'}
@@ -174,6 +194,14 @@
             <div class="leaf-foot"><span class="count" aria-label={draft.length+' of 500 characters'}>{draft.length} / 500</span>
               <button disabled={busy||!ready||!draft.trim()} class="ink">{busy?'Saving…':'Save page'}</button></div>
           </form>
+        {:else if panel==='forget' && openedPage}
+          <h2 id="journal-heading">Forget this page?</h2>
+          <p>The words will be permanently removed from this journal. {neighbors.length>1?'The other pages at this address will stay.':'The building will stay, and its lights will go out.'}</p>
+          {#if !guest}<p class="note">Readings and memoir passages that drew on this page will disappear.</p>{/if}
+          <div class="leaf-foot">
+            <button class="text-action" data-keep-page disabled={busy} onclick={()=>open('read')}>Keep this page</button>
+            <button class="ink" disabled={busy} onclick={forgetPage}>{busy?'Forgetting…':'Forget page'}</button>
+          </div>
         {:else if panel==='read' && openedPage}
           <h2 id="journal-heading" tabindex="-1">{weekday.format(openedPage.created_at*1000)}</h2>
           <time datetime={new Date(openedPage.created_at*1000).toISOString()}>{fullDate.format(openedPage.created_at*1000)}</time>
@@ -188,6 +216,7 @@
             {/if}
             <button class="text-action" onclick={()=>open('pages')}>All pages</button>
           </div>
+          <button class="text-action" onclick={()=>open('forget')}>Forget this page</button>
         {:else}
           <h2 id="journal-heading" tabindex="-1">Your pages</h2>
           <div class="index">

@@ -31,9 +31,6 @@ jobs:
       - name: Run regression tests
         run: pnpm test
 
-      - name: Build local companion
-        run: pnpm build:companion
-
       - name: Apply D1 migrations (remote)
         run: pnpm -F worker exec wrangler d1 migrations apply lacuna-db --remote
         env:

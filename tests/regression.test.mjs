@@ -1,4 +1,6 @@
 import test from 'node:test';
+import './living-book.test.mjs';
+import { emptyBook, nextBookTask, acceptBookResult } from '../packages/shared/living-book.ts';
 import assert from 'node:assert/strict';
 import { districts } from '../packages/frontend/src/lib/town/districts.ts';
 import { parseAlbum } from '../packages/frontend/src/lib/music-library.ts';
@@ -381,7 +383,7 @@ test('real companion HTTP keeps journals local, requires AI consent, and syncs c
   const store = { data: { hostId: 'urn:uuid:host', registrations: {}, browserSessions: { [cookieHash]: { auth: { jwt: f.jwt, user: f.user }, expires: Date.now() + 3600000 } }, profiles: { [f.user.id]: { access_token: 'never-expose-this', email: 'plan@example.com' } } }, async save() {} };
   let inferenceCalls = 0;
   const plan = { async disconnect() { return true; }, async models() { return [{ slug: 'test-model', name: 'Test model' }]; }, async generate(_id, _model, prompt) { inferenceCalls++; return prompt.system.includes('extract') ? '{"themes":["home"],"emotions":[],"entities":[]}' : '{"acknowledgment":"Held."}'; } };
-  const companion = await startCompanion({ port, dataDir: directory, buildDir: directory, apiUrl: `http://127.0.0.1:${cloud.address().port}`, store, plan });
+  const companion = await startCompanion({ reflectionsEnabled:true, port, dataDir: directory, buildDir: directory, apiUrl: `http://127.0.0.1:${cloud.address().port}`, store, plan });
   try {
     const home = await fetch(companion.origin);
     assert.match(await home.text(), /lacuna-companion/);
@@ -497,7 +499,8 @@ test('ChatGPT sign-in verifies identity, isolates browsers, rejects replay and p
     assert.deepEqual(responses.map(r => r.status).sort(), [200, 401]);
     assert.equal((await responses.find(r => r.status === 200).json()).user.id, user.id);
     const tested = await fetch(`${companion.origin}/companion/test`, { method: 'POST', headers });
-    assert.deepEqual(await tested.json(), { ok: true, text: 'Lacuna is connected.' });
+    assert.equal(tested.status,503);
+    assert.equal((await tested.json()).error.code,'COMING_SOON');
     assert.equal(f.DB.sqlite.prepare('SELECT count(*) AS n FROM entries').get().n, 0);
     assert.equal(f.DB.sqlite.prepare('SELECT count(*) AS n FROM openai_identities').get().n, 1);
     assert.equal(f.DB.sqlite.prepare('SELECT display_email FROM openai_identities').get().display_email, 'ChatGPT account');
@@ -626,7 +629,64 @@ test('local saves serialize, retry idempotently, validate input, and keep search
   assert.equal(vault.read().version, before);
   assert.equal((await journalRequest(vault, '/entries', 'GET', null, localURL('/entries?kept=1'))).entries.length, 1);
 });
-test('local deletion and AI opt-out reject stale reflections and clear derived private text', async t => {
+test('forgetting keeps only address metadata in both vaults after reopening', async t => {
+  const desktop = await localVault(t), browser = new WebVault(webStorage());
+  await browser.unlock(samplePassphrase, true);
+  for (const vault of [desktop, browser]) {
+    const request = (path, method = 'GET', value) => vault === browser
+      ? webRequest(path, method, value, vault)
+      : journalRequest(vault, path.split('?')[0], method, value, localURL(path));
+    const secret = 'violet ticket in an empty suitcase';
+    const {entry} = await request('/entries', 'POST', thought(1, secret));
+    await request('/entries', 'POST', thought(2, 'a page to keep'));
+    const last = await request('/entries', 'POST', thought(3));
+    await vault.update(data => { data.memoirs.push({id:'old', prose:secret, generated_at:123}); });
+    const forget = id => request('/entries/' + id, 'DELETE');
+    const {address} = await forget(last.entry.id);
+    assert.equal(address.position, 2);
+    const receipt = await forget(entry.id);
+    assert.deepEqual(receipt.address, {id:entry.id, created_at:entry.created_at, riverEdition:3, position:0, forgottenAfter:3});
+    assert.deepEqual(await forget(entry.id), receipt);
+    await assert.rejects(request('/entries', 'POST', thought(1, secret)), /forgotten/);
+    if (vault === desktop) await importLegacy(vault, {entries:[entry], memoirs:[], summaries:[]});
+    vault.lock();
+    await vault.unlock(samplePassphrase);
+    assert.equal(JSON.stringify(vault.read()).includes(secret), false);
+    assert.deepEqual((await request('/city')).forgotten, [receipt.address, address]);
+    for (const path of ['/city', '/village', '/story/export', '/entries']) {
+      assert.deepEqual((await request(path)).entries.map(e=>e.id), [thought(2).entry_id]);
+    }
+    assert.equal((await request('/entries?q=violet')).entries.length, 0);
+  }
+});
+
+test('browser memoir survives encrypted restore without sharing consent and forgets from both exports offline',async()=>{
+  const storage=webStorage(),vault=new WebVault(storage);
+  await vault.unlock(samplePassphrase,true);
+  for(let i=0;i<6;i++)await webRequest('/entries','POST',thought(i,'Synthetic scene '+i),vault);
+  await vault.update(d=>{
+    d.entries.forEach((e,i)=>{e.created_at=100+i*86400;e.writingDay=i;});
+    d.reflectionConsent={account:'fixture',epoch:1};d.book=emptyBook();
+    let task;
+    while((task=nextBookTask(d.book,d.entries))){
+      const first=task.evidence[0];
+      acceptBookResult(d.book,d.entries,task,task.kind==='observe'?{notes:[{topic:first.id,quote:first.body}]}:{title:'A week',prose:first.body,readings:[]});
+    }
+  });
+  const restored=new WebVault(webStorage());await restored.restore(await vault.backup(),samplePassphrase);
+  restored.lock();await restored.unlock(samplePassphrase);
+  assert.equal(restored.read().reflectionConsent,undefined);
+  const previous=restored.read().book.chapters[0].passages[1];
+  await webRequest('/entries/'+thought(0).entry_id,'DELETE',undefined,restored);
+  restored.lock();await restored.unlock(samplePassphrase);
+  const archive=await webRequest('/story/export','GET',undefined,restored);
+  assert.deepEqual(archive.book.chapters[0].passages,[previous]);
+  assert.ok(!JSON.stringify(archive).includes('Synthetic scene 0'));
+  assert.ok(!archiveMarkdown(archive).includes('Synthetic scene 0'));
+  assert.ok(archiveMarkdown(archive).includes(previous.prose));
+});
+
+test('local forgetting and AI opt-out reject stale reflections and clear derived private text', async t => {
   const vault = await localVault(t);
   await journalRequest(vault, '/entries', 'POST', thought(1), localURL('/entries'));
   await vault.update(d => { d.aiAllowed = true; d.memoirs.push({ id: 'sample', prose: 'old generated words', generated_at: 123 }); });
@@ -956,6 +1016,49 @@ test('new pages settle connected neighborhoods across the ferry while older jour
     assert.ok(plan.sites.some(s=>s.bank===1 && s.ferryTerminal));
     assert.equal(plan.addresses.size,prefix.length+additions.length);
   }
+});
+
+test('forgotten pages keep their parcel and historic floors as rooms and ferry stops fall quiet',async()=>{
+  const {paintedCoast}=await import('../packages/frontend/src/lib/town/painted-coast.ts');
+  const {forgetPageAt,validCityHistory}=await import('../packages/shared/city-address.ts');
+  const page=i=>({id:createHash('md5').update('room-'+i).digest('hex'),created_at:Math.floor(i/3),riverEdition:i<16?undefined:i<30?2:3});
+  const journal={entries:Array.from({length:120},(_,i)=>page(i)),forgotten:[]};
+  const coast=()=>paintedCoast(journal.entries,journal.forgotten);
+  const initial=coast();
+  const shape=plan=>plan.sites.map(({id,x,lane,bank,width,kind,lights,setback})=>[id,x,lane,bank,width,kind,lights,setback]);
+  const forget=id=>{
+    const index=journal.entries.findIndex(e=>e.id===id);
+    assert.ok(index>=0);
+    return forgetPageAt(journal,index);
+  };
+  const shared=initial.sites.find(site=>site.lights>0);
+  const rooms=[...initial.addresses].filter(([,site])=>site===shared).map(([id])=>id);
+  const founder=forget(shared.id);
+  let plan=coast();
+  assert.equal(plan.addresses.has(founder.id),false);
+  const stillLit=plan.addresses.get(rooms[1]);
+  assert.equal(stillLit.readableId,rooms[1]);
+  assert.equal(stillLit.litAdditions,shared.lights-1);
+  assert.deepEqual(shape(plan),shape(initial));
+  const stop=initial.ferries.find(route=>route.arrival).arrival;
+  const stopping=new Set([shared.id,stop.id]);
+  for(const [id,site] of initial.addresses)if(id!==founder.id && stopping.has(site.id))forget(id);
+  plan=coast();
+  assert.deepEqual(shape(plan),shape(initial));
+  assert.ok(plan.sites.filter(s=>stopping.has(s.id)).every(s=>s.quiet && s.litAdditions===0));
+  assert.ok(plan.ferries.every(r=>r.departure.id!==stop.id && r.arrival?.id!==stop.id));
+  assert.ok(validCityHistory(journal.entries,journal.forgotten));
+  assert.equal(validCityHistory(journal.entries,[{...founder,body:'must never be retained'}]),false);
+  while(journal.entries.length)forget(journal.entries.at(-1).id);
+  const empty=coast();
+  assert.deepEqual(shape(empty),shape(initial));
+  assert.deepEqual([empty.addresses.size,empty.service,empty.ferries.length],[0,0,0]);
+  assert.ok(empty.sites.every(s=>s.quiet));
+  journal.entries.push(...Array.from({length:24},(_,i)=>page(120+i)));
+  const regrown=coast();
+  assert.deepEqual(shape(regrown).slice(0,initial.sites.length),shape(initial));
+  const oldIds=new Set(initial.sites.map(s=>s.id));
+  assert.ok([...regrown.addresses.values()].every(s=>!oldIds.has(s.id)));
 });
 
 test('mixed river editions keep archived addresses and append neighborhoods deterministically',async()=>{

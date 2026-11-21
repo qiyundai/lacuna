@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { aiAvailable } from '../../../../shared/ai-release.js';
   import { session, signOut } from '$lib/stores/session.svelte.js';
   import { api, isCompanion } from '$lib/api.js';
   import { fade } from 'svelte/transition';
@@ -13,6 +14,8 @@
   import { modal } from '$lib/modal.js';
   import { loadAI } from '$lib/stores/ai.svelte.js';
   import { onMount } from 'svelte';
+  import { replaceState } from '$app/navigation';
+  import { page } from '$app/state';
   import { writeLocal } from '$lib/storage.js';
 
   let open = $state(false);
@@ -26,6 +29,10 @@
   let deleting = $state(false);
   onMount(() => {
     let mounted = true;
+    const returned=new URL(location.href);
+    if(!isCompanion && returned.searchParams.get('billing')==='returned'){
+      showPlan=true;returned.searchParams.delete('billing');replaceState(returned,page.state);
+    }
     loadAI().then(() => {
       if (mounted && !vaultStore.status?.migrated) showVault = true;
     }).catch(() => {});
@@ -111,7 +118,7 @@
         <button class="menu-item" onclick={() => { open = false; confirming = false; showInfo = true; }}>About Lacuna</button>
         <button class="menu-item" onclick={() => { open = false; confirming = false; showPrivacy = true; }}>Data and privacy</button>
         <button class="menu-item" onclick={() => { open = false; showVault = true; }}>Privacy &amp; storage</button>
-        <button class="menu-item" onclick={() => { open = false; showPlan = true; }}>{isCompanion ? 'AI & ChatGPT plan' : 'AI reflections'}</button>
+        <button class="menu-item" onclick={() => { open = false; showPlan = true; }}>{aiAvailable ? 'AI reflections' : 'AI reflections · Coming soon'}</button>
         <button class="menu-item" onclick={() => { open = false; showExport = true; }}>Export journal</button>
         <button class="menu-item" onclick={handleSignOut}>{isCompanion ? 'Sign out' : 'Lock journal'}</button>
         <button class="menu-item danger" disabled={deleting} onclick={handleDelete}>
