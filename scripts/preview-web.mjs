@@ -3,7 +3,7 @@ import { build } from 'esbuild';
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
-import { serveVideo } from '../packages/companion/src/serve-video.mjs';
+import { mediaTypes, serveMedia } from '../packages/companion/src/serve-media.mjs';
 await build({ entryPoints: ['tests/web-fixture.ts'], outfile: '.test-output/web-fixture.js', bundle: true, platform: 'browser', target: 'es2022', format: 'esm' });
 const directory = resolve('packages/frontend/build');
 const server = createServer(async (req, res) => {
@@ -20,7 +20,7 @@ const server = createServer(async (req, res) => {
     if (!path.startsWith(directory + sep) && path !== directory) { res.writeHead(403); res.end(); return; }
     const info = await stat(path).catch(() => null);
     if (!info?.isFile()) path = resolve(directory, 'index.html');
-    if (extname(path) === '.mp4') return await serveVideo(req, res, path, info.size);
+    if (mediaTypes.has(extname(path))) return await serveMedia(req, res, path, info.size);
     res.setHeader('Content-Type', ({ '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png':'image/png', '.glb':'model/gltf-binary', '.woff2': 'font/woff2' })[extname(path)] ?? 'application/octet-stream');
     res.end(req.method === 'HEAD' ? undefined : await readFile(path));
   } catch { res.writeHead(500); res.end('Preview unavailable'); }

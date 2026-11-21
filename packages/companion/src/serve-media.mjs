@@ -1,8 +1,11 @@
 import { createReadStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
+import { extname } from 'node:path';
 
-export async function serveVideo(req, res, file, size) {
-  res.setHeader('Content-Type', 'video/mp4');
+export const mediaTypes = new Map([['.mp4', 'video/mp4'], ['.m4a', 'audio/mp4']]);
+
+export async function serveMedia(req, res, file, size) {
+  res.setHeader('Content-Type', mediaTypes.get(extname(file)));
   res.setHeader('Accept-Ranges', 'bytes');
   let start = 0, end = size - 1;
   const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');

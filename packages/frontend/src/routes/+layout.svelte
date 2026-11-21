@@ -11,6 +11,7 @@
   import PrivacyOverlay from '$lib/components/PrivacyOverlay.svelte';
   import VaultGate from '$lib/components/VaultGate.svelte';
   import ValleyLoading from '$lib/components/ValleyLoading.svelte';
+  import AlbumPlayer from '$lib/components/AlbumPlayer.svelte';
   import { vaultStore, loadVault, didLock } from '$lib/stores/vault.svelte.js';
 
   let { children } = $props();
@@ -81,6 +82,7 @@
   }
 </script>
 
+<AlbumPlayer/>
 {#if page.url.pathname === '/privacy' || page.route.id === '/studio/tide-house' || page.route.id === '/studio/ferry-hall' || page.route.id === '/studio/waterfront'}
   {@render children()}
 {:else if isCompanion && session.status === 'unauthed'}

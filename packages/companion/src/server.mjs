@@ -1,5 +1,5 @@
 import { interpretVillagePage } from './village.mjs';
-import { serveVideo } from './serve-video.mjs';
+import { mediaTypes, serveMedia } from './serve-media.mjs';
 import { createServer } from 'node:http';
 import { readFile, stat, mkdir, open, rm } from 'node:fs/promises';
 import { resolve, sep, extname, join } from 'node:path';
@@ -327,7 +327,7 @@ export async function startCompanion(options = {}) {
       if (info?.isDirectory()) file = join(file, 'index.html');
       info = await stat(file).catch(() => null);
       if (!info?.isFile()) { if (extname(url.pathname)) return json(res, { error: { code: 'NOT_FOUND', message: 'Not found' } }, 404); file = join(build, 'index.html'); }
-      if (extname(file) === '.mp4') return await serveVideo(req, res, file, info.size);
+      if (mediaTypes.has(extname(file))) return await serveMedia(req, res, file, info.size);
       const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webp': 'image/webp', '.glb': 'model/gltf-binary', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
       let data = await readFile(file);
       if (extname(file) === '.html') {

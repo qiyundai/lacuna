@@ -1,11 +1,12 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import MusicButton from './MusicButton.svelte';
   let { children }: {children?: Snippet} = $props();
 </script>
 
 <header class="masthead">
   <div class="wrap masthead-content">
-    <div class="signature"><span aria-hidden="true">≈</span>Lacuna</div>
+    <div class="signature"><span aria-hidden="true">≈</span>Lacuna <MusicButton/></div>
     <nav aria-label="Main navigation">{@render children?.()}</nav>
   </div>
 </header>
