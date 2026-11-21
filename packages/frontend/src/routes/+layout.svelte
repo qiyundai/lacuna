@@ -10,6 +10,7 @@
   import TownWelcome from '$lib/components/TownWelcome.svelte';
   import PrivacyOverlay from '$lib/components/PrivacyOverlay.svelte';
   import VaultGate from '$lib/components/VaultGate.svelte';
+  import ValleyLoading from '$lib/components/ValleyLoading.svelte';
   import { vaultStore, loadVault, didLock } from '$lib/stores/vault.svelte.js';
 
   let { children } = $props();
@@ -27,6 +28,7 @@
   }
 
   onMount(() => {
+    document.getElementById('initial-arrival')?.remove();
     hydrateSession();
     initWeather();
     const stored = readLocal('lacuna_consented');
@@ -96,9 +98,11 @@
   </TownWelcome>
   <PrivacyOverlay bind:show={showConsentOverlay} consentMode={true} onConsent={handleConsent}/>
 {:else if (isCompanion && session.status === 'loading') || !vaultStore.status}
-  <div class="vault-loading" role="status">{authError || 'Opening your journal…'}
-    {#if authError}<button class="atlas-link" onclick={()=>{authError='';loadVault().catch(e=>authError=e.message);}}>Try again</button>{/if}
-  </div>
+  {#if authError}
+    <div class="vault-loading" role="alert">{authError}<button class="atlas-link" onclick={()=>{authError='';loadVault().catch(e=>authError=e.message);}}>Try again</button></div>
+  {:else}
+    <ValleyLoading label="Opening your journal…"/>
+  {/if}
 {:else if vaultStore.status.locked}
   <VaultGate />
 {:else}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import ValleyLoading from './ValleyLoading.svelte';
   import { api, type EntryData } from '$lib/api.js';
   import { sessionVersion } from '$lib/session-version.js';
   import { prependEntry } from '$lib/stores/entries.svelte.js';
@@ -35,6 +36,7 @@
   const latest=$derived(ordered[0]);
   const plan=$derived(paintedCoast(entries));
   const openedPage=$derived(entries.find(entry=>entry.id===readId));
+  const opening=$derived((!ready||!scene)&&!error&&!graphicsError);
   const date=new Intl.DateTimeFormat(undefined,{year:'numeric',month:'short',day:'numeric'});
   async function read(){
     try{const pages=guest?examples():(await api.village.get()).entries;if(alive){entries=pages;ready=true;error='';}}
@@ -79,8 +81,9 @@
 </script>
 
 <main class="coast" aria-label="Journal city">
-  <canvas bind:this={canvas} tabindex="0" aria-label="A city growing along the valley river. Drag or use arrow keys to orbit, right-drag to pan, and scroll or pinch to zoom. Home returns to the city. Select a building to read its page."></canvas>
-  <div class="upper">
+  <canvas bind:this={canvas} inert={opening} tabindex="0" aria-label="A city growing along the valley river. Drag or use arrow keys to orbit, right-drag to pan, and scroll or pinch to zoom. Home returns to the city. Select a building to read its page."></canvas>
+  {#if opening}<ValleyLoading label={ready?'Opening the valley…':'Opening your journal…'} onExit={guest?onExit:undefined}/>{/if}
+  <div class="upper" inert={opening}>
     <div class="scope">{guest?'Example city':'Your city'}</div>
     <div class="tools">
       {#if guest}<button onclick={onExit}>Leave visit</button>{/if}
@@ -89,7 +92,7 @@
       <button class="motion" aria-label={paused?'Resume ambient motion':'Pause ambient motion'} onclick={()=>paused=!paused}>{paused?'▷':'Ⅱ'}</button>
     </div>
   </div>
-  <div class="bottom">
+  <div class="bottom" inert={opening}>
     <div>
       <p class="status" role="status">{error||(!ready?'Opening your journal…':graphicsError?'City view unavailable. Your journal is open.':!scene?'Opening the valley…':notice)}</p>
       {#if scene}

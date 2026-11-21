@@ -1,0 +1,38 @@
+.valley-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: .75rem;
+  overflow: auto;
+  padding: 20px;
+  color: #f5eacf;
+  background: radial-gradient(ellipse at 50% 42%, #284a40, #142f2b 57%, #102724);
+  text-align: center;
+  font: 400 14px/1.4 'Segoe UI', system-ui, sans-serif;
+}
+.valley-loading::before {
+  content: '';
+  width: clamp(115px, min(42vw, 26vh), 240px);
+  aspect-ratio: .84;
+  border-radius: 50% 50% 3px 3px / 42% 42% 3px 3px;
+  background: #657c68 url('/city/valley-print.webp') center / cover;
+  border: 1px solid #d4c49b;
+  outline: 1px solid #bbac854f;
+  outline-offset: 6px;
+  margin-bottom: 10px;
+}
+.valley-loading .imprint {
+  font: 400 clamp(44px, 8vh, 82px)/1 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  letter-spacing: -.065em;
+}
+.valley-loading .opening { color: #d8ddca; }
+.valley-loading progress {
+  inline-size: 72px;
+  block-size: 4px;
+  accent-color: #e4c98e;
+  margin-top: .35rem;
+}
+#initial-arrival { position: fixed; }

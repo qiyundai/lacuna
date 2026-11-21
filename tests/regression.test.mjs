@@ -927,6 +927,64 @@ test('coastal groves have clearings and clustered saplings that persist across i
   assert.ok(trees.some(a=>a[3]<2 && trees.some(b=>b[3]>3 && Math.hypot(a[0]-b[0],a[2]-b[2])<3)));
 });
 
+test('corridor flocks follow world routes above the terrain and return to the same poses after streaming',async()=>{
+  const {corridorFlocks}=await import('../packages/frontend/src/lib/town/corridor-flocks.ts');
+  const ground=(x,z)=>40+10*Math.sin(x*.05+z*.01);
+  const walls={west:-181,east:333};
+  const flocks=corridorFlocks(ground,{value:0},walls);
+  try{
+    const snapshot=()=>flocks.group.children.filter(mesh=>mesh.visible).map(mesh=>[mesh.position.z,mesh.count,...mesh.instanceMatrix.array.slice(0,mesh.count*16)]);
+    flocks.tick(32,0);
+    const first=snapshot();
+    for(const mesh of flocks.group.children.filter(mesh=>mesh.visible)){
+      mesh.geometry.computeBoundingBox();
+      const bounds=mesh.geometry.boundingBox;
+      for(let i=0;i<mesh.count;i++){
+        const scale=Math.hypot(...mesh.instanceMatrix.array.slice(i*16,i*16+3));
+        const wingspan=(bounds.max.x-bounds.min.x)*scale;
+        assert.ok(wingspan>=.85 && wingspan<=1.13);
+        const [x,y,z]=mesh.instanceMatrix.array.slice(i*16+12,i*16+15);
+        assert.ok(y>ground(x,z+mesh.position.z)+10);
+        assert.ok(x>walls.west-54 && x<walls.east+54);
+      }
+    }
+    flocks.tick(36,0);assert.notDeepEqual(snapshot(),first);
+    flocks.tick(32,-6200);
+    assert.ok(flocks.group.children.every(mesh=>Math.abs(mesh.position.z+6200)<1200));
+    flocks.tick(32,0);assert.deepEqual(snapshot(),first);
+  }finally{flocks.dispose();}
+});
+
+test('each gull enters from behind one wall, flies a full circuit and leaves through the opposite wall',async()=>{
+  const {corridorFlocks}=await import('../packages/frontend/src/lib/town/corridor-flocks.ts');
+  const walls={west:-181,east:333};
+  const flocks=corridorFlocks(()=>0,{value:0},walls);
+  try{
+    const home=flocks.group.children.find(mesh=>mesh.position.z===0);
+    const tracks=Array.from({length:home.count},()=>({side:0,directions:[],trips:0,lastX:0}));
+    for(let time=0;time<=900;time++){
+      flocks.tick(time,0);
+      for(const [i,track] of tracks.entries()){
+        const x=home.instanceMatrix.array[i*16+12];
+        const side=x<walls.west?-1:x>walls.east?1:0;
+        if(side){
+          if(track.side && side!==track.side){
+            assert.deepEqual(track.directions,[-track.side,track.side,-track.side]);
+            track.trips++;
+          }
+          track.side=side;
+          track.directions=[];
+        }else if(track.side){
+          const dx=x-track.lastX;
+          if(Math.abs(dx)>.05 && Math.sign(dx)!==track.directions.at(-1))track.directions.push(Math.sign(dx));
+        }
+        track.lastX=x;
+      }
+    }
+    assert.ok(tracks.every(track=>track.trips>=2));
+  }finally{flocks.dispose();}
+});
+
 test('cloud banks grow from land, cross the field, pool below a climbing wisp on either wall and dissolve before respawning',async()=>{
   const {createLowCloud}=await import('../packages/frontend/src/lib/town/low-cloud.ts');
   const T=await import('three');

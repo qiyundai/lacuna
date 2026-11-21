@@ -3,7 +3,8 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="theme-color" content="#e5eadd" />
+		<meta name="theme-color" content="#142f2b" />
+		<link rel="stylesheet" href="/city/arrival.css" />
 		<link rel="icon" type="image/png" href="/icon.png" />
 		<meta name="description" content="A private journal that grows a city, one page at a time." />
 		<meta name="page-type" content="software" />
@@ -12,6 +13,11 @@
 		%sveltekit.head%
 	</head>
 	<body>
+		<div class="valley-loading" id="initial-arrival">
+			<span class="imprint" aria-hidden="true">Lacuna</span>
+			<span class="opening" role="status">Opening Lacuna…</span>
+			<progress aria-label="Opening Lacuna"></progress>
+		</div>
 		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>

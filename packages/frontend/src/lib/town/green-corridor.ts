@@ -8,6 +8,7 @@ import { boughStart, boughEnd, farCrownStart, farCrownEnd, woodlandEnd } from '.
 import { crownNeighbors, type WoodlandTree } from './woodland-boughs.js';
 import { meadowPigment } from './meadow-pigment.js';
 import { coastalBreeze } from './coastal-breeze.js';
+import { corridorFlocks } from './corridor-flocks.js';
 import { createLowCloud } from './low-cloud.js';
 import type { ValleyLighting } from './bay-world.js';
 import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js';
@@ -240,11 +241,12 @@ export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighti
     }
     understory.addGarden(group,stand);return group;
   }
+  const gulls=corridorFlocks(ground,driftTime,bounds);root.add(gulls.group);
   const mist=createLowCloud(lighting,ground,(side,z,y)=>wallEdge(side,z/west.scale.z,y),afterglow);
   return {root,mist,bounds,ground,plant,followRiver,gradeTown(grade:(x:number,z:number,y:number)=>number){surface.gradeTown(grade);},get far(){return extent+2300;},tick(t:number,camera:T.Vector3){
-    driftTime.value=t;eye.copy(camera);understory.view(eye.z);grass.view(eye);forest.view(eye);distant.view(eye);mist.tick(t,camera.z);
+    driftTime.value=t;eye.copy(camera);understory.view(eye.z);grass.view(eye);forest.view(eye);distant.view(eye);gulls.tick(t,camera.z);mist.tick(t,camera.z);
   },dispose(){
-    understory.dispose();grass.dispose();forest.clear();distant.dispose();mist.dispose();
+    understory.dispose();grass.dispose();forest.clear();distant.dispose();gulls.dispose();mist.dispose();
     for(const g of owned)g.dispose();for(const tex of textures)tex.dispose();walls.dispose();floor.dispose();
   }};
 }
