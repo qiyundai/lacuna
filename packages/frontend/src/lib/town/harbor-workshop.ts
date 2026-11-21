@@ -1,4 +1,4 @@
-import {landHeight,shoreline,laneDepth} from './valley-river.js';
+import {landHeight,bankPosition,laneDepth} from './valley-river.js';
 export {landHeight,shoreline} from './valley-river.js';
 import * as T from 'three';
 import { loadGouache, paintMaterial } from './gouache.js';
@@ -12,17 +12,17 @@ import { hashPage } from './city-growth.js';
 import type { Site } from './painted-coast.js';
 
 const surfaceNames=['cliff','masonry','heath','paving'] as const;
-type Skin=typeof surfaceNames[number]|'copper'|'iron'|'lamp'|'bark'|'needle'|'leaf'|'glass'|'cream'|'hull'|'ashlar'|'coping'|'pebble'|'gravel'|'gardenEarth'|'court'|'shingle';
+type Skin=typeof surfaceNames[number]|'copper'|'iron'|'lamp'|'bark'|'needle'|'leaf'|'glass'|'cream'|'hull'|'ashlar'|'coping'|'pebble'|'gravel'|'gardenEarth'|'court';
 type Part=T.Object3D;
 
 export function sitePoint(s:Site){
   const x=(s.x-900)/12.5;
   const depth=s.kind==='wharf'?-.25:laneDepth(x,s.lane);
-  const z=shoreline(x)-depth;return new T.Vector3(x,Math.max(.75,landHeight(x,z)),z);
+  const z=bankPosition(x,s.bank,depth);return new T.Vector3(x,Math.max(.75,landHeight(x,z)),z);
 }
 export function siteHeading(site: Site, x: number) {
-  const line=(station:number)=>shoreline(station)-(site.kind==='wharf'?0:laneDepth(station,site.lane));
-  return -Math.atan(line(x + .5) - line(x - .5)) * .77 + (hashPage(site.id) % 15 - 7) * .014;
+  const line=(station:number)=>bankPosition(station,site.bank,site.kind==='wharf'?0:laneDepth(station,site.lane));
+  return (site.bank?Math.PI:0)-Math.atan(line(x + .5) - line(x - .5)) * .77 + (hashPage(site.id) % 15 - 7) * .014;
 }
 export async function harborWorkshop(){
   const breezeTime={value:0};
@@ -38,7 +38,7 @@ export async function harborWorkshop(){
     materials[name as Skin]=new T.MeshStandardMaterial({color,roughness:name==='glass'?.28:.78,metalness:name==='copper'?.35:0});
   }
   materials.pebble=new T.MeshStandardMaterial({color:'#a79c91',roughness:.89,vertexColors:true});
-  for(const [key,color] of [['court','#e5d7be'],['gardenEarth','#9fce87'],['shingle','#cfbe9e']] as const){
+  for(const [key,color] of [['court','#e5d7be'],['gardenEarth','#9fce87']] as const){
     materials[key]=new T.MeshStandardMaterial({map:key==='gardenEarth'?materials.heath.map:materials.paving.map,color,roughness:.98});
   }
   materials.bark.color.set('#87735a');
@@ -160,7 +160,7 @@ export async function harborWorkshop(){
     paintMaterial(materials.coping, paint);
     paintMaterial(materials.gravel, paint);
     paintMaterial(materials.pebble, paint);
-    for(const name of ['gardenEarth','court','shingle'] as const)paintMaterial(materials[name],paint);
+    for(const name of ['gardenEarth','court'] as const)paintMaterial(materials[name],paint);
     for (const name of ['masonry','copper','bark','cream','hull','iron'] as const) paintMaterial(materials[name], paint, 'architecture', true);
   }
   const buildings = createHarborBuildings(paint);

@@ -49,7 +49,7 @@ export async function webRequest(path: string, method = 'GET', value?: unknown, 
     return vault.update(journal => {
       const existing = journal.entries.find(e => e.id === body.entry_id);
       if (existing) { if (existing.body !== body.body) throw new WebVaultError('ENTRY_CONFLICT', 'This thought ID already belongs to a different thought.'); return { entry: existing }; }
-      const entry: EntryData = { id: body.entry_id as string, user_id: owner, body: body.body as string, created_at: timestamp, solidified_at: body.solidified_at as number, kept_at: null };
+      const entry: EntryData = { id: body.entry_id as string, riverEdition: 2, user_id: owner, body: body.body as string, created_at: timestamp, solidified_at: body.solidified_at as number, kept_at: null };
       if(body.settlement !== undefined){
         if(!isSettlement(body.settlement) || !canSettle(population(journal.entries),body.settlement)) throw new WebVaultError('SITE_TAKEN','Choose a site with room for this trade.');
         entry.settlement = {site:body.settlement.site,trade:body.settlement.trade};

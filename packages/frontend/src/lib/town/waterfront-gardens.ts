@@ -1,9 +1,10 @@
 import * as T from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { hashPage } from './city-growth.js';
+import type { Bank } from './painted-coast.js';
 import type { Workshop } from './harbor-workshop.js';
 import type { WaterfrontLot } from './harbor-streets.js';
-import { landHeight, laneDepth, shoreline } from './valley-river.js';
+import { landHeight, laneDepth, bankPosition } from './valley-river.js';
 
 export async function loadGardenPlants(){
   const loader=new GLTFLoader();
@@ -84,14 +85,14 @@ export function cutBuildingPlots(lots:WaterfrontLot[],walks:ReturnType<typeof ga
   };
 }
 
-export function landscapeWaterfront(shop:Workshop,plants:T.Group[],lots:WaterfrontLot[],
+export function landscapeWaterfront(shop:Workshop,plants:T.Group[],bankSide:Bank,from:number,to:number,lots:WaterfrontLot[],
   reserved:ReturnType<typeof gardenClearance>,grade:ReturnType<typeof cutBuildingPlots>,buildings:T.Box3[],ground:T.Group,planting:T.Group,details:T.Group,mow:(x:number,z:number,r:number)=>void){
-  if(!lots.length)return;
+  const outward=bankSide===0?1:-1;
   const batches=new Map<T.Material,Strip>();
   function surface(material:T.Material,rows:T.Vector3[][]){
     let batch=batches.get(material);
     if(!batch){batch={position:[],uv:[],index:[]};batches.set(material,batch);}
-    strip(batch,rows);
+    strip(batch,bankSide===0?rows:rows.map(row=>[...row].reverse()));
   }
   function open(x:number,z:number,r:number){
     return !reserved.has(x,z)&&!buildings.some(b=>x>b.min.x-r&&x<b.max.x+r&&z>b.min.z-r&&z<b.max.z+r);
@@ -117,11 +118,12 @@ export function landscapeWaterfront(shop:Workshop,plants:T.Group[],lots:Waterfro
     }
   }
   for(const {column,lane,lot} of cells.values()){
-    const seed=hashPage(column+','+lane);
+    const seed=hashPage(bankSide+'/'+column+','+lane);
     const center=(132+column*157+lane*8-900)/12.5;
     const nearby=buildings.filter(b=>b.max.x>=center-10&&b.min.x<=center+10);
     const depth=(x:number)=>lane<0?43+.9*Math.sin(x*.11):laneDepth(x,lane);
     const quay=lane===3, garden=!lot||lot.site.kind==='pines';
+    if(quay && !lot)continue;
     const west=cells.has((column-1)+','+lane),east=cells.has((column+1)+','+lane);
     const rows:T.Vector3[][]=[],faces:T.Vector3[][]=[],caps:T.Vector3[][]=[],verges:T.Vector3[][]=[];
     const point=(u:number,v:number)=>{
@@ -130,11 +132,11 @@ export function landscapeWaterfront(shop:Workshop,plants:T.Group[],lots:Waterfro
       const taper=garden?Math.min(west?1:.18+.82*T.MathUtils.smootherstep(u,0,.92),east?1:.18+.82*T.MathUtils.smootherstep(1-u,0,.92)):1;
       const inner=quay?-3.6:-5.15*taper+bend;
       const outer=quay?(lot?1.2:3.2)+bend:(garden?4.7:3.85)*taper+bend;
-      const z=shoreline(x)-depth(x)+T.MathUtils.lerp(inner,outer,v);
+      const z=bankPosition(x,bankSide,depth(x)-T.MathUtils.lerp(inner,outer,v));
       const natural=grade(x,z,landHeight(x,z));
       let y=natural+.075;
       if(garden&&!quay){
-        const innerHeight=landHeight(x,shoreline(x)-depth(x)+inner);
+        const innerHeight=landHeight(x,bankPosition(x,bankSide,depth(x)-inner));
         const end=Math.min(west?1:T.MathUtils.smoothstep(u,0,.35),east?1:T.MathUtils.smoothstep(1-u,0,.35));
         y+=Math.min(1.48,Math.max(0,innerHeight-natural)*.82)*end;
       }else if(lot&&!quay){
@@ -147,15 +149,15 @@ export function landscapeWaterfront(shop:Workshop,plants:T.Group[],lots:Waterfro
     for(let i=0;i<=16;i++){
       const u=i/16,row=Array.from({length:9},(_,j)=>point(u,j/8));
       const front=row[8]!;
-      const foot=new T.Vector3(front.x,Math.min(front.y-.12,landHeight(front.x,front.z+.24)-.18),front.z+.24);
+      const foot=new T.Vector3(front.x,Math.min(front.y-.12,landHeight(front.x,front.z+outward*.24)-.18),front.z+outward*.24);
       rows.push(row);
       faces.push([front,foot]);
-      caps.push([new T.Vector3(front.x,front.y+.025,front.z-.15),new T.Vector3(front.x,front.y+.03,front.z+.09)]);
+      caps.push([new T.Vector3(front.x,front.y+.025,front.z-outward*.15),new T.Vector3(front.x,front.y+.03,front.z+outward*.09)]);
       verges.push([row[0]!.clone(),point(u,.10)]);
       for(const p of verges[i]!)p.y+=.035;
       if(!garden)for(let j=0;j<row.length;j+=2)mow(row[j]!.x,row[j]!.z,1.05);
     }
-    surface(garden&&!quay?shop.materials.gardenEarth:quay&&!lot?shop.materials.shingle:shop.materials.court,rows);
+    surface(garden&&!quay?shop.materials.gardenEarth:shop.materials.court,rows);
     if(!quay||lot){
       surface(shop.materials.ashlar,faces);
       surface(shop.materials.coping,caps);
@@ -209,30 +211,28 @@ export function landscapeWaterfront(shop:Workshop,plants:T.Group[],lots:Waterfro
       }
     }
   }
-  const stations=lots.map(lot=>lot.model.position.x);
-  const reach=Math.min(36,6+lots.length),from=Math.floor(Math.min(...stations)-reach),to=Math.ceil(Math.max(...stations)+reach);
-  const bank:T.Vector3[][]=[];
-  for(let x=from;x<=to;x+=.5){
-    const edge=shoreline(x),meander=.5+.5*Math.sin(x*.15+.7*Math.sin(x*.061));
-    const fade=T.MathUtils.smoothstep(Math.min(x-from,to-x),0,9);
-    const upper=edge-(.4+2.2*meander)*fade,lower=edge+2.1;
-    bank.push(Array.from({length:7},(_,i)=>{
-      const z=T.MathUtils.lerp(upper,lower,i/6);
-      return new T.Vector3(x,landHeight(x,z)+.06+.12*fade*Math.sin(Math.PI*i/6),z);
-    }));
-    if(meander<.36||!open(x,edge,1.1))continue;
-    const seed=hashPage('bank/'+x);
-    for(let j=0;j<6;j++){
-      const offset=Math.sin(seed+j*2.4),z=edge-.6+1.5*offset;
-      const y=landHeight(x,z)+.13;
-      if(!open(x,z,.4))continue;
-      if(j%3===0){
-        const size=.42+meander*.46;
-        shop.piece(planting,shop.geometries.pebble,'pebble',x,y+.03,z,size,.40*size,.74*size,offset);
-      }else plant(1,x+.19*offset,y,z,1.45+meander*.80,seed+j);
+  for(let cell=Math.floor(from/3);cell<=Math.ceil(to/3);cell++){
+    const seed=hashPage('strand/'+bankSide+'/'+cell);
+    const center=3*(cell+(seed&255)/256);
+    const bar=.5+.5*Math.sin(center*.077+bankSide*3.1+.8*Math.sin(center*.039));
+    const scrub=bankPosition(center,bankSide,3.8+(seed>>>24)/54);
+    if(bar>.6 && seed%5<2 && open(center,scrub,2.6))
+      shop.tree(planting,center,landHeight(center,scrub),scrub,1.6+bar*1.7,seed);
+    const count=2+Math.floor(bar*8);
+    for(let j=0;j<count;j++){
+      const bits=hashPage(seed+'/'+j);
+      const x=center+3.6*((bits&255)/255-.5);
+      const inland=-2.8+((bits>>>8)&255)/255*(4.8+2.4*bar);
+      const z=bankPosition(x,bankSide,inland),y=landHeight(x,z);
+      if(y<-.6 || !open(x,z,.8))continue;
+      const size=.17+.64*((bits>>>16)&255)/255;
+      if(y>.07 && y<1.5 && bar>.46 && j%3!==0){
+        plant(1,x,y-.04,z,size*(1.1+bar),bits);
+      }else{
+        shop.piece(planting,shop.geometries.pebble,'pebble',x,y,z,size*1.35,size*.53,size*.96,bits%23);
+      }
     }
   }
-  surface(shop.materials.shingle,bank);
   const matrix=new T.Matrix4();
   for(const [tile,patch] of patches){
     const stand=new T.Group();

@@ -1,5 +1,6 @@
 import * as T from 'three';
 import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js';
+import { cloudDriftRate } from './corridor-light.js';
 
 const relief = new ImprovedNoise();
 const sectorWidth = 640;
@@ -233,7 +234,7 @@ export function createBayWorld(scene: T.Scene, throughCorridor=false) {
     const bearing = throughCorridor ? -.026+.012*Math.sin(phase) : Math.PI+.072+.019*Math.sin(phase);
     const elevation = (throughCorridor ? .52 : .83) + .09*Math.sin(phase*.5);
     sunDirection.set(Math.sin(bearing),elevation,-Math.cos(bearing)).normalize();
-    skyMaterial.uniforms.seconds!.value=seconds;
+    skyMaterial.uniforms.seconds!.value=seconds*cloudDriftRate;
     sun.target.position.set(focusX,4,focusZ);
     sun.position.copy(sun.target.position).addScaledVector(sunDirection,112);
     sun.intensity = 2.38 + elevation*.52;

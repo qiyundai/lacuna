@@ -1,6 +1,6 @@
 import { corridorShadow } from './corridor-light.js';
 import * as T from 'three';
-import { riverGround, shoreline, valleyOrigin } from './valley-river.js';
+import { riverGround, shoreline, riverWidth, valleyOrigin } from './valley-river.js';
 import { corridorForest, corridorGrass, distantCrowns, treeMeshes, woodlandAt } from './corridor-vegetation.js';
 import { woodlandFloor } from './woodland-floor.js';
 import type { Gouache } from './gouache.js';
@@ -30,7 +30,9 @@ function corridorFloor(near:number,far:number,extent:number,cityEnd:number){
   const xs:number[]=[];
   for(let x=axis-305;x<axis+306;x+=x>12&&x<148?1.25:5)xs.push(x);
   const sliceSet=new Set(depthSlices(extent));
+  for(let z=near-250;z<near;z+=3)sliceSet.add(z);
   for(let z=near;z<=far;z+=1.3)sliceSet.add(z);
+  for(let z=far;z<=far+250;z+=3)sliceSet.add(z);
   for(let z=255;z<776;z+=4)sliceSet.add(z);
   const zs=[...sliceSet].sort((a,b)=>b-a),cols=xs.length;
   for(const [j,z] of zs.entries())for(const [i,x] of xs.entries()){
@@ -151,24 +153,26 @@ function wallGeometry(side:number){
 export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighting:ValleyLighting,paint?:Gouache,afterglow=false){
   const root=new T.Group(),owned:T.BufferGeometry[]=[],textures:T.Texture[]=[];
   const loader=new T.TextureLoader();
-  const load=(name:string)=>loader.loadAsync('/city/materials/'+name+'.webp').then(t=>{
-    t.wrapS=t.wrapT=T.RepeatWrapping;t.anisotropy=4;textures.push(t);return t;
+  const load=(name:string,anisotropy=4)=>loader.loadAsync('/city/materials/'+name+'.webp').then(t=>{
+    t.wrapS=t.wrapT=T.RepeatWrapping;t.anisotropy=anisotropy;textures.push(t);return t;
   }).catch(()=>null);
-  const [moss,normal,canopy,sprays]=await Promise.all([
-    load('wall-moss'),load('wall-moss-normal'),load('woodland-canopy'),load('moss-leaf-sprays')
+  const [moss,normal,canopy,sprays,grassFibres]=await Promise.all([
+    load('wall-moss'),load('wall-moss-normal'),load('woodland-canopy'),load('moss-leaf-sprays'),load('meadow-fibres',8)
   ]);
   const eye=new T.Vector3();
   const driftTime={value:0};
   const walls=wallMaterial(moss??heath,normal??heath,canopy??heath,driftTime,lighting.direction);
   const floor=new T.MeshLambertMaterial({map:heath,fog:false});
+  if(grassFibres)floor.defines={...floor.defines,USE_GRASS_FIBRES:1};
   floor.onBeforeCompile=shader=>{
+    shader.uniforms.grassFibres={value:grassFibres};
     Object.assign(shader.uniforms,{driftTime,breezeTime:driftTime,forestEye:{value:eye},floorShade:{value:understory.texture},shadeLayout:{value:understory.layout}});
     shader.vertexShader='attribute float woodland;uniform vec3 forestEye;varying vec3 floorPlace;varying float treeCover,floorDistance;\n'+shader.vertexShader.replace('#include <begin_vertex>',`
       #include <begin_vertex>
       floorPlace=position;
       floorDistance=distance(forestEye,position);
       treeCover=woodland;`);
-    shader.fragmentShader=corridorShadow+coastalBreeze+meadowPigment+'uniform sampler2D floorShade;uniform vec4 shadeLayout;varying vec3 floorPlace;varying float treeCover,floorDistance;\n'+shader.fragmentShader.replace('#include <map_fragment>',`
+    shader.fragmentShader=corridorShadow+coastalBreeze+meadowPigment+'uniform sampler2D grassFibres,floorShade;uniform vec4 shadeLayout;varying vec3 floorPlace;varying float treeCover,floorDistance;\n'+shader.fragmentShader.replace('#include <map_fragment>',`
       #ifdef USE_MAP
         vec2 land=floorPlace.xz;
         float gust=meadowWave(land,breezeTime);
@@ -181,8 +185,27 @@ export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighti
         float shelter=mix(treeCover,texture2D(floorShade,shadeUv).r,window);
         vec3 turf=meadowPigment(land,max(shelter,treeCover),floorPlace.y);
         diffuseColor.rgb=turf*(.76+.93*fibre)*mix(.96,1.09,gust*grass*resolved);
+        #ifdef USE_GRASS_FIBRES
+          vec2 patchBend=vec2(sin(land.y*.19+1.2*sin(land.x*.089)),cos(land.x*.27+land.y*.16));
+          vec2 grassUv=land*.093+.07*patchBend+breezeDirection*gust*.018;
+          float blade=texture2D(grassFibres,grassUv).r;
+          float tuft=texture2D(grassFibres,land.yx*.047+.024*patchBend).r;
+          float hollow=texture2D(grassFibres,grassUv+vec2(.005,.011)).r;
+          float run=.5+.5*sin(dot(land,vec2(.48,.13))+.85*patchBend.y+1.3*gust);
+          float tips=blade*(.56+.50*gust+.36*tuft);
+          vec3 nap=turf*(.64+.45*tuft+.21*run-.32*hollow);
+          nap+=vec3(.132,.186,.064)*tips+vec3(.032,.047,.018)*gust;
+          diffuseColor.rgb=mix(diffuseColor.rgb,nap*(.85+.32*fibre),.94*(1.-.78*shelter)*smoothstep(1.2,3.6,floorPlace.y));
+        #endif
         diffuseColor.rgb*=.96+.20*seedHeads*resolved;
         diffuseColor.rgb*=1.-.53*shelter;
+        float grain=texture2D(map,land*.57).r;
+        float deposits=.53*sin(land.y*.19+sin(land.x*.35))+.24*cos(land.x*.79+land.y*.47);
+        float moisture=1.-smoothstep(-.05,.88,floorPlace.y+deposits*.19);
+        vec3 shingle=mix(vec3(.25,.206,.148),vec3(.064,.072,.062),moisture);
+        shingle*=.73+.89*grain+.14*deposits;
+        float meadowEdge=smoothstep(.48,1.95,floorPlace.y+deposits*.68+(fibre-.5)*.64);
+        diffuseColor.rgb=mix(shingle,diffuseColor.rgb,meadowEdge);
       #endif`)
       .replace('#include <opaque_fragment>','outgoingLight=mix(outgoingLight*mix(vec3(.17,.27,.25),vec3(1.02,.95,.69),canopySunlight(floorPlace)),vec3(.135,.220,.241),(1.-exp(-floorDistance*.000087))*.97);\n#include <opaque_fragment>');
   };
@@ -206,7 +229,7 @@ export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighti
   const understory=woodlandFloor(ground,coverAt,bounds.west,bounds.east);
   const grass=corridorGrass(ground,(x,z)=>{
     const depth=valleyOrigin.x+shoreline(valleyOrigin.z-z)-x;
-    return z>=detailNear-12&&z<=detailFar+12&&depth>=-6&&depth<=86;
+    return z>=detailNear-12&&z<=detailFar+12&&depth>=-riverWidth(valleyOrigin.z-z)-43&&depth<=86;
   },bounds.west,bounds.east,driftTime,eye,coverAt);
   root.add(grass.group);
   const forest=corridorForest(trees,ground,coverAt,bounds.west,bounds.east);

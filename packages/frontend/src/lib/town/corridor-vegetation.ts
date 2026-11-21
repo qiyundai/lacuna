@@ -7,12 +7,14 @@ import { crownNeighbors, woodlandBoughs, type WoodlandTree } from './woodland-bo
 import { meadowPigment } from './meadow-pigment.js';
 import { coastalBreeze } from './coastal-breeze.js';
 import type { Gouache } from './gouache.js';
-import { shoreline, valleyOrigin } from './valley-river.js';
+import { shoreline, riverWidth, valleyOrigin } from './valley-river.js';
 
 const noise=new ImprovedNoise();
 
 export function woodlandAt(x:number,z:number,height:number,cityEnd:number){
-  const depth=shoreline(valleyOrigin.z-z)+valleyOrigin.x-x;
+  const station=valleyOrigin.z-z;
+  const west=shoreline(station)+valleyOrigin.x-x;
+  const depth=Math.max(west,-riverWidth(station)-west);
   const street=z<218 && z>valleyOrigin.z-cityEnd-16 && depth>=-2 ? T.MathUtils.smoothstep(depth,39,55) : 1;
   const overlook=T.MathUtils.smoothstep(Math.hypot((x-70)*.85,z-491),38,89);
   const stand=.66*noise.noise(x*.020,z*.017,8)+.34*noise.noise(x*.047,z*.041,3);
@@ -143,6 +145,7 @@ export function distantCrowns(height:Surface,coverAt:Cover,west:number,east:numb
 
 export function corridorGrass(height:Surface,hasTownLawn:(x:number,z:number)=>boolean,west:number,east:number,
   breezeTime:T.IUniform<number>,eye:T.Vector3,coverAt:Cover){
+  const drawDistance=150;
   const positions:number[]=[],normals:number[]=[],colors:number[]=[],indices:number[]=[];
   for(let j=0;j<4;j++){
     const a=j*2.4,dx=Math.cos(a),dz=Math.sin(a),h=.33+.044*j,start=positions.length/3;
@@ -164,7 +167,7 @@ export function corridorGrass(height:Surface,hasTownLawn:(x:number,z:number)=>bo
       attribute vec4 growth,habitat;
     `+shader.vertexShader.replace('#include <beginnormal_vertex>',`
       vec3 root=growth.xyz;
-      float fade=1.-smoothstep(40.,75.,distance(root,meadowEye));
+      float fade=1.-smoothstep(80.,${drawDistance.toFixed(1)},distance(root,meadowEye));
       float gust=breezeAt(root.xz,breezeTime);
       float angle=growth.w*31.;
       mat2 turn=mat2(cos(angle),-sin(angle),sin(angle),cos(angle));
@@ -182,7 +185,7 @@ export function corridorGrass(height:Surface,hasTownLawn:(x:number,z:number)=>bo
     shader.fragmentShader=shader.fragmentShader.replace('#include <normal_fragment_begin>',
       '#include <normal_fragment_begin>\n normal*=faceDirection;');
   };
-  const ring=tileRing(28,3,west,east,(i,j)=>{
+  const ring=tileRing(28,Math.ceil(drawDistance/28),west,east,(i,j)=>{
     const roots:number[]=[],habitats:number[]=[],box=new T.Box3(),pt=new T.Vector3();
     for(let patchX=0;patchX<7;patchX++)for(let patchZ=0;patchZ<7;patchZ++){
       const cx=i*28+patchX*4+2,cz=j*28+patchZ*4+2;
@@ -211,7 +214,7 @@ export function corridorGrass(height:Surface,hasTownLawn:(x:number,z:number)=>bo
     ring.view(camera);
     for(const tile of ring.group.children){
       const box=(tile as T.Mesh<T.InstancedBufferGeometry>).geometry.boundingBox!;
-      tile.visible=box.distanceToPoint(camera)<75;
+      tile.visible=box.distanceToPoint(camera)<drawDistance;
     }
   }
   return {...ring,view,dispose(){ring.clear();material.dispose();}};

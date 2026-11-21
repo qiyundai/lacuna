@@ -72,7 +72,7 @@ export function createMeadow(ground:T.BufferGeometry,rows:number,eye:T.Vector3,h
   paths.magFilter=paths.minFilter=T.LinearFilter;paths.needsUpdate=true;
   const group=new T.Group();
   const sectors:{mesh:T.Mesh;box:T.Box3;range:number}[]=[];
-  const layers=[{pattern:blades(7,275),end:68,start:39},{pattern:blades(18,93),end:29,start:16}].map(layer=>{
+  const layers=[{pattern:blades(7,275),end:136,start:78},{pattern:blades(18,93),end:29,start:16}].map(layer=>{
     const material=new T.MeshLambertMaterial({vertexColors:true,side:T.DoubleSide});
     material.customProgramCacheKey=()=>'coastal-lawn';
     material.onBeforeCompile=shader=>{

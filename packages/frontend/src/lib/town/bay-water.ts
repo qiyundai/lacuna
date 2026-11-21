@@ -1,5 +1,6 @@
 import {sunbreak} from './sunbreak.js';
 import { valleyOrigin } from './valley-river.js';
+import { ferryWake, wakeLifetime, wakeSamples } from './ferry-wake.js';
 import * as T from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 
@@ -34,6 +35,8 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
   water.rotation.x=-Math.PI/2;water.position.y=.01;water.renderOrder=1;
   const material=water.material as T.ShaderMaterial,slopes=capillarySlopes();
   const bounds=new T.Vector2(),clock={value:0};
+  const wake=ferryWake();
+  Object.assign(material.uniforms,{wakeTrail:wake.trail,wakeCount:wake.count,wakeBounds:wake.bounds});
   Object.assign(material.uniforms,{slopes:{value:slopes},sunDirection:{value:sunDirection},bounds:{value:bounds},clock});
   material.uniforms.shadowFrame={value:sun.shadow.matrix};
   material.uniforms.shadowDepth={value:null};
@@ -66,6 +69,8 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
     uniform mat4 shadowFrame;
     uniform highp sampler2DShadow shadowDepth;
     uniform float clock;
+    uniform int wakeCount;
+    uniform vec4 wakeTrail[${wakeSamples}],wakeBounds;
     ${afterglow?sunbreak:''}
     float cellValue(vec2 cell){
       vec3 h=fract(vec3(cell.xyx)*vec3(.1031,.1030,.0973));
@@ -86,7 +91,10 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
       float edge=8.+19.*sin(station*.012+.65)+8.*sin(station*.029)-2.4*cos(station*.056);
       float width=24.+5.*sin(station*.017)+4.*cos(station*.031);
       float shore=p.x-${valleyOrigin.x}.-edge;
-      float bankDistance=min(shore,width-shore);
+      float side=step(width*.5,shore);
+      float bar=.5+.5*sin(station*.077+side*3.1+.8*sin(station*.039));
+      float scallop=.65*sin(station*.36+side*4.)+.32*sin(station*.83+side);
+      float bankDistance=min(shore,width-shore)-scallop-bar*1.25;
       float channel=smoothstep(-.5,width*.44,bankDistance);
       float bend=.228*cos(station*.012+.65)+.232*cos(station*.029)+.1344*sin(station*.056);
       vec2 downstream=normalize(vec2(bend,-1.)),across=vec2(-downstream.y,downstream.x);
@@ -105,6 +113,30 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
       float footprint=max(length(dFdx(p)),length(dFdy(p)));
       vec2 detail=(across*fine.x+downstream*fine.y)*(1.-smoothstep(.4,2.7,footprint));
       vec2 slope=detail+(downstream*swell+across*field.x*.035)*(1.-smoothstep(2.,9.,footprint));
+      float propWash=0.;
+      if(wakeCount>1 && all(greaterThan(p,wakeBounds.xy-7.)) && all(lessThan(p,wakeBounds.zw+7.))){
+        float closest=1e5;
+        vec2 radial=vec2(0.);
+        float age=0.,power=0.;
+        for(int i=1;i<${wakeSamples};i++){
+          if(i>=wakeCount)break;
+          vec4 a=wakeTrail[i-1],b=wakeTrail[i];
+          vec2 segment=b.xy-a.xy;
+          float t=clamp(dot(p-a.xy,segment)/max(dot(segment,segment),.00001),0.,1.);
+          vec4 samplePoint=mix(a,b,t);
+          float seconds=max(0.,clock-samplePoint.z);
+          vec2 delta=p-samplePoint.xy-downstream*.08*seconds;
+          float d=length(delta);
+          if(d<closest){
+            closest=d;radial=delta/max(.01,d);age=seconds;power=samplePoint.w;
+          }
+        }
+        float energy=power*(1.-smoothstep(1.,${wakeLifetime}.,age))*smoothstep(.9,3.1,bankDistance);
+        float crest=closest-.38-.44*age+.12*field.x;
+        float envelope=exp(-crest*crest/(.28+.12*age));
+        slope+=radial*.43*cos(crest*6.)*envelope*energy*(1.-smoothstep(.18,1.,footprint));
+        propWash=energy*(.32*envelope+.6*exp(-closest*closest/(.28+.08*age)-age*.60))*(.54+.46*breeze);
+      }
       vec3 n=normalize(vec3(slope.x,1.,slope.y));
       vec2 uv=vUv.xy/vUv.w;
       float fresnel=.024+.92*pow(1.-clamp(dot(eye,n),0.,1.),4.);
@@ -115,6 +147,8 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
       float coast=(1.-smoothstep(0.,14.,max(bounds.x-station,station-bounds.y)));
       float shallow=exp(-.16*max(0.,bankDistance))*(.68+.32*field.y);
       vec3 body=mix(vec3(.017,.080,.113),vec3(.062,.171,.146),shallow);
+      float bed=1.-smoothstep(.12,3.3,bankDistance);
+      body=mix(body,vec3(.116,.123,.084)*(.77+.38*breeze),bed);
       vec3 halfAngle=normalize(eye+sunDirection);
       float rough=.079+.045*riffle+.027*smoothstep(.25,1.9,footprint);
       float a2=rough*rough, nh=max(dot(n,halfAngle),0.);
@@ -129,10 +163,10 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
       ${afterglow?`
       color+=sunbreakAt(surface,clock,sunDirection)*sunlight*glint*vec3(1.45,.97,.44);`:''}
       float foam=coast*exp(-1.9*abs(bankDistance-.5-field.x))*smoothstep(.52,.82,breeze);
-      color=mix(color,vec3(.55,.67,.58),foam*.36);
+      color=mix(color,vec3(.55,.67,.58),clamp(foam*.36+propWash,0.,.8));
       gl_FragColor=vec4(color,1.);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`;
-  return {water,bounds,clock,dispose(){water.dispose();geometry.dispose();slopes.dispose();}};
+  return {water,bounds,clock,wake,dispose(){water.dispose();geometry.dispose();slopes.dispose();}};
 }

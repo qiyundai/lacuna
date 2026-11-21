@@ -1,6 +1,6 @@
 import * as T from 'three';
 import type { ValleyLighting } from './bay-world.js';
-import { corridorLightField } from './corridor-light.js';
+import { cloudDriftRate, corridorLightField } from './corridor-light.js';
 import { sunbreak } from './sunbreak.js';
 
 function randomStream(seed:number){
@@ -36,7 +36,7 @@ function moistureTexture(seed:number){
 
 function cloudMaterial(volume:T.Data3DTexture,lighting:ValleyLighting,depth:T.IUniform<T.DepthTexture|null>,screen:T.Vector2,afterglow:boolean){
   return new T.ShaderMaterial({glslVersion:T.GLSL3,uniforms:{
-    volume:{value:volume},clock:{value:0},humidity:{value:0},puffs:{value:Array.from({length:puffCount},()=>new T.Vector4())},
+    volume:{value:volume},clock:{value:0},cloudTime:{value:0},humidity:{value:0},puffs:{value:Array.from({length:puffCount},()=>new T.Vector4())},
     supply:{value:new Float32Array(puffCount)},weatherPhase:{value:new T.Vector3()},
     wispBase:{value:new T.Vector4()},wispTip:{value:new T.Vector4()},
     geometryDepth:depth,screen:{value:screen},sunDirection:{value:lighting.direction},sunColor:{value:lighting.direct}
@@ -53,7 +53,7 @@ function cloudMaterial(volume:T.Data3DTexture,lighting:ValleyLighting,depth:T.IU
     uniform sampler3D volume;
     uniform sampler2D geometryDepth;
     uniform vec2 screen;
-    uniform float clock,humidity;
+    uniform float clock,cloudTime,humidity;
     uniform vec4 puffs[${puffCount}];
     uniform vec4 wispBase,wispTip;
     uniform float supply[${puffCount}];
@@ -85,12 +85,12 @@ function cloudMaterial(volume:T.Data3DTexture,lighting:ValleyLighting,depth:T.IU
         float rise=(p.y-wispBase.y)/(wispTip.y-wispBase.y);
         float taper=1.-rise;
         vec2 spine=mix(wispBase.xz,wispTip.xz,rise);
-        float curl=sin(rise*9.-clock*.42+wispTip.w);
+        float curl=sin(rise*9.-cloudTime*.42+wispTip.w);
         spine.y+=curl*wispBase.w*.28*sin(3.14159*rise);
         vec2 crossSection=(p.xz-spine)/(wispBase.w*(.12+.88*taper));
         float edge=dot(crossSection*vec2(1.2,.78),crossSection*vec2(1.2,.78));
         if(edge<1.){
-          vec3 updraft=vec3(crossSection*.26,(p.y-wispBase.y)*.026-clock*.057);
+          vec3 updraft=vec3(crossSection*.26,(p.y-wispBase.y)*.026-cloudTime*.057);
           vec4 vapor=texture(volume,updraft+wispTip.w)-.5;
           float veil=smoothstep(-.22,.20,vapor.r+dot(vapor.gba,weatherPhase)*.64-.17*rise);
           density+=(1.-density)*.43*taper*sqrt(taper)*(1.-smoothstep(.05,1.,edge))*(.16+.84*veil);
@@ -153,6 +153,7 @@ export function createLowCloud(lighting:ValleyLighting,ground:Surface,wall:Wall,
   });
 
   function tick(t:number,eyeZ=0){
+    const cloudTime=t*cloudDriftRate;
     const center=Math.round(eyeZ/spacing);
     for(let row=center-radius;row<=center+radius;row++){
       const bank=banks[T.MathUtils.euclideanModulo(row,banks.length)]!;
@@ -162,7 +163,7 @@ export function createLowCloud(lighting:ValleyLighting,ground:Surface,wall:Wall,
         bank.row=row;bank.generation=Infinity;
         bank.period=64+random()*32;bank.offset=random();
       }
-      const age=t/bank.period+bank.offset,index=Math.floor(age),phase=age-index;
+      const age=cloudTime/bank.period+bank.offset,index=Math.floor(age),phase=age-index;
       const {mesh,material}=bank;
       if(bank.generation!==index){
         const random=randomStream(rowSeed^Math.imul(index+1,0x85ebca6b));
@@ -248,6 +249,7 @@ export function createLowCloud(lighting:ValleyLighting,ground:Surface,wall:Wall,
         *(1.-T.MathUtils.smoothstep(distance,spacing*(radius-1.4),spacing*(radius-.7)));
       material.uniforms.humidity!.value=humidity;
       material.uniforms.clock!.value=t;
+      material.uniforms.cloudTime!.value=cloudTime;
       mesh.visible=humidity>.01;
     }
   }

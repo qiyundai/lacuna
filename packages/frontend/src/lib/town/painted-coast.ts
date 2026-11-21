@@ -1,8 +1,9 @@
 import { hashPage, type CityPage } from './city-growth.js';
 
 export const frontage = ['houses','steps','terraces','crescent','apartments','market','warehouse','crane','pines','glasshouse','station','civic','belfry','towers','arches','wharf','beacon'] as const;
+export type Bank = 0 | 1;
 type Architecture = typeof frontage[number];
-export type Site = { id:string; kind:Architecture; ferryTerminal?:boolean; x:number; y:number; width:number; mirror:boolean; lane:number; lights:number; predecessor?:Site };
+export type Site = { id:string; kind:Architecture; bank:Bank; ferryTerminal?:boolean; x:number; y:number; width:number; mirror:boolean; lane:number; lights:number; predecessor?:Site };
 export type Coast = { sites:Site[]; addresses:Map<string,Site>; latest?:Site; service:number; start:number; end:number };
 
 const lanes:readonly Architecture[][] = [
@@ -20,9 +21,9 @@ function heightAt(contour:number[], x:number) {
 export const waterline=[449,482,522,566,611,640,666,688,645,609,583,566,556];
 export const coastlineAt=(x:number)=>heightAt(waterline,x);
 
-type Parcel={column:number;lane:number};
+type Parcel={column:number;lane:number;bank:Bank};
 const neighbors=[[-1,0],[1,0],[0,-1],[0,1]] as const;
-const key=(column:number,lane:number)=>column*4+lane;
+const key=(column:number,lane:number,bank:Bank)=>column*8+bank*4+lane;
 
 export function paintedCoast(entries:readonly CityPage[]):Coast {
   const sites:Site[]=[],addresses=new Map<string,Site>(),occupied=new Map<number,Site>(),front=new Map<number,Parcel>();
@@ -31,8 +32,9 @@ export function paintedCoast(entries:readonly CityPage[]):Coast {
   if(!pages.length)return {sites,addresses,service,start:0,end};
   const seed=hashPage(pages[0]!.id);
   const startLane=1+(seed%2);
-  front.set(key(4,startLane),{column:4,lane:startLane});
-  let edge=4;
+  front.set(key(4,startLane,0),{column:4,lane:startLane,bank:0});
+  const edge:[number,number]=[4,4],bankLots:[number,number]=[0,0];
+  let farFounded=false;
   const kinds=(parcel:Parcel,salt:number,adjacent:number):Architecture[]=>{
     const {lane}=parcel;
     const pool=[...lanes[lane]!];
@@ -52,33 +54,53 @@ export function paintedCoast(entries:readonly CityPage[]):Coast {
     }
     let choice:Parcel|undefined,score=-Infinity,adjacent=0;
     for(const parcel of front.values()){
-      const {lane,column}=parcel;
-      const touching=neighbors.filter(([dc,dl])=>lane+dl>=0&&lane+dl<4&&occupied.has(key(column+dc,lane+dl))).length;
-      let cell=Math.imul(column+1,0x9e3779b1)^Math.imul(lane+1,0x85ebca77)^salt;
+      const {lane,column,bank}=parcel;
+      if(bank && page.riverEdition!==2)continue;
+      const touching=neighbors.filter(([dc,dl])=>lane+dl>=0&&lane+dl<4&&occupied.has(key(column+dc,lane+dl,bank))).length;
+      let cell=Math.imul(column+1,0x9e3779b1)^Math.imul(lane+1,0x85ebca77)^Math.imul(bank,0x27d4eb2d)^salt;
       cell=Math.imul(cell^(cell>>>16),0x7feb352d);
       const draw=((cell^(cell>>>15))>>>0)/4294967296;
-      const rank=draw+.14*touching+.065*Math.min(0,column-edge+5)+.075*Math.sin(column*.54+lane+seed%41);
+      const crossing=bank===1 && !farFounded;
+      const room=page.riverEdition===2 && farFounded ? .62*(1-2*bankLots[bank]!/last) : 0;
+      const rank=(crossing?1.8:0)+room+draw+.14*touching+.065*Math.min(0,column-edge[bank]!+5)+.075*Math.sin(column*.54+lane+seed%41);
       if(rank>score){score=rank;choice=parcel;adjacent=touching;}
     }
-    const {column,lane}=choice!;
+    const {column,lane,bank}=choice!;
     const options=kinds(choice!,salt,adjacent);
     const block:Site[]=[];
     for(let c=Math.max(0,column-3);c<=column+3;c++)for(let l=0;l<4;l++){
-      const neighbor=occupied.get(key(c,l));if(neighbor)block.push(neighbor);
+      const neighbor=occupied.get(key(c,l,bank));if(neighbor)block.push(neighbor);
+    }
+    if(page.riverEdition===2){
+      const trade=block.filter(site=>site.ferryTerminal || site.kind==='market' || site.kind==='warehouse').length;
+      const homes=block.filter(site=>site.kind==='houses' || site.kind==='terraces').length;
+      if(lane>=2 && trade>=2)options.push('warehouse','market','crane');
+      if(homes>=2)options.push('terraces','houses',lane<2?'apartments':'market');
     }
     const landmarks:Architecture[]=['station','civic','belfry','beacon','wharf','arches','towers'];
     const available=options.filter(k=>!landmarks.includes(k)||!block.some(s=>s.kind===k));
     const selection=available.length?available:options;
     const highStreet=last>14 && lane<2 && adjacent>1 && !block.some(s=>s.kind==='towers') && salt%4!==0;
-    const kind:Architecture=!last?(salt%3===0?'market':'houses'):highStreet?'towers':selection[(salt>>>10)%selection.length]!;
+    const across:Bank=bank===0?1:0;
+    const firstLanding=page.riverEdition===2 && lane===3 &&
+      ((!adjacent && occupied.get(key(column,3,across))?.ferryTerminal) ||
+        (!farFounded && (bank===1 || (last>=4 && !block.some(s=>s.ferryTerminal)))));
+    let kind=selection[(salt>>>10)%selection.length]!;
+    if(!last)kind=salt%3===0?'market':'houses';
+    else if(firstLanding)kind='wharf';
+    else if(highStreet)kind='towers';
     const x=132+column*157+((salt>>>12)%19)-9+lane*8;
-    latest={id:page.id,kind,lane,x,y:0,width:101+(salt>>>18)%45,mirror:!!(salt&1),lights:0,ferryTerminal:kind==='wharf'};
-    sites.push(latest);addresses.set(page.id,latest);occupied.set(key(column,lane),latest);front.delete(key(column,lane));
+    latest={id:page.id,kind,lane,bank,x,y:0,width:101+(salt>>>18)%45,mirror:!!(salt&1),lights:0,ferryTerminal:kind==='wharf'};
+    sites.push(latest);addresses.set(page.id,latest);occupied.set(key(column,lane,bank),latest);front.delete(key(column,lane,bank));
     for(const [dc,dl] of neighbors){
-      const c=column+dc,l=lane+dl,k=key(c,l);
-      if(c>=0&&l>=0&&l<4&&!occupied.has(k))front.set(k,{column:c,lane:l});
+      const c=column+dc,l=lane+dl,k=key(c,l,bank);
+      if(c>=0&&l>=0&&l<4&&!occupied.has(k))front.set(k,{column:c,lane:l,bank});
     }
-    edge=Math.max(edge,column);end=Math.max(end,Math.ceil((x+latest.width*.5)/1800)*1800);
+    bankLots[bank]++;
+    if(bank===1)farFounded=true;
+    if(latest.ferryTerminal && !occupied.has(key(column,3,across)) && (!farFounded || page.riverEdition===2))
+      front.set(key(column,3,across),{column,lane:3,bank:across});
+    edge[bank]=Math.max(edge[bank]!,column);end=Math.max(end,Math.ceil((x+latest.width*.5)/1800)*1800);
     if(latest.ferryTerminal)service++;
   }
   return {sites,latest,addresses,service,start:0,end};

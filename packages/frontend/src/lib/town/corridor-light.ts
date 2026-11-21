@@ -1,6 +1,8 @@
+export const cloudDriftRate = 1 / 3;
+
 export const corridorLightField=`
   float canopyLightField(vec3 p,float driftTime){
-    float k=p.z+.115*p.y+.11*(p.x-76.)+driftTime*1.7;
+    float k=p.z+.115*p.y+.11*(p.x-76.)+driftTime*${cloudDriftRate}*1.7;
     float folded=sign(k)*log(1.+abs(k)*.000115)/.000115;
     float phase=folded*.012+.78*sin(folded*.0041)+.28*sin(folded*.0023+p.x*.002);
     phase+=.09*sin(p.y*.017+folded*.009)+.07*sin(p.y*.034+p.x*.012);

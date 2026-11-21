@@ -1,7 +1,7 @@
-import {laneDepth} from './valley-river.js';
+import {bankEdge,bankPosition,laneDepth} from './valley-river.js';
 import * as T from 'three';
-import { landHeight, shoreline, type Workshop } from './harbor-workshop.js';
-import type { Site } from './painted-coast.js';
+import { landHeight, type Workshop } from './harbor-workshop.js';
+import type { Bank, Site } from './painted-coast.js';
 
 export type DoorApproach = { threshold: T.Vector3; landing: T.Vector3; exit: T.Vector3 };
 export type WaterfrontLot = { site: Site; model: T.Group; doors: DoorApproach[]; gallery: T.Vector3[] };
@@ -45,6 +45,7 @@ export function placeLot(site: Site, model: T.Group): WaterfrontLot {
 }
 
 export function streetLine(lots: WaterfrontLot[], lane: number, junctions: number[] = []) {
+  const bank=lots[0]?.site.bank??0, outward=bank===0?1:-1;
   const doors = lots.flatMap(lot => lot.doors);
   const xs = lots.map(lot => lot.model.position.x).concat(doors.map(d => d.exit.x));
   if (!xs.length) return [];
@@ -58,10 +59,10 @@ export function streetLine(lots: WaterfrontLot[], lane: number, junctions: numbe
     const elevation = .95;
     for (const {exit} of doors) {
       const distance = Math.abs(x-exit.x);
-      offset = Math.max(offset, exit.z-shoreline(exit.x)+1.42-distance*.55);
+      offset = Math.max(offset, outward*(exit.z-bankEdge(exit.x,bank))+1.42-distance*.55);
 
     }
-    const z = shoreline(x)+offset;
+    const z = bankPosition(x,bank,-offset);
     const ground = Math.max(landHeight(x,z-.73),landHeight(x,z),landHeight(x,z+.73));
     line.push(new T.Vector3(x,Math.max(elevation,ground+.16),z));
   }
@@ -210,7 +211,7 @@ export function streetFurniture(shop: Workshop, group: T.Group, line: T.Vector3[
   }
 }
 
-export function hillsidePassage(shop: Workshop, group: T.Group, a: T.Vector3, b: T.Vector3) {
+export function hillsidePassage(shop: Workshop, group: T.Group, a: T.Vector3, b: T.Vector3, bank:Bank) {
   const length=horizontal(a,b);
   if (length<.10) return;
   let route: T.Vector3[]=[];
@@ -220,7 +221,7 @@ export function hillsidePassage(shop: Workshop, group: T.Group, a: T.Vector3, b:
       const t=i/count;
       const q=a.clone().lerp(b,t);
       const shift=-reach*Math.sin(Math.PI*t);
-      q.z+=shoreline(q.x+shift)-shoreline(q.x);
+      q.z+=bankEdge(q.x+shift,bank)-bankEdge(q.x,bank);
       q.x+=shift;
       q.y=landHeight(q.x,q.z)+.20;
       return q;

@@ -89,6 +89,7 @@ export const api = {
 };
 
 export interface EntryData extends VillageEntry {
+  riverEdition?: 2;
   settlement?: Settlement;
   id: string;
   user_id: string;

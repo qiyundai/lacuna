@@ -890,6 +890,7 @@ test('city saves on both vaults preserve words and skip the legacy story classif
     const value={...thought(948,'A page with no particular theme.'),city:true};
     const {entry}=await send(value);
     assert.equal(entry.body,value.body);
+    assert.equal(entry.riverEdition,2);
     assert.equal(entry.presence,undefined);
     assert.deepEqual((await send(value)).entry,entry);
   }
@@ -922,6 +923,77 @@ test('a journal grows connected parcels upstream and every page keeps a stable c
     assert.deepEqual(early,paintedCoast(pages.slice(0,32).reverse().map(p=>({...p,body:'different words'}))));
   }
   assert.equal(signatures.size,12);
+});
+
+test('new pages settle connected neighborhoods across the ferry while older journals retain their parcels',async()=>{
+  const {paintedCoast}=await import('../packages/frontend/src/lib/town/painted-coast.ts');
+  const {sitePoint,siteHeading}=await import('../packages/frontend/src/lib/town/harbor-workshop.ts');
+  const {bankEdge}=await import('../packages/frontend/src/lib/town/valley-river.ts');
+  const archive=Array.from({length:90},(_,i)=>({id:'bank-archive-'+i,created_at:i}));
+  const legacy=paintedCoast(archive);
+  const signature=Array.from(legacy.addresses,([id,s])=>[id,s.id,s.kind,s.x,s.lane,s.lights]);
+  assert.equal(createHash('sha256').update(JSON.stringify(signature)).digest('hex'),'af1e84717c7a278d70288800c38772e6f14769bd2f715d67f00436d994909c3a');
+  for(let seed=0;seed<12;seed++){
+    const additions=Array.from({length:120},(_,i)=>({id:seed+'-river-'+i,created_at:100+i,riverEdition:2}));
+    const prefix=seed%2?archive:[];
+    const plan=paintedCoast([...prefix,...additions]);
+    for(const page of prefix){
+      const s=plan.addresses.get(page.id),before=legacy.addresses.get(page.id);
+      assert.deepEqual([s.id,s.kind,s.bank,s.x],[before.id,before.kind,0,before.x]);
+    }
+    const lots=new Map();
+    for(const s of plan.sites){
+      const c=Math.round((s.x-132-s.lane*8)/157),key=[s.bank,c,s.lane].join('/');
+      assert.ok(!lots.has(key));
+      const local=[[0,1],[0,-1],[1,0],[-1,0]].some(([dx,dl])=>lots.has([s.bank,c+dx,s.lane+dl].join('/')));
+      assert.ok(!lots.size || local || (s.ferryTerminal && lots.get([1-s.bank,c,3].join('/'))?.ferryTerminal));
+      lots.set(key,s);
+      const p=sitePoint(s),inward=s.bank?1:-1;
+      if(!s.ferryTerminal)assert.ok((p.z-bankEdge(p.x,s.bank))*inward>0);
+      assert.ok(Math.cos(siteHeading(s,p.x))*inward<0);
+    }
+    assert.ok(plan.sites.filter(s=>s.bank===1 && s.lane<3).length>=5);
+    assert.ok(plan.sites.some(s=>s.bank===1 && s.ferryTerminal));
+    assert.equal(plan.addresses.size,prefix.length+additions.length);
+  }
+});
+
+test('the full turning ferry hull stays in navigable water on loops and crossings',async()=>{
+  const {FerryCourse}=await import('../packages/frontend/src/lib/town/ferry-course.ts');
+  const {landHeight}=await import('../packages/frontend/src/lib/town/valley-river.ts');
+  for(let station=-60;station<1800;station+=41){
+    for(const bank of [0,1])for(const destination of [undefined,station-60,station+1,station+130]){
+      const course=new FerryCourse(station,bank,destination);
+      assert.ok(course.getPointAt(0).distanceTo(course.getPointAt(1))<1e-6);
+      assert.equal(course.progress(3),0);
+      for(let i=0;i<=160;i++){
+        const t=i/160,p=course.getPointAt(t),tangent=course.getTangentAt(t);
+        for(const length of [-2.5,0,2.55])for(const side of [-.62,.62]){
+          const x=p.x+length*tangent.x-side*tangent.z,z=p.z+length*tangent.z+side*tangent.x;
+          assert.ok(landHeight(x,z)<-.35,'insufficient hull clearance at '+x+','+z);
+        }
+      }
+    }
+  }
+});
+
+test('wake samples remain at earlier stern positions through a turn and lose energy at rest',async()=>{
+  const {ferryWake,wakeSamples}=await import('../packages/frontend/src/lib/town/ferry-wake.ts');
+  const {valleyOrigin}=await import('../packages/frontend/src/lib/town/valley-river.ts');
+  const {Vector3}=await import('three');
+  const wake=ferryWake(),boat=new Vector3(),heading=new Vector3(1,0,0);
+  wake.sample(boat,heading,0,true);
+  boat.x=2;wake.sample(boat,heading,1,true);
+  const along=wake.trail.value[0].clone();
+  boat.z=2;heading.set(0,0,1);wake.sample(boat,heading,2,true);
+  assert.deepEqual(wake.trail.value[1],along);
+  assert.equal(wake.trail.value[0].x,valleyOrigin.x+2-1.85);
+  assert.equal(wake.trail.value[0].y,valleyOrigin.z-2);
+  assert.ok(wake.trail.value[0].w>0);
+  for(let t=3;t<30;t++)wake.sample(boat,heading,t,true);
+  assert.equal(wake.count.value,wakeSamples);
+  assert.ok(wake.trail.value.every(p=>p.w===0));
+  wake.sample(boat,heading,30,false);assert.equal(wake.count.value,0);
 });
 
 test('coastal groves have clearings and clustered saplings that persist across inlet boundaries',async()=>{
@@ -1013,7 +1085,7 @@ test('cloud banks grow from land, cross the field, pool below a climbing wisp on
     assert.equal(uniforms.sunDirection.value,world.sunDirection);
     const births=[],impacts=new Set();
     let growing=false,radii;
-    for(let t=0;t<=580;t+=.5){
+    for(let t=0;t<=1740;t+=1.5){
       sky.tick(t);
       const {x,y,z}=center.position;
       if(!center.visible){growing=false;radii=undefined;continue;}
@@ -1044,13 +1116,14 @@ test('cloud banks grow from land, cross the field, pool below a climbing wisp on
     }
     assert.ok(births.length>=5 && new Set(births.map(([x,z])=>Math.round(x)+','+Math.round(z))).size===births.length);
     assert.equal(impacts.size,2);
-    sky.tick(170);
+    sky.tick(510);
+    assert.equal(uniforms.cloudTime.value,170);
     const positions=banks.map(b=>b.position.clone()),supply=uniforms.supply.value.slice();
-    sky.tick(171);
+    sky.tick(513);
     const changes=uniforms.supply.value.map((value,i)=>value-supply[i]);
     assert.ok(changes.some(v=>v>0) && changes.some(v=>v<0));
-    sky.tick(170,-5100);assert.ok(banks.every(b=>Math.abs(b.position.z+5100)<3100));
-    sky.tick(170);assert.ok(banks.every((b,i)=>b.position.equals(positions[i])));
+    sky.tick(510,-5100);assert.ok(banks.every(b=>Math.abs(b.position.z+5100)<3100));
+    sky.tick(510);assert.ok(banks.every((b,i)=>b.position.equals(positions[i])));
     assert.deepEqual(uniforms.supply.value,supply);
   }finally{sky.dispose();world.dispose();}
 });
@@ -1094,9 +1167,10 @@ test('corridor trees and grass follow a distant visit and regrow in the same pla
     assert.ok(instances.every(mesh=>mesh.geometry===trunk && mesh.material===instances[0].material && mesh.customDepthMaterial));
     assert.ok(instances[0].material.color.equals(leaves.color));
     assert.ok(lawn.group.children.some(mesh=>mesh.visible&&mesh.geometry.instanceCount>100));
+    assert.ok(lawn.group.children.some(mesh=>mesh.visible&&mesh.geometry.boundingBox.distanceToPoint(eye)>120));
     for(const mesh of lawn.group.children){
       const r=mesh.geometry.getAttribute('growth');
-      for(let i=0;i<r.count;i++){assert.ok(r.getX(i)>=10);assert.ok(Math.abs(r.getZ(i)-eye.z)<120);}
+      for(let i=0;i<r.count;i++){assert.ok(r.getX(i)>=10);assert.ok(Math.abs(r.getZ(i)-eye.z)<196);}
     }
     eye.z=80;lawn.view(eye);forest.view(eye);
     assert.deepEqual(roots(),original);
@@ -1299,6 +1373,11 @@ test('the lawn roots blades on every grassy terrain triangle and tapers detail w
     assert.equal(roots.size,12);
     lawn.view();
     assert.ok(lawn.group.children.every(mesh=>mesh.visible));
+    eye.set(0,110,0);lawn.view();
+    for(const mesh of lawn.group.children){
+      const blades=mesh.geometry.getAttribute('position').count/5;
+      assert.equal(mesh.visible,blades===7);
+    }
     eye.set(0,200,0);lawn.view();
     assert.ok(lawn.group.children.every(mesh=>!mesh.visible));
     eye.set(2,8,-1);lawn.view();
