@@ -15,7 +15,7 @@ import { connectDoors, hillsidePassage, neighborhoodPassages, placeLot, streetFu
 import { courtTemplates, cutBuildingPlots, gardenClearance, landscapeWaterfront, loadGardenPlants } from './waterfront-gardens.js';
 import { createBayWorld } from './bay-world.js';
 import { hashPage } from './city-growth.js';
-import type { FerryService } from './river-neighborhoods.js';
+import { sameFerryStops, type FerryService } from './river-neighborhoods.js';
 import { FerryCourse } from './ferry-course.js';
 import type { Coast, Site } from './painted-coast.js';
 import { createMeadow, groveDensity, plantGroves } from './waterfront-meadow.js';
@@ -280,7 +280,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     const remaining=services.filter(route=>!fleet.some(slot=>slot.route?.departure.id===route.departure.id));
     for(const [i,slot] of fleet.entries()){
       const route=services.find(r=>r.departure.id===slot.route?.departure.id)??remaining.shift();
-      if(route?.departure.id!==slot.route?.departure.id || route?.arrival?.id!==slot.route?.arrival?.id){
+      if(!sameFerryStops(slot.route,route)){
         slot.course=route?new FerryCourse(sitePoint(route.departure).x,route.departure.bank,route.arrival && sitePoint(route.arrival).x):undefined;
         slot.phase=route?(hashPage(route.departure.id)%6100)/100:0;
         slot.wake.clear();sea.wakeCounts[i]=0;

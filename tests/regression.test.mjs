@@ -1053,6 +1053,23 @@ test('door approaches retain the least-cost accessible landing on long streets',
   }
 });
 
+test('ferry courses follow relocated stops when an older journal page is removed',async()=>{
+  const {paintedCoast}=await import('../packages/frontend/src/lib/town/painted-coast.ts');
+  const {sameFerryStops}=await import('../packages/frontend/src/lib/town/river-neighborhoods.ts');
+  const pages=Array.from({length:128},(_,i)=>({id:'0-review-'+i,created_at:i,riverEdition:3}));
+  const routes=paintedCoast(pages).ferries;
+  const edited=paintedCoast(pages.filter((_,i)=>i!==17)).ferries;
+  const original=routes.find(r=>r.departure.id==='0-review-111');
+  const moved=edited.find(r=>r.departure.id===original.departure.id);
+  assert.ok(moved && original.departure.x!==moved.departure.x);
+  assert.equal(sameFerryStops(original,moved),false);
+  const paired=routes.find(r=>r.arrival);
+  assert.ok(paired);
+  assert.equal(sameFerryStops(paired,structuredClone(paired)),true);
+  assert.equal(sameFerryStops(paired,{...paired,arrival:{...paired.arrival,x:paired.arrival.x+157}}),false);
+  assert.equal(sameFerryStops(paired,{departure:paired.departure}),false);
+});
+
 test('the full turning ferry hull stays in navigable water on loops and crossings',async()=>{
   const {FerryCourse}=await import('../packages/frontend/src/lib/town/ferry-course.ts');
   const {landHeight}=await import('../packages/frontend/src/lib/town/valley-river.ts');

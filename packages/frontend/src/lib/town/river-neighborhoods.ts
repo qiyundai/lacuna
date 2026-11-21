@@ -79,6 +79,12 @@ export function parcelShelf({column,lane,bank}:RiverParcel){
 
 export type FerryService={departure:Site; arrival?:Site};
 
+export function sameFerryStops(a:FerryService|undefined,b:FerryService|undefined){
+  const sameLanding=(first?:Site,second?:Site)=>
+    first?.id===second?.id && first?.bank===second?.bank && first?.x===second?.x;
+  return sameLanding(a?.departure,b?.departure) && sameLanding(a?.arrival,b?.arrival);
+}
+
 export function ferryServices(sites:readonly Site[]):FerryService[]{
   const services:FerryService[]=[];
   const waiting:[FerryService[],FerryService[]]=[[],[]];
