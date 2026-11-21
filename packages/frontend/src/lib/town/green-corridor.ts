@@ -122,6 +122,10 @@ function depthSlices(extent=-farEnd){
   return half.slice(1).reverse().concat(half.map(v=>-v));
 }
 
+function wallEdge(side:number,z:number,y:number){
+  return axis+side*(wallHalfWidth+8.7*noise.noise(z*.0031,y*.0014,side+9)+3.8*noise.noise(z*.014,y*.009,side+5));
+}
+
 function wallGeometry(side:number){
   const zs=depthSlices(),p:number[]=[],idx:number[]=[];
   function strips(rows:number,sample:(z:number,k:number)=>[number,number,number]){
@@ -134,19 +138,16 @@ function wallGeometry(side:number){
     }
   }
   const rim=(z:number)=>2260+84*Math.sin(z*.00043)+41*noise.noise(z*.0012,side,8);
-  function edge(z:number,y:number){
-    return axis+side*(wallHalfWidth+8.7*noise.noise(z*.0031,y*.0014,side+9)+3.8*noise.noise(z*.014,y*.009,side+5));
-  }
-  strips(86,(z,k)=>{const y=-20+(rim(z)+20)*k/86;return [edge(z,y),y,z];});
+  strips(86,(z,k)=>{const y=-20+(rim(z)+20)*k/86;return [wallEdge(side,z,y),y,z];});
   strips(27,(z,k)=>{
-    const top=rim(z),d=(Math.pow(1.215,k)-1)*43,x=edge(z,top)+side*d;
+    const top=rim(z),d=(Math.pow(1.215,k)-1)*43,x=wallEdge(side,z,top)+side*d;
     const rolls=T.MathUtils.smoothstep(d,0,170)*(42*noise.noise(x*.0017,z*.002,16)+20*Math.sin(z*.0012+x*.003));
     return [x,top+rolls,z];
   });
   const g=new T.BufferGeometry();g.setIndex(idx);g.setAttribute('position',new T.Float32BufferAttribute(p,3));g.computeVertexNormals();return g;
 }
 
-export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighting:ValleyLighting,paint?:Gouache){
+export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighting:ValleyLighting,paint?:Gouache,afterglow=false){
   const root=new T.Group(),owned:T.BufferGeometry[]=[],textures:T.Texture[]=[];
   const loader=new T.TextureLoader();
   const load=(name:string)=>loader.loadAsync('/city/materials/'+name+'.webp').then(t=>{
@@ -239,8 +240,8 @@ export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighti
     }
     understory.addGarden(group,stand);return group;
   }
-  const mist=createLowCloud(lighting);root.add(mist.cloud);
-  return {root,bounds,ground,plant,followRiver,gradeTown(grade:(x:number,z:number,y:number)=>number){surface.gradeTown(grade);},get far(){return extent+2300;},tick(t:number,camera:T.Vector3){
+  const mist=createLowCloud(lighting,ground,(side,z,y)=>wallEdge(side,z/west.scale.z,y),afterglow);
+  return {root,mist,bounds,ground,plant,followRiver,gradeTown(grade:(x:number,z:number,y:number)=>number){surface.gradeTown(grade);},get far(){return extent+2300;},tick(t:number,camera:T.Vector3){
     driftTime.value=t;eye.copy(camera);understory.view(eye.z);grass.view(eye);forest.view(eye);distant.view(eye);mist.tick(t,camera.z);
   },dispose(){
     understory.dispose();grass.dispose();forest.clear();distant.dispose();mist.dispose();

@@ -129,14 +129,14 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   const renderer=new T.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
   const scene=new T.Scene();
   const world=createBayWorld(scene,afterglow);
-  const valley=await createGreenCorridor(shop.materials.heath.map!,shop.treeModels,world.lighting,shop.paint);
+  const valley=await createGreenCorridor(shop.materials.heath.map!,shop.treeModels,world.lighting,shop.paint,afterglow);
   renderer.localClippingEnabled=true;
   renderer.setPixelRatio(Math.min(devicePixelRatio,1.65));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFShadowMap;
   renderer.shadowMap.autoUpdate=false;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;
   const camera=new T.PerspectiveCamera(47,1,.30,valley.far);
   scene.fog=new T.FogExp2('#66827f',.00014);
   const sea=createBayWater(world.sunDirection,world.sun,renderer.extensions.has('EXT_color_buffer_float'),afterglow),water=sea.water;
-  const atmosphere=createBayAtmosphere(renderer,scene,camera,world.sun,world.sunDirection,afterglow);
+  const atmosphere=createBayAtmosphere(renderer,scene,camera,world.sun,world.sunDirection,valley.mist,afterglow);
   scene.add(water,valley.root);
   const city=new T.Group();city.position.set(valleyOrigin.x,0,valleyOrigin.z);city.rotation.y=Math.PI/2;scene.add(city);
   const localEye=new T.Vector3();

@@ -927,37 +927,58 @@ test('coastal groves have clearings and clustered saplings that persist across i
   assert.ok(trees.some(a=>a[3]<2 && trees.some(b=>b[3]>3 && Math.hypot(a[0]-b[0],a[2]-b[2])<3)));
 });
 
-test('the low cloud thins to clear air before a new formation gathers',async()=>{
+test('cloud banks grow from land, cross the field, pool below a climbing wisp on either wall and dissolve before respawning',async()=>{
   const {createLowCloud}=await import('../packages/frontend/src/lib/town/low-cloud.ts');
   const T=await import('three');
   const {createBayWorld}=await import('../packages/frontend/src/lib/town/bay-world.ts');
-  const scene=new T.Scene(),world=createBayWorld(scene);
-  const sky=createLowCloud(world.lighting),near=sky.cloud.children[0],far=sky.cloud.children[1];
+  const world=createBayWorld(new T.Scene());
+  const ground=(x,z)=>18+.015*x+.003*z,wall=side=>side*257;
+  const sky=createLowCloud(world.lighting,ground,wall,true,6207425);
   try{
-    const uniforms=near.material.uniforms,old=uniforms.volume.value;
-    assert.deepEqual(scene.children.filter(object=>object.isDirectionalLight),[world.sun]);
+    const banks=sky.cloud.children;
+    const center=banks[0],uniforms=center.material.uniforms;
     assert.equal(uniforms.sunDirection.value,world.sunDirection);
-    assert.equal(far.material.uniforms.sunColor.value,world.lighting.direct);
-    let retired=false;old.addEventListener('dispose',()=>{retired=true;});
-    assert.notEqual(old,far.material.uniforms.volume.value);
-    sky.tick(32);assert.equal(uniforms.humidity.value,1);
-    sky.tick(100);assert.ok(uniforms.humidity.value>0 && uniforms.humidity.value<1);
-    for(let t=101;t<=185;t+=.25)sky.tick(t);
-    assert.equal(near.visible,false);assert.equal(uniforms.volume.value,old);
-    sky.tick(186);
-    assert.equal(near.visible,false);assert.ok(retired);
-    assert.notDeepEqual(uniforms.volume.value.image.data,old.image.data);
-    sky.tick(245);
-    const growing=uniforms.humidity.value,position=near.position.clone();
-    assert.ok(near.visible && growing>0 && growing<1);
-    sky.tick(245);assert.equal(uniforms.humidity.value,growing);assert.deepEqual(near.position,position);
-    sky.tick(298);assert.equal(uniforms.humidity.value,1);
-    sky.tick(298,-5100);
-    const banks=sky.cloud.children.filter(mesh=>mesh.name==='Valley cloud bank');
-    const places=banks.map(bank=>bank.position.clone());
-    assert.ok(places.some(p=>p.z<-6600) && places.some(p=>p.z>-3500));
-    sky.tick(303,-5100);
-    assert.ok(banks.every((bank,i)=>bank.position.distanceTo(places[i])>1));
+    const births=[],impacts=new Set();
+    let growing=false,radii;
+    for(let t=0;t<=580;t+=.5){
+      sky.tick(t);
+      const {x,y,z}=center.position;
+      if(!center.visible){growing=false;radii=undefined;continue;}
+      if(!growing && center.scale.y<8){
+        growing=true;births.push([x,z]);
+        assert.ok(y-ground(x,z)<4 && y-center.scale.y*.5<=ground(x,z));
+      }
+      const puffs=uniforms.puffs.value;
+      if(growing && uniforms.humidity.value===1 && center.scale.y>75){
+        const sizes=puffs.map(p=>1/p.w);
+        if(radii)sizes.forEach((r,i)=>assert.ok(r>=radii[i]-.00001));
+        radii=sizes;
+      }
+      if(radii && uniforms.humidity.value<.6 && Math.abs(x)>195){
+        const side=Math.sign(x);
+        for(const [i,p] of puffs.entries()){
+          assert.ok(Math.abs(1/p.w-radii[i])<.00001);
+          assert.ok(side*(x+p.x)+1/p.w>=257);
+        }
+        assert.ok(Math.abs(x-births.at(-1)[0])>60);
+        const base=uniforms.wispBase.value,tip=uniforms.wispTip.value;
+        const grounded=puffs.filter(p=>y+p.y-ground(x+p.x,z+p.z)<=1/p.w);
+        assert.ok(grounded.length>=4);
+        assert.ok(tip.y-base.y>50 && base.w<(tip.y-base.y)*.30);
+        assert.ok(side*(x+tip.x)>250 && side*(x+base.x)>240);
+        impacts.add(side);
+      }
+    }
+    assert.ok(births.length>=5 && new Set(births.map(([x,z])=>Math.round(x)+','+Math.round(z))).size===births.length);
+    assert.equal(impacts.size,2);
+    sky.tick(170);
+    const positions=banks.map(b=>b.position.clone()),supply=uniforms.supply.value.slice();
+    sky.tick(171);
+    const changes=uniforms.supply.value.map((value,i)=>value-supply[i]);
+    assert.ok(changes.some(v=>v>0) && changes.some(v=>v<0));
+    sky.tick(170,-5100);assert.ok(banks.every(b=>Math.abs(b.position.z+5100)<3100));
+    sky.tick(170);assert.ok(banks.every((b,i)=>b.position.equals(positions[i])));
+    assert.deepEqual(uniforms.supply.value,supply);
   }finally{sky.dispose();world.dispose();}
 });
 
