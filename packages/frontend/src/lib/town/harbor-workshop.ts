@@ -3,7 +3,7 @@ export {landHeight,shoreline} from './valley-river.js';
 import * as T from 'three';
 import { loadGouache, paintMaterial } from './gouache.js';
 import { createHarborBuildings } from './harbor-buildings.js';
-import { loadCoastalTrees } from './coastal-flora.js';
+import { coastalTrees } from './coastal-flora.js';
 import { stirCanopy } from './coastal-breeze.js';
 import { reliefNormal } from './surface-relief.js';
 import { createFerryHallKit } from './ferry-hall.js';
@@ -48,7 +48,6 @@ export async function harborWorkshop(){
     materials[key].vertexColors=true;materials[key].side=T.DoubleSide;
     stirCanopy(materials[key],breezeTime,key==='needle'?.031:.054);
   }
-  const forest=await loadCoastalTrees(materials);
   materials.lamp.emissive.set('#ffbd66');materials.lamp.emissiveIntensity=2.2;
   materials.ashlar.onBeforeCompile=shader=>{
     shader.vertexShader='varying vec3 stonePoint;\n'+shader.vertexShader.replace('#include <project_vertex>', `
@@ -125,32 +124,20 @@ export async function harborWorkshop(){
   }
   const box=(p:Part,k:Skin,x:number,y:number,z:number,w:number,h:number,d:number)=>piece(p,geometries.box,k,x,y,z,w,h,d);
   const pole=(p:Part,k:Skin,x:number,y:number,z:number,w:number,h:number)=>piece(p,geometries.round,k,x,y,z,w,h,w);
+  const paint = await loadGouache();
+  const forest=coastalTrees(breezeTime,paint);
+  const treeModels=forest.trees;
   function tree(p:Part,x:number,y:number,z:number,h:number,seed:number){
-    const treeModel=forest.trees[seed%3];
-    if(treeModel){
-      const instance=treeModel.clone();
-      instance.position.set(x,y-.035,z);instance.rotation.y=seed*2.39996;
-      const spread=h*(.96+.16*Math.sin(seed));
-      instance.scale.set(spread,h,spread);
-      p.add(instance);
-      return;
-    }
-    pole(p,'bark',x,y+h*.29,z,h*.045,h*.58);
-    if(seed%3===0){
-      piece(p,geometries.crown,'needle',x,y+h*.63,z,h*.31,h*.91,h*.32,seed);
-      piece(p,geometries.cone,'needle',x,y+h*.94,z,h*.20,h*.37,h*.2,seed);
-    }else{
-      for(let i=0;i<6;i++){
-        const a=i*2.39+seed;
-        piece(p,geometries.crown,i%2?'needle':'leaf',x+Math.cos(a)*h*.18,y+h*(.67+i*.038),z+Math.sin(a)*h*.17,h*.61,h*.32,h*.47,a);
-      }
-    }
+    const species=T.MathUtils.euclideanModulo(seed,treeModels.length),instance=treeModels[species]!.clone();
+    instance.userData.treeSpecies=species;
+    instance.position.set(x,y-.035,z);instance.rotation.y=seed*2.39996;
+    const spread=h*(.96+.16*Math.sin(seed));
+    instance.scale.set(spread,h,spread);p.add(instance);
   }
   function lantern(p:Part,x:number,y:number,z:number,h=1.15){
     pole(p,'iron',x,y+h*.5,z,.07,h);piece(p,geometries.plinth,'lamp',x,y+h+.1,z,.23,.26,.23);
     piece(p,geometries.cone,'iron',x,y+h+.28,z,.32,.16,.32);
   }
-  const paint = await loadGouache();
   if(paint?.relief){
     const relief=paint.relief;
     materials.gravel.onBeforeCompile=shader=>{
@@ -210,7 +197,7 @@ export async function harborWorkshop(){
     for(let i=0;i<8;i++)for(const z of [-.48,.48])box(g,i%3?'lamp':'glass',-1.5+i*.36,.77,z,.19,.23,.035);
     box(g,'cream',.83,1.23,0,.95,.37,.73);pole(g,'iron',-.49,1.45,0,.28,.8);return g;
   }
-  return {paint,breezeTime,materials,piece,box,pole,tree,site,ferry,lantern,geometries,dispose(){
+  return {paint,breezeTime,materials,piece,box,pole,tree,treeModels,site,ferry,lantern,geometries,dispose(){
     forest.dispose();
     paint?.dispose();
     tideHouse?.dispose();

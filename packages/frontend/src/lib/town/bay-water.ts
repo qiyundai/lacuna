@@ -38,8 +38,23 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
   material.uniforms.shadowFrame={value:sun.shadow.matrix};
   material.uniforms.shadowDepth={value:null};
   const reflect=water.onBeforeRender.bind(water);
+  const reflectedEye=new T.Vector3(),reflectedRotation=new T.Quaternion(),reflectedProjection=new T.Matrix4();
+  const worldToReflection=new T.Matrix4(),surfaceInverse=new T.Matrix4();
+  const reflectionUv=material.uniforms.textureMatrix!.value as T.Matrix4;
+  let reflectedAt=-Infinity;
   water.onBeforeRender=(...args)=>{
-    reflect(...args);
+    const camera=args[2],elapsed=clock.value-reflectedAt;
+    const travel=T.MathUtils.clamp((camera.position.y-water.position.y)*.025,.3,2.5);
+    if(elapsed<0 || elapsed>=.14 || water.forceUpdate || !reflectedProjection.equals(camera.projectionMatrix)
+      || reflectedEye.distanceToSquared(camera.position)>travel*travel
+      || Math.abs(reflectedRotation.dot(camera.quaternion))<.9998){
+      reflect(...args);
+      reflectedAt=clock.value;reflectedEye.copy(camera.position);reflectedRotation.copy(camera.quaternion);
+      reflectedProjection.copy(camera.projectionMatrix);
+      worldToReflection.multiplyMatrices(reflectionUv,surfaceInverse.copy(water.matrixWorld).invert());
+    }else{
+      reflectionUv.multiplyMatrices(worldToReflection,water.matrixWorld);
+    }
     material.uniforms.shadowDepth!.value=sun.shadow.map?.depthTexture;
   };
   material.vertexShader='varying vec3 surface;'+material.vertexShader.replace('vUv =','surface=(modelMatrix*vec4(position,1.)).xyz; vUv =');

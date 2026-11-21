@@ -1,3 +1,7 @@
+import { batchPlantings } from './tree-batches.js';
+import type { WoodlandTree } from './woodland-boughs.js';
+import { groveCell } from './corridor-vegetation.js';
+import { constrainValleyView, valleyZoomLimit } from './valley-camera.js';
 import * as T from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createGreenCorridor } from './green-corridor.js';
@@ -14,25 +18,38 @@ import { hashPage } from './city-growth.js';
 import type { Coast, Site } from './painted-coast.js';
 import { createMeadow, groveDensity, plantGroves } from './waterfront-meadow.js';
 
-function bake(source:T.Object3D){
+function bake(source:T.Object3D,plant:(trees:WoodlandTree[],rotation:number)=>T.Group){
   source.updateMatrixWorld(true);
   const parts=new Map<T.BufferGeometry,Map<T.Material,T.Matrix4[]>>();
-  source.traverse(o=>{
-    if(!(o instanceof T.Mesh)||Array.isArray(o.material))return;
-    const bySkin=parts.get(o.geometry)??new Map<T.Material,T.Matrix4[]>();
-    const list=bySkin.get(o.material)??[];list.push(o.matrixWorld.clone());
-    bySkin.set(o.material,list);parts.set(o.geometry,bySkin);
-  });
-  const result=new T.Group();
+  const trees:WoodlandTree[]=[];
+  function collect(o:T.Object3D){
+    const species=o.userData.treeSpecies;
+    if(typeof species==='number'){
+      const e=o.matrixWorld.elements,x=e[12]!,y=e[13]!,z=e[14]!;
+      const size=Math.hypot(e[4]!,e[5]!,e[6]!);
+      trees.push({ix:Math.floor(x/groveCell),iz:Math.floor(z/groveCell),x,y,z,size,
+        species,yaw:Math.atan2(e[8]!,e[10]!),spread:Math.hypot(e[0]!,e[1]!,e[2]!)/size});
+      return;
+    }
+    if(o instanceof T.Mesh && !Array.isArray(o.material)){
+      const bySkin=parts.get(o.geometry)??new Map<T.Material,T.Matrix4[]>();
+      const list=bySkin.get(o.material)??[];list.push(o.matrixWorld.clone());
+      bySkin.set(o.material,list);parts.set(o.geometry,bySkin);
+    }
+    for(const child of o.children)collect(child);
+  }
+  collect(source);
+  const result=plant(trees,Math.PI/2);
   for(const [geometry,bySkin] of parts)for(const [material,instances] of bySkin){
-    const mesh=new T.InstancedMesh(geometry,material,instances.length);
-    instances.forEach((matrix,i)=>mesh.setMatrixAt(i,matrix));
-    mesh.castShadow=!material.transparent;mesh.receiveShadow=true;result.add(mesh);
+    result.add(batchPlantings(geometry,material,instances));
   }
   return result;
 }
 function releaseInstances(group:T.Object3D){
-  group.traverse(o=>{if(o instanceof T.InstancedMesh)o.dispose();});group.clear();
+  group.traverse(o=>{
+    if(o instanceof T.InstancedMesh)o.dispose();
+    else if(o instanceof T.Mesh && o.geometry instanceof T.InstancedBufferGeometry)o.geometry.dispose();
+  });group.clear();
 }
 const shoreRows=107,shoreInterval=.87;
 function meadowSurface(left:number,right:number){
@@ -110,12 +127,9 @@ export type ValleyView='City'|'Overlook';
 export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=>void,afterglow=false){
   const [shop,gardens]=await Promise.all([harborWorkshop(),loadGardenPlants()]);
   const renderer=new T.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
-  const trees=[0,1,2].map(seed=>{
-    const model=new T.Group();shop.tree(model,0,0,0,1,seed);return model;
-  });
   const scene=new T.Scene();
   const world=createBayWorld(scene,afterglow);
-  const valley=await createGreenCorridor(shop.materials.heath.map!,trees,renderer,world.lighting);
+  const valley=await createGreenCorridor(shop.materials.heath.map!,shop.treeModels,world.lighting,shop.paint);
   renderer.localClippingEnabled=true;
   renderer.setPixelRatio(Math.min(devicePixelRatio,1.65));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFShadowMap;
   renderer.shadowMap.autoUpdate=false;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;
@@ -127,6 +141,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   const city=new T.Group();city.position.set(valleyOrigin.x,0,valleyOrigin.z);city.rotation.y=Math.PI/2;scene.add(city);
   const localEye=new T.Vector3();
   const orbit=new OrbitControls(camera,canvas);orbit.enableDamping=false;orbit.minPolarAngle=.22;orbit.maxPolarAngle=1.84;
+  orbit.minDistance=7;orbit.maxDistance=valleyZoomLimit;
   orbit.rotateSpeed=.64;orbit.panSpeed=.76;orbit.zoomSpeed=.88;orbit.screenSpacePanning=false;
   const scenery=new T.Group(),structures=new T.Group(),paths=new T.Group(),travel=new T.Group();
   city.add(scenery,structures,paths,travel);
@@ -152,6 +167,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   }));glows.renderOrder=2;city.add(glows);
   let frame=0,paused=false,skipped=false,dead=false,last=0,time=afterglow?133:0,framed=false,inspected=false;
   let lastShadowTime = -Infinity;
+  const shadowEye=new T.Vector3(Infinity,0,0);
   let focusX=0,loadedInlet=0,course:T.CatmullRomCurve3|undefined,rail:Site|undefined;
   let construction: {arrival:ReturnType<typeof buildingArrival>; start:number; site:Site} | undefined;
   let framing: {from:T.Vector3; to:T.Vector3; eye:T.Vector3; end:T.Vector3; start:number} | undefined;
@@ -166,12 +182,12 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     const base=inValley(center),size=district.getSize(new T.Vector3());
     const reach=T.MathUtils.clamp(36+size.x*.73+size.z*.24/Math.max(.52,camera.aspect),36,158);
     const facing=station>145?-1:1;
-    return {target:base.clone().add(v(0,3,-4*facing)),eye:base.clone().add(v(.24,.36,facing).multiplyScalar(reach))};
+    return {target:base.clone().add(v(0,3+reach*.14,-4*facing)),eye:base.clone().add(v(.24,.36,facing).multiplyScalar(reach))};
   }
   function visit(view:ValleyView|'Page',id?:string){
     const site=id?plan.addresses.get(id):undefined;
     const p=site?inValley(sitePoint(site)):undefined;
-    const pose=view==='Overlook'?{eye:v(70,165,493),target:v(72.87,114.12,263)}:
+    const pose=view==='Overlook'?{eye:v(70,165,493),target:v(73,132,263)}:
       p?{eye:p.clone().add(v(11,8,13)),target:p.clone().add(v(0,2,0))}:cityPose(plan.latest?sitePoint(plan.latest).x:0);
     selectedPage=id;
     inspected=true;moveTo(pose,true);
@@ -181,9 +197,20 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     else{framing=undefined;orbit.target.copy(pose.target);camera.position.copy(pose.eye);orbit.update();}
     schedule();
   }
+  const checkedEye=new T.Vector3(Infinity,0,0),checkedTarget=new T.Vector3();
+  function constrainCamera(){
+    if(checkedEye.equals(camera.position)&&checkedTarget.equals(orbit.target))return;
+    const halfHeight=camera.near*Math.tan(T.MathUtils.degToRad(camera.fov)*.5);
+    const clearanceRadius=Math.hypot(camera.near,halfHeight,halfHeight*camera.aspect);
+    const upstream=valleyOrigin.z-(plan.end-900)/12.5;
+    constrainValleyView(camera.position,orbit.target,valley.bounds,upstream,valley.ground,clearanceRadius);
+    camera.lookAt(orbit.target);camera.updateMatrixWorld();
+    checkedEye.copy(camera.position);checkedTarget.copy(orbit.target);
+  }
   function schedule(){if(!frame&&!dead&&!document.hidden&&!skipped)frame=requestAnimationFrame(draw);}
   function draw(now:number){
     frame=0;if(dead||document.hidden||skipped)return;
+    constrainCamera();
     const centerInlet=T.MathUtils.clamp(Math.floor((valleyOrigin.z-orbit.target.z+72)/144),plan.start/1800,plan.end/1800-1);
     if(inspected&&!framing&&centerInlet!==loadedInlet)update(plan,false,centerInlet);
     if(!paused&&last&&now-last<30){schedule();return;}
@@ -195,15 +222,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       orbit.update();
       if (t===1) framing=undefined;
     }
-    const bounds=valley.bounds;
-    const eyeX=T.MathUtils.clamp(camera.position.x,bounds.west+16,bounds.east-16);
-    const eyeZ=T.MathUtils.clamp(camera.position.z,2300-valley.far+50,18000);
-    if(eyeX!==camera.position.x||eyeZ!==camera.position.z){
-      camera.position.x=eyeX;camera.position.z=eyeZ;
-      orbit.target.x=T.MathUtils.clamp(orbit.target.x,bounds.west+18,bounds.east-18);
-      orbit.target.z=T.MathUtils.clamp(orbit.target.z,2300-valley.far+50,18000);
-      orbit.update();
-    }
+    constrainCamera();
     if (construction) {
       const progress=paused?1:Math.min(1,(time-construction.start)/1.85);
       construction.arrival.sample(progress);
@@ -232,10 +251,11 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     if(rail){const p=sitePoint(rail);tram.position.copy(p);tram.rotation.y=-Math.atan(shoreline(p.x+.5)-shoreline(p.x-.5))*.77+(hashPage(rail.id)%15-7)*.014;
       tram.translateX(Math.sin(time*.105)*4.85);tram.position.y+=2.99;}
     world.setTime(time,valleyOrigin.x+shoreline(focusX)-15,camera.position.x,valleyOrigin.z-focusX);
-    if (time - lastShadowTime >= 3) {
+    if (time - lastShadowTime >= 3 || shadowEye.distanceToSquared(camera.position)>(paused?0:2.25)) {
       renderer.shadowMap.needsUpdate = true;
       lastShadowTime = time;
     }
+    if(renderer.shadowMap.needsUpdate)shadowEye.copy(camera.position);
     water.position.x=camera.position.x;
     water.position.z=camera.position.z;
     shop.breezeTime.value=time;
@@ -244,7 +264,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     if(!paused)schedule();
   }
   function fit(glide=false){
-    orbit.minDistance=7;orbit.maxDistance=3800;moveTo(cityPose(focusX),glide);
+    moveTo(cityPose(focusX),glide);
   }
   function refreshTerrain(start:number,end:number){
     const left=(start-900)/12.5,right=(end-900)/12.5,key=left+','+right;
@@ -259,9 +279,10 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     const woods=new T.Group();
     plantGroves(left,right,shoreline,landHeight,(x,y,z,h,seed)=>shop.tree(woods,x,y,z,h,seed));
     plantGroves(left,right,x=>-shoreline(x)-riverWidth(x)+23,(x,z)=>landHeight(x,-z),(x,y,z,h,seed)=>shop.tree(woods,x,y,-z,h,seed));
-    scenery.add(bake(woods));
+    scenery.add(bake(woods,valley.plant));
   }
   function update(next:Coast,reveal=false,viewInlet?:number){
+    water.forceUpdate=true;
     construction?.arrival.finish();
     construction=undefined;
     plan=next;focusX=next.latest?sitePoint(next.latest).x:0;
@@ -275,7 +296,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       if(site.x>=start && site.x<end)continue;
       const p=sitePoint(site),angle=siteHeading(site,p.x),width=site.width/17;
       if(site.kind==='pines'){
-        shop.piece(cluster,shop.geometries.crown,'leaf',p.x,p.y+2,p.z,4,4.5,3,angle);continue;
+        cluster.add(shop.site(site));continue;
       }
       const floors=site.kind==='towers'?8:site.kind==='apartments'||site.kind==='belfry'?5:2;
       const h=(floors+site.lights)*1.7;
@@ -341,16 +362,16 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       access.traverse(clearWalk);
       model.attach(access);
       if(reveal && site===next.latest && !paused && site.lights===0) {
-        const addition=bake(model);
+        const addition=bake(model,valley.plant);
         structures.add(addition);
         construction={arrival:buildingArrival(addition,model.position.y,Math.min(model.position.y-.65,...doors.map(door=>landHeight(door.exit.x,door.exit.z)))),start:time,site};
       } else cluster.add(model);
     }
     for(const item of cluster.children)clearWalk(item);
     const grade=cutBuildingPlots(lots,reserved);
-    valley.gradeTown(grade);
+    valley.gradeTown(grade);checkedEye.x=Infinity;
     landscapeWaterfront(shop,gardens.plants,lots,reserved,grade,parcels.map(p=>p.box),paths,cluster,structures,(x,z,r)=>meadow?.mow(x,z,r));
-    structures.add(bake(cluster));
+    structures.add(bake(cluster,valley.plant));
     const positions:number[]=[],radii:number[]=[];
     for(const subset of structures.children){
       subset.updateMatrixWorld(true);
@@ -381,7 +402,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   }
   function resize(){
     const w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return;
-    renderer.setSize(w,h,false);atmosphere.resize(w,h);glows.material.uniforms.screen!.value=h*renderer.getPixelRatio()*1.9;camera.aspect=w/h;camera.updateProjectionMatrix();if(!inspected)fit();schedule();
+    renderer.setSize(w,h,false);atmosphere.resize(w,h);glows.material.uniforms.screen!.value=h*renderer.getPixelRatio()*1.9;camera.aspect=w/h;camera.updateProjectionMatrix();checkedEye.x=Infinity;if(!inspected)fit();schedule();
   }
   function visibility(){
     if(document.hidden||skipped){cancelAnimationFrame(frame);frame=0;last=0;}else schedule();
@@ -413,6 +434,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     framing=undefined;if(e.key!=='Home')inspected=true;orbit.update();e.preventDefault();schedule();
   },options);
   function setPainted(enabled:boolean) {
+    water.forceUpdate=true;
     world.setPainted(enabled && !!shop.paint);
     if (!shop.paint) return;
     shop.paint.coverage.value = enabled ? 1 : 0;

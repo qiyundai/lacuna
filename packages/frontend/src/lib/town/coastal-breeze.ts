@@ -19,21 +19,33 @@ export const coastalBreeze = `
   }
 `;
 
-export function stirCanopy(material:T.MeshStandardMaterial,clock:T.IUniform<number>,flexibility:number) {
+export const treeFlex=.072;
+
+export const canopySway=`
+  vec2 canopySway(vec2 root,vec2 branch,float heightFraction,float seconds){
+    float tip=smoothstep(.18,1.,heightFraction);
+    float phase=dot(root,vec2(.058,-.092))-seconds*1.08;
+    float gust=.72+.28*sin(phase*.41+root.x*.028);
+    float lean=.18+gust*sin(phase);
+    float flutter=.22*sin(phase*2.21+dot(branch,vec2(.58,.93))+heightFraction*2.6);
+    return tip*(vec2(.923,.385)*lean+vec2(-.385,.923)*flutter);
+  }
+`;
+
+export function stirCanopy(material:T.MeshStandardMaterial|T.MeshLambertMaterial,clock:T.IUniform<number>,flexibility:number) {
   material.onBeforeCompile=shader=>{
     shader.uniforms.breezeTime=clock;
     shader.uniforms.crownFlex={value:flexibility};
-    shader.vertexShader=coastalBreeze+'uniform float crownFlex;\n'+shader.vertexShader.replace('#include <begin_vertex>',`
+    shader.vertexShader=canopySway+'uniform float breezeTime,crownFlex;\n'+shader.vertexShader.replace('#include <begin_vertex>',`
       #include <begin_vertex>
       mat4 treeFrame=modelMatrix;
       #ifdef USE_INSTANCING
         treeFrame*=instanceMatrix;
       #endif
       vec3 rest=(treeFrame*vec4(position,1.)).xyz;
-      float gust=breezeAt(rest.xz,breezeTime-.35);
-      float tip=smoothstep(.22,1.,position.y);
       float rise=length(treeFrame[1].xyz);
-      vec2 sway=breezeDirection*(crownFlex*rise*tip*gust);
+      vec2 root=treeFrame[3].xz;
+      vec2 sway=crownFlex*rise*canopySway(root,rest.xz-root,position.y,breezeTime);
       vec3 offset=vec3(sway.x,0.,sway.y);
       mat3 axes=mat3(treeFrame);
       vec3 scaleSq=vec3(dot(axes[0],axes[0]),dot(axes[1],axes[1]),dot(axes[2],axes[2]));

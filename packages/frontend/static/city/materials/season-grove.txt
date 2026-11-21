@@ -1,0 +1,5 @@
+Waterfront trees use “Lowpoly Tree (with random season)” by Antoine Bagattini, licensed under BlendKit Royalty Free.
+https://www.blendkit.com/asset-gallery-detail/a9db8538-8b1f-4d15-958b-f1def14f2add/
+https://www.blendkit.com/docs/licenses/
+
+The game uses simplified branches and clusters sampled from the original leaf positions, with three moss-green crown variants and reduced meshes at distance.

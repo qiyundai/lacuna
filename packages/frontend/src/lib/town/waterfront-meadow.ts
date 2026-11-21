@@ -1,4 +1,5 @@
 import * as T from 'three';
+import { meadowPigment } from './meadow-pigment.js';
 import { coastalBreeze } from './coastal-breeze.js';
 
 function hash(x:number,z:number) {
@@ -42,11 +43,11 @@ export function plantGroves(left:number,right:number,shore:(x:number)=>number,he
 function blades(count:number,seed:number) {
   const position:number[]=[],normals:number[]=[],roots:number[]=[],colors:number[]=[],sections:number[]=[],indices:number[]=[];
   for(let i=0;i<count;i++){
-    const u=hash(i+seed,2),v=hash(i+seed,3),width=.012+.016*hash(i+seed,4);
+    const u=hash(i+seed,2),v=hash(i+seed,3),width=.027+.022*hash(i+seed,4);
     const angle=hash(i+seed,5)*Math.PI*2, dx=Math.cos(angle)*width,dz=Math.sin(angle)*width;
     const h=.24+.31*hash(i+seed,6),bend=.04+.12*hash(i+seed,7),shade=.77+.31*hash(i+seed,8);
     const bx=-Math.sin(angle)*bend,bz=Math.cos(angle)*bend;
-    for(const t of [0,.38,.73,1]){
+    for(const t of [0,.53,1]){
       const taper=1.-t,tone=.55+.64*t;
       for(const side of (t===1?[0]:[-1,1])){
         position.push(bx*t*t+side*dx*taper,t===0?-.028:h*t,bz*t*t+side*dz*taper);
@@ -55,8 +56,8 @@ function blades(count:number,seed:number) {
         colors.push(tone*shade,tone*shade,tone);
       }
     }
-    const a=7*i;
-    indices.push(a,a+1,a+2,a+2,a+1,a+3,a+2,a+3,a+4,a+4,a+3,a+5,a+4,a+5,a+6);
+    const a=5*i;
+    indices.push(a,a+1,a+2,a+2,a+1,a+3,a+2,a+3,a+4);
   }
   return {position:new T.Float32BufferAttribute(position,3),normal:new T.Float32BufferAttribute(normals,3),uv:new T.Float32BufferAttribute(roots,2),color:new T.Float32BufferAttribute(colors,3),bladeSection:new T.Float32BufferAttribute(sections,1),index:new T.Uint16BufferAttribute(indices,1)};
 }
@@ -71,13 +72,13 @@ export function createMeadow(ground:T.BufferGeometry,rows:number,eye:T.Vector3,h
   paths.magFilter=paths.minFilter=T.LinearFilter;paths.needsUpdate=true;
   const group=new T.Group();
   const sectors:{mesh:T.Mesh;box:T.Box3;range:number}[]=[];
-  const layers=[{pattern:blades(19,275),end:68,start:39},{pattern:blades(60,93),end:29,start:16}].map(layer=>{
-    const material=new T.MeshStandardMaterial({vertexColors:true,side:T.DoubleSide,roughness:1});
+  const layers=[{pattern:blades(7,275),end:68,start:39},{pattern:blades(18,93),end:29,start:16}].map(layer=>{
+    const material=new T.MeshLambertMaterial({vertexColors:true,side:T.DoubleSide});
     material.customProgramCacheKey=()=>'coastal-lawn';
     material.onBeforeCompile=shader=>{
       Object.assign(shader.uniforms,{lawnEye:{value:eye},bladeRange:{value:new T.Vector2(layer.start,layer.end)},pavingMask:{value:paths},maskBounds:{value:new T.Vector4(min.x,min.z,width*step,depth*step)},lawnTexture:{value:heath}});
       shader.uniforms.breezeTime=breezeTime;
-      shader.vertexShader=coastalBreeze+`
+      shader.vertexShader=coastalBreeze+meadowPigment+`
         attribute vec3 corner, edgeB, edgeC, turfCover, treeCover;
         attribute vec4 scatter;
         attribute float bladeSection;
@@ -91,7 +92,8 @@ export function createMeadow(ground:T.BufferGeometry,rows:number,eye:T.Vector3,h
         vec3 root=corner+edgeB*bary.y+edgeC*bary.z;
         bladeUv=root.xz*.43;
         float stand=dot(treeCover,bary);
-        float gust=breezeAt((modelMatrix*vec4(root,1.)).xz,breezeTime)*(1.-.32*stand);
+        vec3 worldRoot=(modelMatrix*vec4(root,1.)).xyz;
+        float gust=breezeAt(worldRoot.xz,breezeTime)*(1.-.32*stand);
         float angle=max(.001,(.23+1.91*gust)*bladeSection);
         float curl=sin(angle);
         vec3 groundNormal=normalize(cross(edgeB,edgeC));
@@ -110,15 +112,12 @@ export function createMeadow(ground:T.BufferGeometry,rows:number,eye:T.Vector3,h
         vec2 wind=normalize(localWind+vec2(-localWind.y,localWind.x)*fold*.22);
         vec2 bend=lean*growth+wind*(up*lengthScale*(1.-cos(angle))/angle);
         vec3 transformed=root+vec3(bend.x,position.y*lengthScale*curl/angle-.009,bend.y);
-        vec3 lawn=mix(vec3(.158,.280,.105),vec3(.291,.373,.132),drift);
-        vColor.rgb*=mix(lawn,vec3(.113,.223,.119),stand)*(.90+.17*drift);
-        vec3 sheen=mix(vec3(.82,.86,.84),vec3(1.44,1.52,1.32),gust);
-        vColor.rgb*=mix(vec3(1.),sheen,.36+.64*bladeSection);
+        vColor.rgb*=meadowPigment(worldRoot.xz,stand,worldRoot.y)*mix(.95,1.10,gust*bladeSection);
       `);
       shader.fragmentShader='uniform sampler2D lawnTexture; varying vec2 bladeUv;\n'+shader.fragmentShader.replace('#include <color_fragment>',`
         #include <color_fragment>
         float fiber=texture2D(lawnTexture,bladeUv).g;
-        diffuseColor.rgb*=.86+.72*fiber;
+        diffuseColor.rgb*=.84+.56*fiber;
       `).replace('#include <normal_fragment_begin>','#include <normal_fragment_begin>\n normal*=faceDirection;');
     };
     return {...layer,material};

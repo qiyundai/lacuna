@@ -952,6 +952,12 @@ test('the low cloud thins to clear air before a new formation gathers',async()=>
     assert.ok(near.visible && growing>0 && growing<1);
     sky.tick(245);assert.equal(uniforms.humidity.value,growing);assert.deepEqual(near.position,position);
     sky.tick(298);assert.equal(uniforms.humidity.value,1);
+    sky.tick(298,-5100);
+    const banks=sky.cloud.children.filter(mesh=>mesh.name==='Valley cloud bank');
+    const places=banks.map(bank=>bank.position.clone());
+    assert.ok(places.some(p=>p.z<-6600) && places.some(p=>p.z>-3500));
+    sky.tick(303,-5100);
+    assert.ok(banks.every((bank,i)=>bank.position.distanceTo(places[i])>1));
   }finally{sky.dispose();world.dispose();}
 });
 
@@ -975,16 +981,24 @@ test('corridor trees and grass follow a distant visit and regrow in the same pla
   const eye=new T.Vector3(20,6,80),trunk=new T.BoxGeometry(),leaves=new T.MeshLambertMaterial();
   const model=new T.Group();model.add(new T.Mesh(trunk,leaves));
   const forest=corridorForest([model],()=>5,(x,z,y)=>woodlandAt(x,z,y,144),0,45);
-  const lawn=corridorGrass(()=>5,(x)=>x<10,0,45,{value:0},eye);
+  const lawn=corridorGrass(()=>5,(x)=>x<10,0,45,{value:0},eye,()=>.5);
   const roots=()=>Array.from(lawn.group.children[0].geometry.getAttribute('growth').array.slice(0,12));
   try{
     lawn.view(eye);forest.view(eye);
+    const grass=lawn.group.children[0];
+    assert.ok(grass.receiveShadow&&grass.material.isMeshLambertMaterial);
+    const normals=grass.geometry.getAttribute('normal'),habitat=grass.geometry.getAttribute('habitat');
+    assert.equal(normals.count,grass.geometry.getAttribute('position').count);
+    assert.equal(habitat.count,grass.geometry.instanceCount);
+    assert.equal(habitat.getY(0),1);
+    assert.ok(Math.abs(habitat.getW(0)-.5)<.01);
     const original=roots(),firstTree=forest.group.children[0];
     eye.z=-4300;lawn.view(eye);forest.view(eye);
     assert.ok(!forest.group.children.includes(firstTree));
     const instances=forest.group.children.flatMap(tile=>tile.children);
     assert.ok(instances.reduce((sum,mesh)=>sum+mesh.count,0)>80);
-    assert.ok(instances.every(mesh=>mesh.geometry===trunk && mesh.material===leaves));
+    assert.ok(instances.every(mesh=>mesh.geometry===trunk && mesh.material===instances[0].material && mesh.customDepthMaterial));
+    assert.ok(instances[0].material.color.equals(leaves.color));
     assert.ok(lawn.group.children.some(mesh=>mesh.visible&&mesh.geometry.instanceCount>100));
     for(const mesh of lawn.group.children){
       const r=mesh.geometry.getAttribute('growth');
@@ -993,6 +1007,181 @@ test('corridor trees and grass follow a distant visit and regrow in the same pla
     eye.z=80;lawn.view(eye);forest.view(eye);
     assert.deepEqual(roots(),original);
   }finally{lawn.dispose();forest.clear();trunk.dispose();leaves.dispose();}
+});
+
+test('stylized ground trees keep their volume within each detail budget',async()=>{
+  const {coastalTreeGeometry}=await import('../packages/frontend/src/lib/town/coastal-flora.ts');
+  let sharedSprayLayout;
+  for(const species of [0,1,2]){
+    for(const [level,budget] of [2550,365,13].entries()){
+      const shape=coastalTreeGeometry(species,level);
+      try{
+        const positions=shape.getAttribute('position');
+        const leafMask=shape.getAttribute('leafMask');
+        assert.equal(leafMask.count,positions.count);
+        if(level===1){
+          const uv=shape.getAttribute('sprayUv');
+          const layout=[];
+          for(const index of shape.index.array){
+            assert.equal(uv.getY(index)>0,Boolean(leafMask.getX(index)));
+            layout.push(uv.getX(index),uv.getY(index));
+          }
+          if(sharedSprayLayout)assert.deepEqual(layout,sharedSprayLayout);
+          else sharedSprayLayout=layout;
+        }
+        assert.ok(leafMask.array.includes(0) && leafMask.array.includes(1));
+        assert.ok(shape.index.count/3<=budget);
+        assert.equal(shape.getAttribute('color').count,positions.count);
+        const normals=shape.getAttribute('normal');
+        assert.equal(normals.count,positions.count);
+        for(let i=0;i<normals.count;i++){
+          assert.ok(Math.hypot(normals.getX(i),normals.getY(i),normals.getZ(i))>.99);
+        }
+        shape.computeBoundingBox();
+        const {min,max}=shape.boundingBox;
+        assert.ok(max.y-min.y>.80 && max.x-min.x>.2 && max.z-min.z>.2);
+      }finally{shape.dispose();}
+    }
+  }
+});
+
+test('distant woodland retains planted shapes and neighboring crowns across orbit and streaming',async()=>{
+  const T=await import('three');
+  const {distantCrowns}=await import('../packages/frontend/src/lib/town/corridor-vegetation.ts');
+  const eye=new T.Vector3();
+  const light={direction:new T.Vector3(-.4,1.55,-.92).normalize(),direct:new T.Color(),sky:new T.Color(),ground:new T.Color()};
+  const canopy=new T.Texture();
+  const woods=distantCrowns(()=>8,()=>1,-16,16,light,{value:0},eye,canopy);
+  try{
+    woods.view(eye);
+    const [middle,far]=woods.group.children;
+    const collect=band=>new Map(band.children.flatMap(mesh=>{
+      const crowns=mesh.geometry.getAttribute('crown');
+      return Array.from({length:crowns.count},(_,i)=>[[crowns.getX(i),crowns.getZ(i)].join(','),crowns.getW(i)]);
+    }));
+    const dense=collect(middle),distant=collect(far);
+    assert.ok(middle.children.some(mesh=>mesh.visible && mesh.geometry.boundingBox.min.z>700));
+    const shared=[...dense].filter(([key])=>distant.has(key));
+    assert.ok(shared.length>100 && shared.length===dense.size);
+    assert.ok(shared.every(([key,h])=>distant.get(key)===h));
+    const tree=middle.children.find(mesh=>mesh.geometry.instanceCount>8),g=tree.geometry;
+    assert.equal(g.getAttribute('position').count,g.getAttribute('position2').count);
+    assert.ok(g.getAttribute('northCrown').array.some((value,i)=>i%4===3 && value>0));
+    const pose=tree.matrix.clone(),roots=g.getAttribute('crown').array.slice();
+    eye.set(12,55,15);woods.view(eye);
+    assert.ok(tree.matrix.equals(pose));
+    assert.deepEqual(g.getAttribute('crown').array,roots);
+    eye.z=-4900;woods.view(eye);eye.set(0,0,0);woods.view(eye);
+    assert.deepEqual(collect(middle),dense);
+  }finally{woods.dispose();canopy.dispose();}
+});
+
+test('both tree detail levels keep every trunk at its planted position and preserve its tint',async()=>{
+  const T=await import('three');
+  const {batchPlantings,distantTreeGeometry}=await import('../packages/frontend/src/lib/town/tree-batches.ts');
+  const full=new T.BoxGeometry(),reduced=new T.TetrahedronGeometry(),material=new T.MeshBasicMaterial();
+  distantTreeGeometry.set(full,reduced);
+  const positions=[[14,2,-9],[17,4,-11],[48,3,0]];
+  const matrices=positions.map(([x,y,z])=>new T.Matrix4().makeScale(4,5,4).setPosition(x,y,z));
+  const colors=positions.map((_,i)=>new T.Color().setScalar((i+1)*.25));
+  const plantings=batchPlantings(full,material,matrices,colors);
+  try{
+    plantings.updateMatrixWorld(true);
+    assert.equal(plantings.children.length,2);
+    const camera=new T.PerspectiveCamera();
+    for(const lod of plantings.children){
+      for(const offset of [26,28,26]){
+        camera.position.copy(lod.position);camera.position.z+=offset;camera.updateMatrixWorld();
+        lod.update(camera);
+        assert.deepEqual(lod.children.filter(o=>o.visible).map(o=>o.geometry),[full,reduced]);
+        assert.ok(lod.children.every(mesh=>mesh.castShadow&&mesh.customDepthMaterial));
+      }
+      for(const [offset,shape] of [[0,full],[55,reduced]]){
+        camera.position.copy(lod.position);camera.position.z+=offset;camera.updateMatrixWorld();
+        lod.update(camera);
+        const shown=lod.children.filter(o=>o.visible);
+        assert.equal(shown.length,1);
+        const mesh=shown[0];assert.equal(mesh.geometry,shape);
+        for(let i=0;i<mesh.count;i++){
+          const color=new T.Color(),matrix=new T.Matrix4();
+          mesh.getMatrixAt(i,matrix);mesh.getColorAt(i,color);
+          const j=colors.findIndex(c=>c.equals(color));
+          assert.ok(matrix.premultiply(mesh.matrixWorld).equals(matrices[j]));
+        }
+      }
+    }
+  }finally{
+    plantings.traverse(o=>{if(o.isInstancedMesh)o.dispose();});
+    full.dispose();reduced.dispose();material.dispose();
+  }
+});
+
+test('ground trees preserve their planting transform as the camera moves through the detail bands',async()=>{
+  const T=await import('three');
+  const {treeMeshes}=await import('../packages/frontend/src/lib/town/corridor-vegetation.ts');
+  const {distantTreeGeometry}=await import('../packages/frontend/src/lib/town/tree-batches.ts');
+  const full=new T.BoxGeometry(),reduced=new T.TetrahedronGeometry(),material=new T.MeshStandardMaterial();
+  const model=new T.Group();model.add(new T.Mesh(full,material));model.updateMatrixWorld();
+  distantTreeGeometry.set(full,reduced);
+  const trees=[{ix:0,iz:0,x:1,y:2,z:3,size:5,species:0,yaw:.62,spread:.91}];
+  const adaptive=treeMeshes(trees,[model]);
+  try{
+    const [lod]=adaptive.children[0].children,[mesh]=lod.children,camera=new T.PerspectiveCamera();
+    adaptive.updateMatrixWorld(true);
+    assert.equal(mesh.geometry,full);assert.ok(mesh.castShadow && mesh.receiveShadow);
+    const matrix=new T.Matrix4();mesh.getMatrixAt(0,matrix);matrix.premultiply(mesh.matrixWorld);
+    const expected=new T.Matrix4().makeRotationY(.62).scale(new T.Vector3(4.55,5,4.55)).setPosition(1,2,3);
+    assert.ok(matrix.elements.every((n,i)=>Math.abs(n-expected.elements[i])<.00001));
+    for(const z of [3,55,90,164,190,192,500,1800]){
+      camera.position.set(1,2,z);camera.updateMatrixWorld();lod.update(camera);
+      assert.equal(mesh.visible,z===3);
+      assert.equal(lod.children.filter(child=>child.visible).length,z<=190?1:0);
+    }
+  }finally{
+    adaptive.traverse(o=>{if(o.isInstancedMesh)o.dispose();});
+    full.dispose();reduced.dispose();material.dispose();
+  }
+});
+
+test('woodland floor shade stays at its planted position as the camera crosses texture bands',async()=>{
+  const T=await import('three');
+  const {woodlandFloor}=await import('../packages/frontend/src/lib/town/woodland-floor.ts');
+  const floor=woodlandFloor(()=>4,()=>0,0,130),group=new T.Group(),parent=new T.Group();
+  parent.add(group);
+  floor.addGarden(group,[{x:92,y:3,z:0,size:10}]);
+  try{
+    const sample=(x,z)=>{
+      const [left,width,depth]=floor.layout.toArray(),im=floor.texture.image;
+      const col=Math.floor((x-left)/width*im.width),row=T.MathUtils.euclideanModulo(Math.floor(z/depth*im.height),im.height);
+      return im.data[row*im.width+col];
+    };
+    floor.view(0);const shade=sample(64,25);
+    assert.ok(shade>110);assert.equal(sample(85,25),0);
+    for(const eyeZ of [160,-370,5100,0]){floor.view(eyeZ);if(Math.abs(eyeZ)<1000)assert.equal(sample(64,25),shade);}
+    parent.remove(group);floor.view(0);assert.equal(sample(64,25),0);
+  }finally{floor.dispose();}
+});
+
+test('valley orbit stays inside the forest and clears the graded slopes on its way to the eye',async()=>{
+  const T=await import('three');
+  const {constrainValleyView,valleyZoomLimit}=await import('../packages/frontend/src/lib/town/valley-camera.ts');
+  const ground=(x,z)=>9+39*Math.exp(-((z-45)**2)/42)+x*.027;
+  const bounds={west:-181,east:333};
+  const eye=new T.Vector3(76,16,95),target=new T.Vector3(76,14,0);
+  const limit=()=>constrainValleyView(eye,target,bounds,-42000,ground,.65);
+  limit();
+  assert.ok(eye.z>0&&eye.z<45);
+  for(const [x,y,z] of [[7000,2900,90000],[-500,-100,496],[60,-40,-42120],[76,3124,477]]){
+    eye.set(x,y,z);target.set(x*.45,y*.13,z*.91);limit();
+    assert.ok(eye.distanceTo(target)<=valleyZoomLimit+.001);
+    assert.ok(eye.y<=184&&eye.y>=ground(eye.x,eye.z)+1);
+    assert.ok(eye.x>=bounds.west+84&&eye.x<=bounds.east-84&&eye.z<=529&&eye.z>=-42180);
+    const point=new T.Vector3();
+    for(let k=0;k<=100;k++){
+      point.lerpVectors(target,eye,k/100);
+      assert.ok(point.y>=ground(point.x,point.z)+1);
+    }
+  }
 });
 
 test('the lawn roots blades on every grassy terrain triangle and tapers detail with viewing distance',async()=>{

@@ -1,28 +1,21 @@
+import { corridorShadow } from './corridor-light.js';
 import * as T from 'three';
 import { riverGround, shoreline, valleyOrigin } from './valley-river.js';
-import { corridorForest, corridorGrass, distantCrowns, woodlandAt } from './corridor-vegetation.js';
+import { corridorForest, corridorGrass, distantCrowns, treeMeshes, woodlandAt } from './corridor-vegetation.js';
+import { woodlandFloor } from './woodland-floor.js';
+import type { Gouache } from './gouache.js';
+import { boughStart, boughEnd, farCrownStart, farCrownEnd, woodlandEnd } from './tree-dither.js';
+import { crownNeighbors, type WoodlandTree } from './woodland-boughs.js';
+import { meadowPigment } from './meadow-pigment.js';
 import { coastalBreeze } from './coastal-breeze.js';
 import { createLowCloud } from './low-cloud.js';
 import type { ValleyLighting } from './bay-world.js';
-import { renderTreeAtlas } from './tree-atlas.js';
 import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js';
 
 const noise=new ImprovedNoise();
 const axis=76;
 const farEnd=-19900;
 const wallHalfWidth=257;
-const corridorShadow=`
-  uniform float driftTime;
-  float canopySunlight(vec3 p){
-    float k=p.z+.115*p.y+.11*(p.x-76.)+driftTime*1.7;
-    float folded=sign(k)*log(1.+abs(k)*.000115)/.000115;
-    float phase=folded*.012+.78*sin(folded*.0041)+.28*sin(folded*.0023+p.x*.002);
-    phase+=.09*sin(p.y*.017+folded*.009)+.07*sin(p.y*.034+p.x*.012);
-    float cloud=sin(phase)+.18*sin(phase*1.81+.7)+.08*sin(folded*.027+p.x*.008);
-    float softness=.34+min(.45,fwidth(cloud));
-    return smoothstep(-.04-softness,.04+softness,cloud);
-  }`;
-
 export function overlookHeight(x:number,z:number){
   const river=riverGround(x,z);
   if(z<248||z>820)return river;
@@ -32,26 +25,22 @@ export function overlookHeight(x:number,z:number){
 }
 
 function corridorFloor(near:number,far:number,extent:number,cityEnd:number){
-  const p:number[]=[],c:number[]=[],uv:number[]=[],cover:number[]=[],idx:number[]=[];
+  const p:number[]=[],uv:number[]=[],cover:number[]=[],idx:number[]=[];
   const xs:number[]=[];
   for(let x=axis-305;x<axis+306;x+=x>12&&x<148?1.25:5)xs.push(x);
   const sliceSet=new Set(depthSlices(extent));
   for(let z=near;z<=far;z+=1.3)sliceSet.add(z);
   for(let z=255;z<776;z+=4)sliceSet.add(z);
   const zs=[...sliceSet].sort((a,b)=>b-a),cols=xs.length;
-  const tint=new T.Color(),field=new T.Color('#8f9b63'),forest=new T.Color('#465b3f'),straw=new T.Color('#a3a161');
   for(const [j,z] of zs.entries())for(const [i,x] of xs.entries()){
     const y=overlookHeight(x,z);
     const toe=Math.exp(-Math.abs(wallHalfWidth-Math.abs(x-axis))/18);
     cover.push(woodlandAt(x,z,y,cityEnd));
     p.push(x,y+toe*(9+4*Math.sin(z*.012)),z);uv.push(x*.11,z*.11);
-    const grain=.48+.47*noise.noise(x*.030,z*.028,12)+.1*Math.cos(x*.067+z*.037);
-    tint.copy(forest).lerp(field,T.MathUtils.clamp(grain,0,1)).lerp(straw,T.MathUtils.smoothstep(y,56,144)*.75);
-    c.push(tint.r,tint.g,tint.b);
     if(i+1<cols&&j+1<zs.length){const k=j*cols+i;idx.push(k,k+1,k+cols,k+1,k+cols+1,k+cols);}
   }
   const g=new T.BufferGeometry();g.setIndex(idx);g.setAttribute('position',new T.Float32BufferAttribute(p,3));
-  g.setAttribute('color',new T.Float32BufferAttribute(c,3));g.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
+  g.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
   g.setAttribute('woodland',new T.Float32BufferAttribute(cover,1));g.computeVertexNormals();
   const vertices=g.getAttribute('position');
   function bracket(axis:number[],value:number,ascending:boolean){
@@ -157,25 +146,27 @@ function wallGeometry(side:number){
   const g=new T.BufferGeometry();g.setIndex(idx);g.setAttribute('position',new T.Float32BufferAttribute(p,3));g.computeVertexNormals();return g;
 }
 
-export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],renderer:T.WebGLRenderer,lighting:ValleyLighting){
+export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighting:ValleyLighting,paint?:Gouache){
   const root=new T.Group(),owned:T.BufferGeometry[]=[],textures:T.Texture[]=[];
   const loader=new T.TextureLoader();
   const load=(name:string)=>loader.loadAsync('/city/materials/'+name+'.webp').then(t=>{
     t.wrapS=t.wrapT=T.RepeatWrapping;t.anisotropy=4;textures.push(t);return t;
-  }).catch(()=>heath);
-  const [moss,normal,canopy]=await Promise.all([load('wall-moss'),load('wall-moss-normal'),load('woodland-canopy')]);
+  }).catch(()=>null);
+  const [moss,normal,canopy,sprays]=await Promise.all([
+    load('wall-moss'),load('wall-moss-normal'),load('woodland-canopy'),load('moss-leaf-sprays')
+  ]);
   const eye=new T.Vector3();
-  const driftTime={value:0},walls=wallMaterial(moss,normal,canopy,driftTime,lighting.direction);
-  const floor=new T.MeshLambertMaterial({map:heath,vertexColors:true,fog:false});
+  const driftTime={value:0};
+  const walls=wallMaterial(moss??heath,normal??heath,canopy??heath,driftTime,lighting.direction);
+  const floor=new T.MeshLambertMaterial({map:heath,fog:false});
   floor.onBeforeCompile=shader=>{
-    Object.assign(shader.uniforms,{driftTime,breezeTime:driftTime,forestEye:{value:eye},woods:{value:canopy}});
+    Object.assign(shader.uniforms,{driftTime,breezeTime:driftTime,forestEye:{value:eye},floorShade:{value:understory.texture},shadeLayout:{value:understory.layout}});
     shader.vertexShader='attribute float woodland;uniform vec3 forestEye;varying vec3 floorPlace;varying float treeCover,floorDistance;\n'+shader.vertexShader.replace('#include <begin_vertex>',`
       #include <begin_vertex>
       floorPlace=position;
       floorDistance=distance(forestEye,position);
-      treeCover=woodland;
-      transformed.y+=woodland*5.6*smoothstep(1640.,2210.,floorDistance);`);
-    shader.fragmentShader=corridorShadow+coastalBreeze+'uniform sampler2D woods;varying vec3 floorPlace;varying float treeCover,floorDistance;\n'+shader.fragmentShader.replace('#include <map_fragment>',`
+      treeCover=woodland;`);
+    shader.fragmentShader=corridorShadow+coastalBreeze+meadowPigment+'uniform sampler2D floorShade;uniform vec4 shadeLayout;varying vec3 floorPlace;varying float treeCover,floorDistance;\n'+shader.fragmentShader.replace('#include <map_fragment>',`
       #ifdef USE_MAP
         vec2 land=floorPlace.xz;
         float gust=meadowWave(land,breezeTime);
@@ -183,10 +174,13 @@ export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],render
         float seedHeads=texture2D(map,land*vec2(.39,.11)+.04*sin(land.yx*.27)).g;
         float grass=smoothstep(.3,2.,floorPlace.y);
         float resolved=1.-smoothstep(1.,12.,max(fwidth(land.x),fwidth(land.y)));
-        diffuseColor.rgb*=(.65+2.36*fibre)*mix(vec3(1.),mix(vec3(.84,.90,.78),vec3(1.27,1.24,.91),gust+seedHeads*.18),grass*resolved);
-        vec3 crowns=texture2D(woods,land*.0048+.025*sin(land.yx*.011)).rgb;
-        float wood=treeCover*(.30+.70*smoothstep(170.,365.,floorDistance));
-        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.039,.068,.025)+crowns*vec3(.37,.41,.29),wood);
+        vec2 shadeUv=vec2((land.x-shadeLayout.x)/shadeLayout.y,land.y/shadeLayout.z);
+        float window=1.-smoothstep(.46,.49,abs(land.y-shadeLayout.w)/shadeLayout.z);
+        float shelter=mix(treeCover,texture2D(floorShade,shadeUv).r,window);
+        vec3 turf=meadowPigment(land,max(shelter,treeCover),floorPlace.y);
+        diffuseColor.rgb=turf*(.76+.93*fibre)*mix(.96,1.09,gust*grass*resolved);
+        diffuseColor.rgb*=.96+.20*seedHeads*resolved;
+        diffuseColor.rgb*=1.-.53*shelter;
       #endif`)
       .replace('#include <opaque_fragment>','outgoingLight=mix(outgoingLight*mix(vec3(.17,.27,.25),vec3(1.02,.95,.69),canopySunlight(floorPlace)),vec3(.135,.220,.241),(1.-exp(-floorDistance*.000087))*.97);\n#include <opaque_fragment>');
   };
@@ -203,25 +197,53 @@ export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],render
     west.scale.z=east.scale.z=length/-farEnd;
     const old=paving.geometry;
     surface=corridorFloor(near,far,length,cityLength);paving.geometry=surface.geometry;
-    grass.clear();forest.clear();distant.clear();owned[owned.indexOf(old)]=paving.geometry;old.dispose();
+    grass.clear();forest.clear();distant.clear();understory.clear();owned[owned.indexOf(old)]=paving.geometry;old.dispose();
   }
   const ground=(x:number,z:number)=>surface.height(x,z);
+  const coverAt=(x:number,z:number,y:number)=>woodlandAt(x,z,y,cityLength);
+  const understory=woodlandFloor(ground,coverAt,bounds.west,bounds.east);
   const grass=corridorGrass(ground,(x,z)=>{
     const depth=valleyOrigin.x+shoreline(valleyOrigin.z-z)-x;
     return z>=detailNear-12&&z<=detailFar+12&&depth>=-6&&depth<=86;
-  },bounds.west,bounds.east,driftTime,eye);
+  },bounds.west,bounds.east,driftTime,eye,coverAt);
   root.add(grass.group);
-  const atlas=renderTreeAtlas(renderer,trees);
-  const coverAt=(x:number,z:number,y:number)=>woodlandAt(x,z,y,cityLength);
   const forest=corridorForest(trees,ground,coverAt,bounds.west,bounds.east);
   root.add(forest.group);
-  const distant=distantCrowns(ground,coverAt,bounds.west,bounds.east,atlas,lighting,driftTime,eye,corridorShadow);
+  const distant=distantCrowns(ground,coverAt,bounds.west,bounds.east,lighting,driftTime,eye,sprays,paint);
   root.add(distant.group);
+  function plant(stand:WoodlandTree[],rotation:number){
+    const group=new T.Group(),cells=new Map<string,WoodlandTree[]>(),neighbors=crownNeighbors(stand);
+    for(const tree of stand){
+      const key=Math.floor(tree.x/32)+','+Math.floor(tree.z/32);
+      const cell=cells.get(key);
+      if(cell)cell.push(tree);else cells.set(key,[tree]);
+    }
+    for(const cell of cells.values()){
+      const near=treeMeshes(cell,trees);
+      const middle=distant.boughs.tile(cell,neighbors,0,rotation)!.mesh;
+      const far=distant.boughs.tile(cell,neighbors,1,rotation)!.mesh;
+      const bounds=middle.geometry.boundingSphere!;
+      const center=new T.Vector3(),cameraPosition=new T.Vector3();
+      const lod=new T.LOD();
+      lod.add(near,middle,far);
+      lod.update=camera=>{
+        center.copy(bounds.center).applyMatrix4(lod.matrixWorld);
+        cameraPosition.setFromMatrixPosition(camera.matrixWorld).sub(center);
+        const range=cameraPosition.length(),horizontal=Math.hypot(cameraPosition.x,cameraPosition.z);
+        const radius=bounds.radius*lod.matrixWorld.getMaxScaleOnAxis();
+        near.visible=range-radius<boughEnd;
+        middle.visible=range+radius>boughStart && horizontal-radius<farCrownEnd;
+        far.visible=horizontal+radius>farCrownStart && horizontal-radius<woodlandEnd;
+      };
+      group.add(lod);
+    }
+    understory.addGarden(group,stand);return group;
+  }
   const mist=createLowCloud(lighting);root.add(mist.cloud);
-  return {root,bounds,followRiver,gradeTown(grade:(x:number,z:number,y:number)=>number){surface.gradeTown(grade);},get far(){return extent+2300;},tick(t:number,camera:T.Vector3){
-    driftTime.value=t;eye.copy(camera);grass.view(eye);forest.view(eye);distant.view(eye);mist.tick(t);
+  return {root,bounds,ground,plant,followRiver,gradeTown(grade:(x:number,z:number,y:number)=>number){surface.gradeTown(grade);},get far(){return extent+2300;},tick(t:number,camera:T.Vector3){
+    driftTime.value=t;eye.copy(camera);understory.view(eye.z);grass.view(eye);forest.view(eye);distant.view(eye);mist.tick(t,camera.z);
   },dispose(){
-    grass.dispose();forest.clear();distant.dispose();atlas.dispose();mist.dispose();
+    understory.dispose();grass.dispose();forest.clear();distant.dispose();mist.dispose();
     for(const g of owned)g.dispose();for(const tex of textures)tex.dispose();walls.dispose();floor.dispose();
   }};
 }

@@ -26,7 +26,23 @@ export const brushSampler = `
         vec2 edge = smoothstep(vec2(.43), vec2(.495), abs(fract(uv) - .5));
         return mix(texture2D(gouacheMap, uv).rgb, texture2D(gouacheMap, uv + vec2(.37,.29)).rgb, max(edge.x, edge.y));
       }
+      float brushStroke(vec3 swatch) {
+        return clamp((dot(swatch, vec3(.24,.64,.12)) - .586) * 5.6, -.88, 1.);
+      }
 `;
+
+export const leafBrushCoordinates = `
+  vec3 leafBrushCoordinates(vec3 rest, float leafMask) {
+    return vec3(vec2(rest.x + .47 * rest.z, rest.y - .63 * rest.z) * vec2(.36,.54), leafMask);
+  }`;
+
+export const leafBrushPigment = brushSampler + `
+  vec3 leafBrushPigment(vec3 brush) {
+    float stroke = brushStroke(brushSample(brush.xy));
+    vec3 pigment = mix(vec3(1.), vec3(.66,.73,.81), max(-stroke,0.));
+    pigment = mix(pigment, vec3(1.46,1.35,1.14), max(stroke,0.));
+    return mix(vec3(1.), pigment, brush.z * gouacheCoverage);
+  }`;
 
 type PaintSurface = 'architecture' | 'roof' | 'facade' | 'canopy' | 'terrain' | 'rock';
 
@@ -119,8 +135,7 @@ export function paintMaterial(material: T.MeshStandardMaterial, paint: Gouache, 
       vec3 swatch = brushSample(p.zy + vec2(.18,.64)) * axis.x
                   + brushSample(p.xz + vec2(.39,.13)) * axis.y
                   + brushSample(p.xy + vec2(.61,.32)) * axis.z;
-      float value = dot(swatch, vec3(.24,.64,.12));
-      float stroke = clamp((value - .586) * 5.6, -.88, 1.);
+      float stroke = brushStroke(swatch);
       float ochre = smoothstep(.08,.20, swatch.r - swatch.b);
       vec3 ground = base * vec3(.57,.66,.85) + vec3(.019,.009,.021);
       vec3 loaded = base * vec3(1.35,1.29,1.18) + vec3(.044,.033,.012);

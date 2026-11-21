@@ -15,26 +15,6 @@ const screenVertex=`
 export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camera:T.PerspectiveCamera,
   sun:T.DirectionalLight,direction:T.Vector3,afterglow=false){
   const hdr=renderer.extensions.has('EXT_color_buffer_float');
-  if(!hdr&&!afterglow){
-    const material=worldGradeMaterial(true),quad=new FullScreenQuad(material);
-    const size=new T.Vector2();
-    let frame=new T.FramebufferTexture(1,1);
-    return {
-      render(_seconds:number){
-        renderer.render(scene,camera);
-        renderer.copyFramebufferToTexture(frame);
-        material.uniforms.tDiffuse!.value=frame;
-        quad.render(renderer);
-      },
-      resize(_w:number,_h:number){
-        renderer.getDrawingBufferSize(size);
-        if(frame.image.width===size.x && frame.image.height===size.y)return;
-        frame.dispose();
-        frame=new T.FramebufferTexture(size.x,size.y);
-      },
-      dispose(){frame.dispose();quad.dispose();material.dispose();}
-    };
-  }
   const targetType=hdr?T.HalfFloatType:T.UnsignedByteType;
   const beauty=new T.WebGLRenderTarget(1,1,{type:targetType,samples:Math.min(2,renderer.capabilities.maxSamples)});
   beauty.depthTexture=new T.DepthTexture(1,1,T.UnsignedIntType);
@@ -53,8 +33,8 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
     uniform highp sampler2DShadow shadowDepth;
     uniform mat4 invProjection,eyeFrame,shadowFrame;
     uniform vec3 sunDir,eye;
-    ${afterglow?`uniform float seconds;
-    ${sunbreak}`:''}
+    uniform float seconds;
+    ${afterglow?sunbreak:''}
     void main(){
       float z=texture2D(geometryDepth,screenUv).r;
       vec4 endpoint=invProjection*vec4(screenUv*2.-1.,z*2.-1.,1.);
@@ -76,7 +56,7 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
         float layer=exp(-max(0.,p.y)*.025);
         light+=sunbreakAt(p,seconds,sunDir)*visibility*layer*exp(-d*.004)*stepSize;`:`
         float layer=exp(-max(0.,p.y)*.070);
-        float gap=.55+.45*sin(dot(p.xz,vec2(.075,.041))-p.y*.39);
+        float gap=.55+.45*sin(dot(p.xz,vec2(.075,.041))-p.y*.39+seconds*.14);
         light+=visibility*layer*gap*exp(-d*.009)*stepSize;`}
       }
       float phase=.34+2.45*pow(max(dot(ray,sunDir),0.),9.);

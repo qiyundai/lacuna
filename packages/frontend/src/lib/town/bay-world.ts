@@ -107,6 +107,8 @@ const skyFragment = `
       transmission*=1.-opacity;
     }
     sky=sky*transmission+clouds;
+    float valleyMist=pow(abs(dir.z),18.)*(1.-smoothstep(.002,.065,abs(dir.y)));
+    sky=mix(sky,vec3(.15,.24,.25),valleyMist*.94);
     gl_FragColor = vec4(sky,1.);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>

@@ -11,21 +11,22 @@ function randomStream(seed:number){
   };
 }
 
-function* densityField(seed:number){
+function* densityField(seed:number,formation?:number){
+  const distant=formation!==undefined;
   const random=randomStream(seed);
-  const w=96,h=52,d=44,voxels=new Uint8Array(w*h*d*4);
+  const w=distant?56:96,h=distant?30:52,d=distant?28:44,voxels=new Uint8Array(w*h*d*4);
   const lobes:{x:number;y:number;z:number;rx:number;ry:number;rz:number}[]=[];
   const spine=6+Math.floor(random()*3),summit=random()*.84-.42;
   for(let i=0;i<spine;i++){
     const x=-.71+1.42*i/(spine-1);
     const fullness=1-Math.abs(x);
-    lobes.push({x,y:-.56+random()*.12,z:(random()-.5)*.26,
+    lobes.push({x,y:-.56+random()*.12,z:(random()-.5)*.26+(formation===1?.21*Math.sin(i*1.24):0),
       rx:.22+random()*.13,ry:.20+fullness*.17+random()*.10,rz:.36+random()*.23});
   }
-  const turrets=2+Math.floor(random()*3);
+  const turrets=formation===0?1:2+Math.floor(random()*3);
   for(let i=0;i<turrets;i++){
     const x=i===0?summit:(random()-.5)*1.03;
-    const height=i===0?.68+random()*.26:.32+random()*.35;
+    const height=formation===0?.32+random()*.10:i===0?.68+random()*.26:.32+random()*.35;
     const z=(random()-.5)*.31;
     lobes.push({x,y:-.25,z,rx:.26+random()*.13,ry:.41,rz:.46+random()*.14});
     lobes.push({x:x+(random()-.5)*.13,y:height-.63,z,rx:.17+random()*.14,ry:.37+random()*.14,rz:.28+random()*.20});
@@ -154,7 +155,7 @@ function cloudLayer(geometry:T.BoxGeometry,seed:number,bank:CloudBank,lighting:V
     }
     const humidity=T.MathUtils.smootherstep(phase,.025,.40)*(1-T.MathUtils.smootherstep(phase,.47,.96));
     material.uniforms.clock!.value=t;material.uniforms.humidity!.value=humidity;
-    mesh.position.copy(origin).addScaledVector(bank.drift,Math.sin(t*bank.rate));
+    mesh.position.copy(origin).addScaledVector(bank.drift,phase-.32);
     mesh.visible=humidity>.001;
   }
   tick(0);
@@ -164,12 +165,48 @@ function cloudLayer(geometry:T.BoxGeometry,seed:number,bank:CloudBank,lighting:V
 export function createLowCloud(lighting:ValleyLighting){
   const seeds=crypto.getRandomValues(new Uint32Array(2)),geometry=new T.BoxGeometry(1,1,1);
   const near=cloudLayer(geometry,seeds[0]!,{
-    anchor:new T.Vector3(121,47,-192),size:new T.Vector3(259,104,94),drift:new T.Vector3(3.6,0,0),heading:0,rate:.023,offset:.32
+    anchor:new T.Vector3(121,47,-192),size:new T.Vector3(259,104,94),drift:new T.Vector3(115,7,-146),heading:0,rate:.023,offset:.32
   },lighting);
   const far=cloudLayer(geometry,seeds[1]!,{
-    anchor:new T.Vector3(35,78,1210),size:new T.Vector3(305,77,151),drift:new T.Vector3(0,0,8),heading:2.48,rate:.013,offset:.66
+    anchor:new T.Vector3(35,78,1210),size:new T.Vector3(305,77,151),drift:new T.Vector3(86,9,-183),heading:2.48,rate:.013,offset:.66
   },lighting);
   const sky=new T.Group();sky.add(near.mesh,far.mesh);
-  return {cloud:sky,tick(t:number){near.tick(t);far.tick(t);},
-    dispose(){near.dispose();far.dispose();geometry.dispose();}};
+  const fields=Array.from({length:3},(_,i)=>complete(densityField(seeds[0]!+i+1,i)));
+  const radius=6,spacing=485,count=radius*2+1;
+  const banks=Array.from({length:count},()=>{
+    const material=cloudMaterial(fields[0]!,lighting),mesh=new T.Mesh(geometry,material);
+    mesh.name='Valley cloud bank';mesh.renderOrder=3;sky.add(mesh);
+    return {mesh,material,row:Infinity,origin:new T.Vector3(),drift:new T.Vector3(),offset:0,period:1};
+  });
+  function tick(t:number,eyeZ=0){
+    near.tick(t);far.tick(t);
+    const center=Math.round(eyeZ/spacing);
+    for(let row=center-radius;row<=center+radius;row++){
+      const bank=banks[T.MathUtils.euclideanModulo(row,count)]!;
+      if(bank.row!==row){
+        const random=randomStream(seeds[1]!^Math.imul(row+487,0x9e3779b9));
+        bank.row=row;
+        bank.origin.set(-64+random()*290,68+random()*76,row*spacing+(random()-.5)*132);
+        bank.drift.set(61+random()*74,5+random()*10,-116-random()*116);
+        bank.period=160+random()*115;bank.offset=random();
+        bank.mesh.scale.set(158+random()*132,39+random()*49,77+random()*83);
+        bank.mesh.rotation.y=(random()-.5)*1.84;
+        bank.material.uniforms.volume!.value=fields[Math.floor(random()*fields.length)];
+      }
+      const phase=T.MathUtils.euclideanModulo(t/bank.period+bank.offset,1);
+      bank.mesh.position.copy(bank.origin).addScaledVector(bank.drift,phase-.5);
+      const distance=Math.abs(bank.mesh.position.z-eyeZ);
+      const humidity=T.MathUtils.smoothstep(phase,0,.19)*(1-T.MathUtils.smoothstep(phase,.78,1))
+        *(1-T.MathUtils.smoothstep(distance,spacing*(radius-1.5),spacing*(radius-.75)));
+      bank.material.uniforms.clock!.value=t+bank.offset*200;
+      bank.material.uniforms.humidity!.value=humidity;
+      bank.mesh.visible=humidity>.002 && (row<0 || row>2);
+    }
+  }
+  tick(0);
+  return {cloud:sky,tick,dispose(){
+    for(const bank of banks)bank.material.dispose();
+    for(const field of fields)field.dispose();
+    near.dispose();far.dispose();geometry.dispose();
+  }};
 }
