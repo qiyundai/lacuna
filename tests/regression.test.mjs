@@ -1,6 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { districts } from '../packages/frontend/src/lib/town/districts.ts';
+import { parseAlbum } from '../packages/frontend/src/lib/music-library.ts';
+
+test('playlist reprises keep distinct positions and preserve saved IDs for the first occurrence', () => {
+  const address = new URL('https://lacuna.example/music/river/album.m3u8');
+  const tracks = parseAlbum([
+    '#EXTM3U', '#PLAYLIST:River', '#EXTINF:90,Opening', 'bend.m4a',
+    '#EXTINF:-1,Reprise', 'bend.m4a', '#EXTINF:120,Return', 'return.m4a?mix=2'
+  ].join('\r\n'), address);
+  assert.equal(tracks[0].id, '/music/river/album.m3u8#/music/river/bend.m4a');
+  assert.equal(tracks[1].url, tracks[0].url);
+  assert.equal(tracks[1].seconds, undefined);
+  assert.equal(new Set(tracks.map(track => track.id)).size, 3);
+  assert.equal(tracks[2].url, '/music/river/return.m4a?mix=2');
+  assert.deepEqual(tracks.map(track => track.title), ['Opening', 'Reprise', 'Return']);
+});
 
 test('a river crossing keeps its founding page and opens the far bank to later pages', () => {
   const page = (id, body, presence) => ({ id, body, presence, created_at: Number(id) });

@@ -94,6 +94,12 @@ Tests use disposable SQLite data and simulated OpenAI responses. Real OAuth cons
 
 The sample-story preview builds into `.test-output/preview-app`, migrates synthetic entries from a disposable in-memory D1 fixture into a temporary encrypted vault, and never loads production data or OAuth credentials. The **sample-only** unlock passphrase is `sample story vault passphrase`. It uses ports 1456 and 8788 so the real companion on 1455 can remain open. Stop the preview before starting another instance.
 
+## Music library
+
+Open the music note beside Lacuna and choose **Add music** to keep audio files in the current browser. **Album folder** groups tracks by their containing folder name. Imported copies stay on this device and can be removed from the player.
+
+To ship an album with the app, put its audio and UTF-8 M3U playlist under `packages/frontend/static/music/` and add the relative playlist path to `library.json`. The player uses the `#PLAYLIST:` album name, the titles and durations from `#EXTINF:`, and audio paths relative to the playlist. Use [A River Remembers](packages/frontend/static/music/a-river-remembers.m3u8) as an example.
+
 ## License
 
 [MIT](./LICENSE)

@@ -2,7 +2,10 @@ import { createReadStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { extname } from 'node:path';
 
-export const mediaTypes = new Map([['.mp4', 'video/mp4'], ['.m4a', 'audio/mp4']]);
+export const mediaTypes = new Map([
+  ['.mp4', 'video/mp4'], ['.m4a', 'audio/mp4'], ['.mp3', 'audio/mpeg'],
+  ['.ogg', 'audio/ogg'], ['.opus', 'audio/ogg'], ['.wav', 'audio/wav'], ['.flac', 'audio/flac']
+]);
 
 export async function serveMedia(req, res, file, size) {
   res.setHeader('Content-Type', mediaTypes.get(extname(file)));

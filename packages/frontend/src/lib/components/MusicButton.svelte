@@ -1,11 +1,17 @@
 <script lang="ts">
-  function openAlbum() {
-    const player = document.getElementById('soundtrack');
-    if (player instanceof HTMLDialogElement) player.showModal();
+  import { tick } from 'svelte';
+  import { musicWindow } from '$lib/music-window.svelte.js';
+
+  async function openAlbum(event: MouseEvent & { currentTarget: HTMLButtonElement }) {
+    musicWindow.opener = event.currentTarget;
+    musicWindow.mode = 'library';
+    await tick();
+    document.getElementById('soundtrack')?.focus({ preventScroll: true });
   }
 </script>
 
-<button type="button" class="music-button" onclick={openAlbum} aria-label="Music" title="Music" aria-haspopup="dialog">
+<button type="button" class="music-button" onclick={openAlbum} aria-label="Music" title="Music"
+  aria-controls="soundtrack" aria-expanded={musicWindow.mode !== 'closed'}>
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
     <path d="M8 17V6l11-2v11M8 9l11-2"/>
     <ellipse cx="5.5" cy="17.5" rx="2.5" ry="2"/><ellipse cx="16.5" cy="15.5" rx="2.5" ry="2"/>

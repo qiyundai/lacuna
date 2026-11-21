@@ -142,7 +142,7 @@ export async function startCompanion(options = {}) {
     res.setHeader('Referrer-Policy', 'no-referrer'); res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Permissions-Policy', 'geolocation=(), camera=(), microphone=(), payment=()');
     const nonce = randomBytes(18).toString('base64');
-    res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`);
+    res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; connect-src 'self'; media-src 'self' blob:; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`);
     try {
       const url = new URL(req.url, origin);
       if (!allowedRequest(req, origin)) return json(res, { error: { code: 'FORBIDDEN', message: 'Open Lacuna on this computer to continue' } }, 403);
