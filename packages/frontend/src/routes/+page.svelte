@@ -1,4 +1,5 @@
 <script lang="ts">
+  import IconAction from '$lib/components/IconAction.svelte';
   import { swipeDetector } from '$lib/gesture.js';
   import Void from '$lib/components/Void.svelte';
   import DownSpace from '$lib/components/DownSpace.svelte';
@@ -25,9 +26,9 @@
 </script>
 {#snippet navigation()}
   {#each destinations as item}
-    <button aria-current={view===item[0]?'page':undefined} disabled={busy} onclick={()=>navigate(item[0])}>{item[1]}</button>
+    <IconAction icon={item[0]} label={item[1]} current={view===item[0]?'page':undefined} disabled={busy} onclick={()=>navigate(item[0])}/>
   {/each}
-  <button onclick={()=>settings.showSettings()}>Journal settings</button>
+  <IconAction icon="settings" label="Journal settings" onclick={()=>settings.showSettings()}/>
 {/snippet}
 <UserMenu bind:this={settings}/>
 {#if view==='town'}

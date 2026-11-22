@@ -145,10 +145,10 @@
   }
 
   .screen-overlay{overflow:auto;align-items:safe center;background:var(--field);padding:22px}
-  .menu-content{width:min(100%,30rem);margin:auto;display:grid;gap:.8rem;cursor:default}
+  .menu-content{width:min(100%,32rem);margin:auto;display:grid;gap:var(--space-5);cursor:default}
   h2{font:400 2.65rem/1.1 var(--font-reading);letter-spacing:-.05em}
   .menu-email{color:var(--muted);font:.9rem var(--font-ui)}
-  .menu-actions{display:grid;margin:.75rem 0;border-top:1px solid var(--line)}
-  .menu-item{font:500 1rem var(--font-ui);min-height:48px;padding:.6rem .2rem;text-align:left;color:var(--ink);background:transparent;border:0;border-bottom:1px solid var(--line);cursor:pointer}
-  .menu-item:hover{color:var(--river);background:var(--paper)}.menu-item.danger{color:var(--void-danger)}
+  .menu-actions{display:grid;justify-items:start;gap:.15rem;margin:.5rem 0}
+  .menu-item{font:500 1rem var(--font-ui);min-height:48px;padding:.6rem .2rem;text-align:left;color:var(--ink);background:transparent;border:0;cursor:pointer}
+  .menu-item:is(:hover,:focus-visible){color:var(--river);text-decoration:underline;text-underline-offset:.32em}.menu-item.danger{color:var(--void-danger)}
 </style>

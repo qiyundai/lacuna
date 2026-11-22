@@ -337,7 +337,7 @@
 </aside>
 
 <style>
-  aside{position:fixed;z-index:12;inset:calc(var(--mast-height) + .6rem) var(--gutter) auto auto;width:min(26rem,calc(100vw - 1.5rem));max-height:calc(100dvh - var(--mast-height) - 1.5rem);display:flex;flex-direction:column;overflow:auto;overscroll-behavior:contain;border:1px solid #71806b;border-radius:9px;background:var(--paper);color:var(--ink);box-shadow:0 12px 48px #0c231e45;font:400 .91rem/1.3 var(--font-ui);color-scheme:light}
+  aside{position:fixed;z-index:12;inset:calc(var(--mast-height) + .6rem) var(--gutter) auto auto;width:min(26rem,calc(100vw - 1.5rem));max-height:calc(100dvh - var(--mast-height) - 1.5rem);display:flex;flex-direction:column;overflow:auto;overscroll-behavior:contain;border:0;border-radius:9px;background:var(--paper);color:var(--ink);box-shadow:0 12px 48px #0c231e45;font:400 .91rem/1.3 var(--font-ui);color-scheme:light}
   aside[hidden]{display:none}
   aside:focus-visible{outline:2px solid var(--river);outline-offset:2px}
   aside :focus-visible{outline:2px solid #b17739;outline-offset:-2px}
@@ -362,7 +362,7 @@
   button.enabled{color:#1e5c43;background:#ccdcca}
   sup{position:absolute;right:5px;bottom:4px;font-size:.67rem}
   .volume{width:min(32%,8rem);gap:2px}.volume button{min-width:34px}.level{min-width:2.4em;text-align:right;font-size:.7rem;font-variant-numeric:tabular-nums}
-  .collection{min-height:0;display:flex;flex-direction:column;padding:0 .85rem .45rem}
+  .collection{min-height:0;display:flex;flex-direction:column;padding:0 var(--space-5) .7rem}
   header{flex:none;margin:.35rem 0}.views{gap:.75rem}
   .views button{border-bottom:2px solid transparent;color:var(--muted);font-size:.9rem}
   .views [aria-pressed="true"]{border-color:var(--river);font-weight:650;color:var(--ink)}
@@ -370,12 +370,12 @@
   .add{gap:.2rem;color:var(--river);font-size:.83rem;font-weight:600}
   .import-options{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;padding:.35rem .5rem;margin-bottom:.4rem;background:var(--field);border-radius:4px}
   .import-options small{flex:1}.import-options button{padding:0 .4rem;color:var(--river);font-size:.8rem;text-decoration:underline}
-  .filters{gap:.4rem;flex:none;margin:0 0 .35rem}
+  .filters{gap:var(--space-4);flex:none;margin:0 0 .35rem}
   .filters label{display:grid;gap:.2rem;flex:1;min-width:0;color:var(--muted);font-size:.75rem}
   .filters .search-field{flex:1.25}
-  .filters input,.filters select{min-width:0;width:100%;height:37px;padding:0 .45rem;background:#fffefa;border:1px solid var(--line);border-radius:4px;color:var(--ink);font:400 .85rem var(--font-ui)}
+  .filters input,.filters select{min-width:0;width:100%;min-height:44px;padding:0 .1rem;background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;color:var(--ink);font:400 .85rem var(--font-ui)}
   .list{min-height:3rem;max-height:21.5rem;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
-  .row{border-bottom:1px solid #dfe4d9;min-height:42px}.row:last-child{border:0}
+  .row{border-bottom:1px solid var(--rule);min-height:46px}.row:last-child{border:0}
   .row.active{background:#e7eee1}
   .song{flex:1;min-width:0;justify-content:start;gap:.5rem;text-align:left}
   .number,.length{font-size:.72rem;color:var(--muted);font-variant-numeric:tabular-nums}

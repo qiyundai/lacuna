@@ -1,11 +1,12 @@
 <script lang="ts">
+  import IconAction from '$lib/components/IconAction.svelte';
   import Masthead from '$lib/components/Masthead.svelte';
 </script>
 <svelte:head>
   <title>Privacy, by choice Â· Lacuna</title>
   <meta name="description" content="How Lacuna protects your words: encrypted browser storage and local journaling." />
 </svelte:head>
-<Masthead><a href="/">Return to Lacuna</a></Masthead>
+<Masthead><IconAction href="/" icon="back" label="Return to Lacuna"/></Masthead>
 <main class="declaration">
   <article>
     <header>

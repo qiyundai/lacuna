@@ -1,4 +1,5 @@
 <script lang="ts">
+  import IconAction from './IconAction.svelte';
   import { onMount, tick, type Snippet } from 'svelte';
   import Masthead from './Masthead.svelte';
   import ValleyLoading from './ValleyLoading.svelte';
@@ -48,7 +49,6 @@
   const valleyViews=['City','Overlook'] as const;
   let panel=$state<'write'|'pages'|'read'|'forget'>('write'),alive=false,reveal=false;
   const ordered=$derived([...entries].sort((a,b)=>b.created_at-a.created_at||b.id.localeCompare(a.id)));
-  const latest=$derived(ordered[0]);
   const seen = new WeakMap<EntryData, SceneCues>();
   const plan=$derived.by(()=>{
     const coast = paintedCoast(entries,forgotten);
@@ -162,22 +162,26 @@
   {#if opening}<ValleyLoading label={ready?'Opening the valley…':'Opening your journal…'} onExit={guest?onExit:undefined}/>{/if}
   <h1 class="sr-only" tabindex="-1">{guest?'Example city':'Your city'}</h1>
   {#if !opening}
-    <Masthead floating disabled={busy}>
-      {#snippet heading()}<p class="city-summary">{guest?'Example city':'Your city'} · {entries.length} {entries.length===1?'page':'pages'}{#if latest}<small>Last written {date.format(latest.created_at*1000)}</small>{/if}</p>{/snippet}
-      <button onclick={()=>open('pages')} disabled={!ready}>Pages</button>
+    <Masthead floating disabled={busy} world={guest?'Example city':'The valley city'} pageCount={entries.length}>
+      <IconAction icon="pages" label="Pages" onclick={()=>open('pages')} disabled={!ready}/>
       {#if scene}
-        {#each valleyViews as view}<button onclick={()=>scene?.visit(view)}>{view==='City'?'City view':view}</button>{/each}
-        <button onclick={()=>paused=!paused}>{paused?'Resume ambient motion':'Pause ambient motion'}</button>
+        {#each valleyViews as view}
+          <IconAction icon={view==='City'?'city':'overlook'} label={view==='City'?'City view':view} onclick={()=>scene?.visit(view)}/>
+        {/each}
+        <IconAction icon={paused?'play':'pause'} label={paused?'Resume ambient motion':'Pause ambient motion'} onclick={()=>paused=!paused}/>
       {/if}
       {@render navigation?.()}
-      {#if guest}<a href="/privacy">Privacy</a><button onclick={onExit}>Leave visit</button>{/if}
+      {#if guest}
+        <IconAction icon="privacy" label="Privacy" href="/privacy"/>
+        <IconAction icon="leave" label="Leave visit" onclick={onExit}/>
+      {/if}
     </Masthead>
     <div class="bottom">
       <p class="status" role="status">{error||(graphicsError?'City view unavailable. Your journal is open.':notice||(!entries.length&&ready?(forgotten.length?'No pages left to read.':'Your first page begins the city.') :''))}</p>
       <div class="actions">
-        {#if graphicsError}<button onclick={graphics}>Retry city</button>{/if}
-        {#if !ready&&error}<button onclick={read}>Retry journal</button>{/if}
-        <button class="write" disabled={!ready||busy} onclick={()=>open('write')}>{draft?'Return to draft':'Write a page'} <span aria-hidden="true">↗</span></button>
+        {#if graphicsError}<IconAction icon="retry" label="Retry city" onclick={graphics}/>{/if}
+        {#if !ready&&error}<IconAction icon="retry" label="Retry journal" onclick={read}/>{/if}
+        <IconAction primary icon="write" label={draft?'Return to draft':'Write a page'} disabled={!ready||busy} onclick={()=>open('write')}/>
       </div>
     </div>
   {/if}
@@ -254,22 +258,18 @@
   .coast{position:relative;height:100%;min-height:0;overflow:hidden;color:#fff4e8;background:linear-gradient(#8c8395,#3d5466)}
   canvas{content-visibility:auto;contain-intrinsic-size:auto 700px;width:100%;height:100%;display:block;touch-action:none;cursor:grab}canvas:active{cursor:grabbing}
   .bottom{position:absolute;inset:auto var(--gutter) max(1rem,env(safe-area-inset-bottom));display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;pointer-events:none}
-  .actions{margin-left:auto;display:flex;gap:.4rem;pointer-events:auto}
+  .actions{margin-left:auto;display:grid;justify-items:end;gap:.4rem;pointer-events:none}
   button{min-height:44px;cursor:pointer;font:500 .92rem/1.2 var(--font-ui)}
-  .actions button{border-radius:4px;border:1px solid #dacdb1;background:#f5eadb;color:#233b31;padding:.75rem 1rem;box-shadow:0 2px 9px #142f2b40}
-  .write{white-space:nowrap}.write span{margin-left:.75rem}
-  .status{margin:0;background:#1d3730eb;color:#fff5df;padding:.6rem .8rem;border-radius:3px;font:.9rem/1.4 var(--font-ui)}.status:empty{display:none}
-  .city-summary{margin:.65rem .35rem;font:500 1.25rem var(--font-reading)}
-  .city-summary small{display:block;color:#56695b;font:.78rem/1.5 var(--font-ui)}
+  .status{margin:0;padding-block:.6rem;color:var(--scene-ink);text-shadow:var(--scene-type-shadow);font:.9rem/1.4 var(--font-ui)}.status:empty{display:none}
   .page-marker{position:absolute;transform:translate(-50%,-100%);height:49px;min-width:44px;padding:0 3px 13px;display:grid;place-items:center;background:transparent;border:0;color:#fff8df}
   .page-marker::after{content:'';position:absolute;bottom:0;height:13px;width:1px;background:#fff5cf;box-shadow:0 1px 2px #203a32}
   .marker-face{display:flex;align-items:center;gap:6px;border:1px solid #e9d69c;border-radius:20px;background:#1d3834f2;box-shadow:0 2px 7px #10272680;padding:7px}
   .marker-label{display:none;font:600 .75rem var(--font-ui);white-space:nowrap}
   .featured .marker-face,.page-marker:is(:hover,:focus-visible) .marker-face{padding-inline:10px;background:#f3e4b9;color:#25382d}
   .featured .marker-label,.page-marker:is(:hover,:focus-visible) .marker-label{display:block}
-  dialog{position:fixed;inset:0;margin:auto;width:min(48rem,calc(100% - 2rem));max-height:88dvh;color:#233b36;background:#f8f5e9;border:0;padding:0;border-radius:3px;overflow:auto;overscroll-behavior:contain;box-shadow:0 20px 85px #0a1c21a6,2px 3px 0 #d1c8ad}
+  dialog{position:fixed;inset:0;margin:auto;width:min(50rem,calc(100% - 2rem));max-height:88dvh;color:#233b36;background:#f8f5e9;border:0;padding:0;border-radius:3px;overflow:auto;overscroll-behavior:contain;box-shadow:0 20px 85px #0a1c21a6,2px 3px 0 #d1c8ad}
   dialog::backdrop{background:#132d3280}
-  .folio{display:grid;grid-template-columns:minmax(10rem,.52fr) minmax(0,1fr);min-height:24rem}
+  .folio{display:grid;grid-template-columns:minmax(10rem,.52fr) minmax(0,1fr);min-height:26rem}
   .cover{display:flex;flex-direction:column;justify-content:flex-end;position:relative;isolation:isolate;background:#24473e url('/city/valley-print.webp') 56% center/cover;color:#fff6d9}
   .cover::after{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(0deg,#17392ff5,transparent 66%);box-shadow:inset -6px 0 10px -7px #112d24}
   .imprint{padding:1.65rem 1.4rem;display:grid;gap:2px}
@@ -279,21 +279,21 @@
   .reading .cover::after{background:none}
   .plate{margin:.8rem .5rem 0}.plate img{display:block;width:100%;max-height:15rem;object-fit:contain;filter:drop-shadow(0 5px 3px #46533822)}
   .reading .imprint{padding:1rem 1.35rem 1.5rem}
-  .leaf{min-width:0;display:flex;flex-direction:column;padding:1.2rem clamp(1.35rem,3.5vw,2.6rem) 1.35rem;background:linear-gradient(90deg,#b9b39c33,transparent 15px)}
+  .leaf{min-width:0;display:flex;flex-direction:column;padding:var(--space-5) var(--sheet-inset) var(--space-6);background:linear-gradient(90deg,#b9b39c33,transparent 15px)}
   .leaf-head,.leaf-foot{display:flex;justify-content:space-between;align-items:center;gap:1rem}
-  .leaf-head{border-bottom:1px solid #b7c1b0;color:#50665c;margin-bottom:1.4rem}
+  .leaf-head{color:var(--muted);margin-bottom:var(--space-5)}
   .close,.turns button{width:44px;height:44px;border:0;background:none;color:#29463c;font-size:1.5rem}.close{margin-right:-.7rem}
   .leaf h2{font:400 clamp(2.1rem,4vw,3.15rem)/1.07 var(--font-reading);letter-spacing:-.05em;margin-bottom:.42rem}
   .leaf time,.count,.note{color:#54655a}.sr-only{position:absolute;width:1px;height:1px;padding:0;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
-  form{display:flex;flex-direction:column;gap:1rem;flex:1;margin-top:1.25rem}
-  textarea{width:100%;min-height:7.5rem;resize:vertical;border:0;border-radius:0;padding:0 .2rem;color:#203c34;caret-color:#416a52;font:1.26rem/2rem var(--font-reading);background:repeating-linear-gradient(transparent 0 calc(2rem - 1px),#768b772e calc(2rem - 1px) 2rem);scroll-padding:.25rem}
+  form{display:flex;flex-direction:column;gap:var(--space-5);flex:1;margin-top:var(--space-6)}
+  textarea{width:100%;min-height:7.5rem;resize:vertical;border:0;border-radius:0;padding:0 .2rem;color:#203c34;caret-color:#416a52;font:1.26rem/2rem var(--font-reading);background:repeating-linear-gradient(transparent 0 calc(2rem - 1px),#768b771e calc(2rem - 1px) 2rem);scroll-padding:.25rem}
   textarea::placeholder{color:#66776a;font-style:italic}
-  .leaf-foot{margin-top:auto;border-top:1px solid #b7c1b0;padding-top:.7rem}
-  .ink{background:#23483b;color:#fff8e6;border:0;border-radius:3px;padding:.72rem 1.4rem}
+  .leaf-foot{margin-top:auto;padding-top:.9rem}
+  .ink{background:var(--ink);color:var(--paper);border:0;border-radius:2rem;padding:.72rem 1.4rem}
   .ink:enabled:hover{background:#32634f}.ink:disabled{background:#d7dacc;color:#536253}
   button:disabled{cursor:default}
   .entry-body{white-space:pre-wrap;overflow-wrap:anywhere;font:1.4rem/1.65 var(--font-reading);margin:1.4rem 0 2.2rem}
-  .index{margin-top:.8rem;max-height:48dvh;overflow:auto;overscroll-behavior:contain;padding-right:.4rem}.index article{border-bottom:1px solid #bcc6b6;padding:.65rem 0}
+  .index{margin-top:.8rem;max-height:48dvh;overflow:auto;overscroll-behavior:contain;padding-right:.4rem}.index article{padding:var(--space-4) 0}.index article+article{border-top:1px solid var(--rule)}
   .index-entry,.text-action,.visit-site{background:none;color:#294d3d;border:0;text-align:left}
   .index-entry{width:100%;display:grid;gap:.35rem}.index-entry span{font:1.16rem/1.45 var(--font-reading);white-space:pre-wrap;overflow-wrap:anywhere}
   .visit-site,.text-action{text-decoration:underline;text-underline-offset:.22em;font-size:.82rem}.text-action{margin-left:auto}
@@ -301,7 +301,7 @@
   .note{margin:.7rem 0 0;font-size:.74rem}
   :is(button,textarea):focus-visible{outline:2px solid #7e5725;outline-offset:2px}
   .page-marker:focus-visible .marker-face{outline:2px solid #fff7db;outline-offset:2px}
-  .leaf :is(.index-entry,.text-action,.visit-site,.turns button,.close):enabled:is(:hover,:focus-visible){background:#e4e9da}
+  .leaf :is(.index-entry,.text-action,.visit-site,.turns button,.close):enabled:is(:hover,:focus-visible){color:var(--river);text-decoration:underline;text-underline-offset:.28em}
   @media(hover:hover) and (prefers-reduced-motion:no-preference){
     .page-marker .marker-face,.leaf button{transition:translate .15s ease-out}
     .page-marker:hover .marker-face,.leaf button:enabled:hover{translate:0 -1px}
@@ -312,13 +312,14 @@
   .leaf h2:focus-visible{outline:0;text-decoration:underline;text-decoration-color:#909f87;text-decoration-thickness:1px;text-underline-offset:.12em}
   textarea:focus-visible{outline:0;box-shadow:inset 2px 0 #8f9d77;padding-left:.65rem}
   @media(prefers-reduced-motion:no-preference){dialog[open]{animation:unfold .22s ease-out}@keyframes unfold{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}}
+  @media(max-width:600px) and (hover:none){.bottom .status{flex-basis:100%}}
   @media(max-width:600px){
     .bottom{flex-wrap:wrap}
     dialog{max-height:92dvh}.folio{display:flex;flex-direction:column;min-height:0}.cover{min-height:5rem;background-position:center 55%}
     .imprint,.reading .imprint{padding:.65rem 1.3rem}.imprint strong{font-size:1.7rem}
     .reading .cover{flex-direction:row-reverse;justify-content:space-between;align-items:center}
     .plate{margin:.2rem 1rem;width:5.75rem}.plate img{max-height:4.65rem}
-    .leaf{padding:.3rem 1.3rem 1.1rem}.leaf-head{margin-bottom:.9rem}.leaf-foot{gap:.15rem}
+    .leaf{padding:.65rem var(--sheet-inset) var(--space-5)}.leaf-head{margin-bottom:.9rem}.leaf-foot{gap:.15rem}
     .entry-body{margin:1.1rem 0 1.45rem}
   }
 </style>

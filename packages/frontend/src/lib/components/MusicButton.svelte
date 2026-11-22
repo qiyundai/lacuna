@@ -1,4 +1,5 @@
 <script lang="ts">
+  import IconAction from './IconAction.svelte';
   import { tick } from 'svelte';
   import { musicWindow } from '$lib/music-window.svelte.js';
 
@@ -12,4 +13,4 @@
   }
 </script>
 
-<button type="button" onclick={openAlbum} aria-controls="soundtrack" aria-expanded={musicWindow.mode !== 'closed'}>Music</button>
+<IconAction icon="music" label="Music" onclick={openAlbum} controls="soundtrack" expanded={musicWindow.mode !== 'closed'}/>

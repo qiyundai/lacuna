@@ -1,4 +1,5 @@
 <script lang="ts">
+  import IconAction from './IconAction.svelte';
   import { tick, type Snippet } from 'svelte';
   import Masthead from './Masthead.svelte';
   import JournalCity from './JournalCity.svelte';
@@ -17,7 +18,7 @@
 
   {#if walking}<JournalCity guest onExit={leave}/>
   {:else}
-    <Masthead floating><a href="/privacy">Privacy</a></Masthead>
+    <Masthead floating><IconAction href="/privacy" icon="privacy" label="Privacy"/></Masthead>
     <main class="arrival">
       <section class="river-view" aria-label="The valley city">
       <CorridorFlight/>
@@ -44,8 +45,8 @@
   .intro{padding-bottom:min(3vh,30px);max-width:38rem}
   h1{margin:0 0 .8rem;font:400 clamp(4.4rem,8.7vw,9.8rem)/.96 var(--font-reading);letter-spacing:-.065em}
   .intro p{max-width:28ch;font:400 clamp(1.25rem,2vw,1.75rem)/1.4 var(--font-reading)}
-  .links{display:flex;gap:12px;flex-wrap:wrap;margin-top:1.8rem}.links button{min-height:48px;padding:10px 22px;font:600 .96rem/1.2 var(--font-ui);border-radius:4px;cursor:pointer}
-  .begin{color:#273c34;background:#f7f1da;border:1px solid #f7f1da}.visit{color:#fff6db;background:#273544cb;border:1px solid #e8e2c7a8}.visit span{margin-left:8px}
-  .leaf{align-self:safe center;width:min(100%,30rem);border:1px solid #b8aa8d;background:#f8f3e4;color:var(--ink);padding:clamp(20px,3vw,44px);border-radius:6px}
+  .links{display:flex;align-items:center;gap:.5rem var(--space-6);flex-wrap:wrap;margin-top:var(--space-6)}.links button{min-height:48px;padding:0;border:0;background:transparent;color:inherit;font:500 1rem/1.3 var(--font-ui);text-underline-offset:.35em;cursor:pointer}
+  .links .begin{font:400 1.4rem var(--font-reading);text-decoration:underline;text-decoration-thickness:1px}.links button:hover,.links button:focus-visible{text-decoration:underline}.links button:focus-visible{outline-color:var(--scene-ink)}.visit span{margin-left:.4rem}
+  .leaf{align-self:safe center;width:min(100%,30rem);background:var(--paper);color:var(--ink);padding:var(--sheet-inset)}
   .leaf>.atlas-link{margin-bottom:12px}@media(max-width:550px){.intro{padding-bottom:3vh}}
 </style>
