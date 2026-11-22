@@ -3,10 +3,10 @@ import {floorSeed,roomLighting,type WindowEmitter} from './room-light.js';
 import { batchPlantings } from './tree-batches.js';
 import type { WoodlandTree } from './woodland-boughs.js';
 import { groveCell } from './corridor-vegetation.js';
-import { constrainValleyView, valleyZoomLimit } from './valley-camera.js';
+import { constrainValleyView } from './valley-camera.js';
 import * as T from 'three';
 import { cityPageMarkers, type CityParcel, type PageMarker } from './city-page-markers.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { valleyInput } from './valley-input.js';
 import { createGreenCorridor } from './green-corridor.js';
 import { bankEdge, inValley, valleyOrigin,riverWidth } from './valley-river.js';
 import { createBayWater } from './bay-water.js';
@@ -160,9 +160,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   scene.add(water,valley.root);
   const city=new T.Group();city.position.set(valleyOrigin.x,0,valleyOrigin.z);city.rotation.y=Math.PI/2;scene.add(city);
   const localEye=new T.Vector3();
-  const orbit=new OrbitControls(camera,canvas);orbit.enableDamping=false;orbit.minPolarAngle=.22;orbit.maxPolarAngle=1.84;
-  orbit.minDistance=7;orbit.maxDistance=valleyZoomLimit;
-  orbit.rotateSpeed=.64;orbit.panSpeed=.76;orbit.zoomSpeed=.88;orbit.screenSpacePanning=false;
+  const target=new T.Vector3();
   const scenery=new T.Group(),structures=new T.Group(),paths=new T.Group(),travel=new T.Group();
   city.add(scenery,structures,paths,travel);
   const vessel=shop.ferry();
@@ -220,36 +218,36 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     inspected=true;moveTo(pose,true);
   }
   function moveTo(pose:{eye:T.Vector3;target:T.Vector3},glide:boolean){
-    if(glide&&!paused)framing={from:orbit.target.clone(),to:pose.target,eye:camera.position.clone(),end:pose.eye,start:time};
-    else{framing=undefined;orbit.target.copy(pose.target);camera.position.copy(pose.eye);orbit.update();}
+    input.reset();
+    if(glide&&!paused&&!motionPreference.matches)framing={from:target.clone(),to:pose.target,eye:camera.position.clone(),end:pose.eye,start:performance.now()};
+    else{framing=undefined;target.copy(pose.target);camera.position.copy(pose.eye);}
     schedule();
   }
   const checkedEye=new T.Vector3(Infinity,0,0),checkedTarget=new T.Vector3();
   function constrainCamera(){
-    if(checkedEye.equals(camera.position)&&checkedTarget.equals(orbit.target))return;
+    if(checkedEye.equals(camera.position)&&checkedTarget.equals(target))return;
     const halfHeight=camera.near*Math.tan(T.MathUtils.degToRad(camera.fov)*.5);
     const clearanceRadius=Math.hypot(camera.near,halfHeight,halfHeight*camera.aspect);
     const upstream=valleyOrigin.z-(plan.end-900)/12.5;
-    constrainValleyView(camera.position,orbit.target,valley.bounds,upstream,valley.ground,clearanceRadius);
-    camera.lookAt(orbit.target);camera.updateMatrixWorld();
-    checkedEye.copy(camera.position);checkedTarget.copy(orbit.target);
+    constrainValleyView(camera.position,target,valley.bounds,upstream,valley.ground,clearanceRadius);
+    camera.lookAt(target);camera.updateMatrixWorld();
+    checkedEye.copy(camera.position);checkedTarget.copy(target);
   }
   function schedule(){if(!frame&&!dead&&!document.hidden&&!skipped)frame=requestAnimationFrame(draw);}
   function draw(now:number){
     frame=0;if(dead||document.hidden||skipped)return;
-    constrainCamera();
-    const centerInlet=T.MathUtils.clamp(Math.floor((valleyOrigin.z-orbit.target.z+72)/144),plan.start/1800,plan.end/1800-1);
-    if(inspected&&!framing&&centerInlet!==loadedInlet)update(plan,false,centerInlet);
-    if(!paused&&last&&now-last<30){schedule();return;}
+    if(!paused&&!framing&&!input.active()&&last&&now-last<30){schedule();return;}
     const dt=last?Math.min(.1,(now-last)/1000):0;last=now;if(!paused)time+=dt;
+    input.step(now);
     if (framing) {
-      const t=paused?1:T.MathUtils.smootherstep((time-framing.start)/1.25,0,1);
-      orbit.target.lerpVectors(framing.from,framing.to,t);
+      const t=paused?1:T.MathUtils.smootherstep((now-framing.start)/1250,0,1);
+      target.lerpVectors(framing.from,framing.to,t);
       camera.position.lerpVectors(framing.eye,framing.end,t);
-      orbit.update();
       if (t===1) framing=undefined;
     }
     constrainCamera();
+    const centerInlet=T.MathUtils.clamp(Math.floor((valleyOrigin.z-target.z+72)/144),plan.start/1800,plan.end/1800-1);
+    if(inspected&&!framing&&centerInlet!==loadedInlet)update(plan,false,centerInlet);
     if (construction) {
       const progress=paused?1:Math.min(1,(time-construction.start)/1.85);
       construction.arrival.sample(progress);
@@ -314,7 +312,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     valley.tick(time,camera.position);sea.clock.value=time;atmosphere.render(time,rooms.sources,light,construction?hashPage(construction.site.id):undefined);
     const selected=selectedPage?plan.addresses.get(selectedPage):undefined;
     if(onMarkers)pageTargets.update(selected??plan.latest,selected?selectedPage:undefined);
-    if(!paused)schedule();
+    if(!paused||framing||input.active())schedule();
   }
   function applyLight(){
     world.setTime(time,valleyOrigin.x+shoreline(focusX)-15,camera.position.x,valleyOrigin.z-focusX,light,motionPreference.matches?0:time);
@@ -368,7 +366,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     construction=undefined;
     plan=next;focusX=next.latest?sitePoint(next.latest).x:0;
     loadedInlet=viewInlet??Math.floor((focusX+72)/144);
-    if(viewInlet!==undefined)focusX=valleyOrigin.z-orbit.target.z;
+    if(viewInlet!==undefined)focusX=valleyOrigin.z-target.z;
     const start=Math.max(next.start,(loadedInlet-1)*1800),end=Math.min(next.end,(loadedInlet+2)*1800);
     if(previous===next && viewInlet!==undefined && rangeKey===(start-900)/12.5+','+(end-900)/12.5){
       sailings(start,end);
@@ -496,16 +494,20 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     renderer.setSize(w,h,false);sea.resize(w*renderer.getPixelRatio(),h*renderer.getPixelRatio());atmosphere.resize(w,h);glows.material.uniforms.screen!.value=h*renderer.getPixelRatio()*1.9;camera.aspect=w/h;camera.updateProjectionMatrix();checkedEye.x=Infinity;if(!inspected)fit();schedule();
   }
   function visibility(){
-    if(document.hidden||skipped){cancelAnimationFrame(frame);frame=0;last=0;}else {clockCheck=-Infinity;schedule();}
+    if(document.hidden||skipped){input.reset();cancelAnimationFrame(frame);frame=0;last=0;}else {clockCheck=-Infinity;schedule();}
   }
   canvas.addEventListener('contentvisibilityautostatechange',e=>{skipped=(e as ContentVisibilityAutoStateChangeEvent).skipped;visibility();},options);
   document.addEventListener('visibilitychange',visibility,options);
   window.addEventListener('pageshow',visibility,options);
   const minuteTimer=window.setInterval(()=>{if(paused&&!document.hidden&&!skipped){clockCheck=-Infinity;schedule();}},60_000);
-  let press:{x:number;y:number;id:number}|undefined;
-  canvas.addEventListener('pointerdown',e=>{press=e.isPrimary&&e.button===0?{x:e.clientX,y:e.clientY,id:e.pointerId}:undefined;},options);
+  const input=valleyInput(canvas,camera,target,signals.signal,schedule,
+    ()=>{inspected=true;framing=undefined;},()=>{inspected=false;fit(true);},
+    (x,y)=>{
+      if(!onPage)return;
+      const found=pageTargets.pick(x,y);
+      if(found)onPage(selectedPage&&plan.addresses.get(selectedPage)===found?selectedPage:found.readableId??found.id);
+    });
   canvas.addEventListener('pointermove',e=>{
-    if(press && (e.pointerId!==press.id || Math.hypot(press.x-e.clientX,press.y-e.clientY)>5))press=undefined;
     if(!onPage||e.pointerType==='touch')return;
     pageTargets.hover(e.buttons?undefined:pageTargets.pick(e.clientX,e.clientY));if(paused)schedule();
   },options);
@@ -513,35 +515,12 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     if(e.relatedTarget instanceof Element && e.relatedTarget.closest('[data-page-marker]'))return;
     pageTargets.hover();if(paused)schedule();
   },options);
-  canvas.addEventListener('pointercancel',()=>{press=undefined;},options);
-  canvas.addEventListener('pointerup',e=>{
-    const start=press;press=undefined;
-    if(!onPage||!start||start.id!==e.pointerId||Math.hypot(start.x-e.clientX,start.y-e.clientY)>5)return;
-    const found=pageTargets.pick(e.clientX,e.clientY);
-    if(found)onPage(selectedPage&&plan.addresses.get(selectedPage)===found?selectedPage:found.readableId??found.id);
-  },options);
-  orbit.addEventListener('start',()=>{inspected=true;framing=undefined;});orbit.addEventListener('change',schedule);
-  canvas.addEventListener('keydown',e=>{
-    if(e.key==='ArrowLeft')orbit.rotateLeft(.13);else if(e.key==='ArrowRight')orbit.rotateLeft(-.13);
-    else if(e.key==='ArrowUp')orbit.rotateUp(.09);else if(e.key==='ArrowDown')orbit.rotateUp(-.09);
-    else if(e.key==='+'||e.key==='=')orbit.dollyIn(1/1.16);else if(e.key==='-')orbit.dollyOut(1/1.16);
-    else if(e.key==='Home'){inspected=false;fit();}else return;
-    framing=undefined;if(e.key!=='Home')inspected=true;orbit.update();e.preventDefault();schedule();
-  },options);
-  function setPainted(enabled:boolean) {
-    water.forceUpdate=true;
-    world.setPainted(enabled && !!shop.paint);
-    if (!shop.paint) return;
-    shop.paint.coverage.value = enabled ? 1 : 0;
-    dayFog.set(enabled ? '#66827f' : '#9d879b');
-    schedule();
-  }
-  setPainted(true);
+  world.setPainted(!!shop.paint);
   const observer=new ResizeObserver(resize);observer.observe(canvas);resize();
-  return {update,visit,hasPaint:!!shop.paint,setPainted,pause(value:boolean){paused=value;last=0;schedule();},destroy(){
+  return {update,visit,pause(value:boolean){paused=value;last=0;schedule();},destroy(){
     construction?.arrival.finish();
     meadow?.dispose();rooms.dispose();clearInterval(minuteTimer);
-    dead=true;cancelAnimationFrame(frame);observer.disconnect();signals.abort();orbit.dispose();releaseInstances(structures);releaseInstances(scenery);
+    dead=true;cancelAnimationFrame(frame);observer.disconnect();signals.abort();releaseInstances(structures);releaseInstances(scenery);
     for(const p of paths.children)if(p instanceof T.Mesh)p.geometry.dispose();
     for(const slot of fleet)releaseInstances(slot.boat);
     const hull=vessel.children[0];if(hull instanceof T.Mesh)hull.geometry.dispose();

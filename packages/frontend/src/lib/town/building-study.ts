@@ -137,12 +137,7 @@ export function openBuildingStudy(canvas: HTMLCanvasElement, model: 'tide-house'
   canvas.addEventListener('keydown', keydown);
   const observer = new ResizeObserver(frameModel);
   observer.observe(canvas);
-  return { setCount, turn, hasPaint: !!paint, setPainted(enabled: boolean) {
-    if (paint) {
-      paint.coverage.value = enabled ? 1 : 0;
-      draw();
-    }
-  }, dispose() {
+  return { setCount, turn, dispose() {
     observer.disconnect();
     controls.removeEventListener('change', draw);
     controls.dispose();

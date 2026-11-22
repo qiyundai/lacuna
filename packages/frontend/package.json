@@ -23,6 +23,7 @@
 		"wrangler": "^4.151.1"
 	},
 	"dependencies": {
+		"@oddbird/popover-polyfill": "^0.7.3",
 		"three": "^0.187.0"
 	}
 }

@@ -14,9 +14,10 @@
   async function leave(){walking=false;await tick();walkButton?.focus();}
 </script>
 <div class="welcome" class:menu={!walking}>
-  <Masthead><a href="/privacy">Privacy</a></Masthead>
+
   {#if walking}<JournalCity guest onExit={leave}/>
   {:else}
+    <Masthead floating><a href="/privacy">Privacy</a></Masthead>
     <main class="arrival">
       <section class="river-view" aria-label="The valley city">
       <CorridorFlight/>
@@ -35,10 +36,7 @@
   {/if}
 </div>
 <style>
-  .welcome{height:100%;display:grid;grid-template-rows:var(--mast-height) minmax(0,1fr)}
-  .welcome.menu{position:relative;display:block}
-  .menu :global(.masthead){position:absolute;inset:0 0 auto;z-index:2;color:#fff3d9;background:linear-gradient(#102520c9,transparent);border:0}
-  .menu :global(.signature span),.menu :global(.masthead nav a){color:#f3edd8}
+  .welcome{height:100%;position:relative}
   .menu .arrival{height:100%}
   .arrival{overflow:auto;color:#fff6db;background:#4f6759}.river-view{position:relative;isolation:isolate;min-height:100%;display:flex;align-items:safe end;padding:clamp(22px,6.5vw,110px) var(--gutter)}
   .river-view{padding-top:calc(var(--mast-height) + 55px)}

@@ -23,6 +23,9 @@ importers:
 
   packages/frontend:
     dependencies:
+      '@oddbird/popover-polyfill':
+        specifier: ^0.7.3
+        version: 0.7.3
       three:
         specifier: ^0.187.0
         version: 0.187.0
@@ -624,6 +627,9 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
+
+  '@oddbird/popover-polyfill@0.7.3':
+    resolution: {integrity: sha512-uOY7RLqS1M12u+EzZHQ8vPSh3NjwDlb4qwJ1WDzQ0inZ14+47Vv0NNs+1Lh4PtX1nLiiCbfJyIxPRHsgBTvhvg==}
 
   '@oxc-project/types@0.154.0':
     resolution: {integrity: sha512-KYOUGQFlLWR+s4QMV2Q9ko38TZm7EdO87Qm7rvZLqk/webse/cDjtyxKhg/47l0byCbs/k46LT8qc4PKjAikzA==}
@@ -1521,6 +1527,8 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@oddbird/popover-polyfill@0.7.3': {}
 
   '@oxc-project/types@0.154.0': {}
 

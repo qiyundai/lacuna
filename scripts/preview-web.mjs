@@ -21,7 +21,7 @@ const server = createServer(async (req, res) => {
     const info = await stat(path).catch(() => null);
     if (!info?.isFile()) path = resolve(directory, 'index.html');
     if (mediaTypes.has(extname(path))) return await serveMedia(req, res, path, info.size);
-    res.setHeader('Content-Type', ({ '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png':'image/png', '.glb':'model/gltf-binary', '.woff2': 'font/woff2' })[extname(path)] ?? 'application/octet-stream');
+    res.setHeader('Content-Type', ({ '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png':'image/png', '.ico':'image/x-icon', '.json':'application/json', '.glb':'model/gltf-binary', '.woff2': 'font/woff2' })[extname(path)] ?? 'application/octet-stream');
     res.end(req.method === 'HEAD' ? undefined : await readFile(path));
   } catch { res.writeHead(500); res.end('Preview unavailable'); }
 });

@@ -333,7 +333,7 @@ export async function startCompanion(options = {}) {
       info = await stat(file).catch(() => null);
       if (!info?.isFile()) { if (extname(url.pathname)) return json(res, { error: { code: 'NOT_FOUND', message: 'Not found' } }, 404); file = join(build, 'index.html'); }
       if (mediaTypes.has(extname(file))) return await serveMedia(req, res, file, info.size);
-      const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webp': 'image/webp', '.glb': 'model/gltf-binary', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
+      const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webp': 'image/webp', '.glb': 'model/gltf-binary', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2' };
       let data = await readFile(file);
       if (extname(file) === '.html') {
         data = Buffer.from(data.toString().replace('<head>', '<head><meta name="lacuna-companion" content="1">').replace(/<script\b/g, `<script nonce="${nonce}"`));

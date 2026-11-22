@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, tick, type Snippet } from 'svelte';
+  import Masthead from './Masthead.svelte';
   import ValleyLoading from './ValleyLoading.svelte';
   import { api, type EntryData } from '$lib/api.js';
   import { sessionVersion } from '$lib/session-version.js';
@@ -20,7 +21,7 @@
     pines:'The pine grove',glasshouse:'The glasshouse',station:'The station',civic:'The town hall',
     belfry:'The belfry',towers:'The towers',arches:'The arches',wharf:'The wharf',beacon:'The beacon'
   };
-  let {guest=false,afterglow=false,fixedHour,onExit,cityAudio,busy=$bindable(false)}:{guest?:boolean;afterglow?:boolean;fixedHour?:number;onExit?:()=>void;cityAudio?:Snippet;busy?:boolean}=$props();
+  let {guest=false,afterglow=false,fixedHour,onExit,navigation,draft=$bindable(''),draftId=$bindable(''),busy=$bindable(false)}:{guest?:boolean;afterglow?:boolean;fixedHour?:number;onExit?:()=>void;navigation?:Snippet;draft?:string;draftId?:string;busy?:boolean}=$props();
   const notes = [
     'The light was still on across the street.', 'Made tea before the alarm.', 'The morning train was nearly empty.',
     'I borrowed a blue bowl and forgot to give it back.', 'We walked home slowly.', 'There was a postcard in the mail.',
@@ -42,10 +43,10 @@
   let entries=$state.raw<EntryData[]>([]),scene=$state.raw<Awaited<ReturnType<typeof createHarbor>>|null>(null);
   let forgotten=$state.raw<ForgottenAddress[]>([]);
   let ready=$state(false),paused=$state(false),graphicsError=$state(false),error=$state(''),notice=$state('');
-  let painted=$state(true),readId=$state('');
+  let readId=$state('');
   let markers=$state.raw<PageMarker[]>([]),writingDate=$state(new Date());
   const valleyViews=['City','Overlook'] as const;
-  let panel=$state<'write'|'pages'|'read'|'forget'>('write'),draft=$state(''),draftId='',alive=false,reveal=false;
+  let panel=$state<'write'|'pages'|'read'|'forget'>('write'),alive=false,reveal=false;
   const ordered=$derived([...entries].sort((a,b)=>b.created_at-a.created_at||b.id.localeCompare(a.id)));
   const latest=$derived(ordered[0]);
   const seen = new WeakMap<EntryData, SceneCues>();
@@ -94,8 +95,12 @@
     if(!guest)window.addEventListener('lacuna:journal-changed',refreshCity);
     return ()=>{alive=false;preference.removeEventListener('change',sync);window.removeEventListener('lacuna:journal-changed',refreshCity);scene?.destroy();};
   });
+  $effect(()=>{
+    if(!notice)return;
+    const timer=setTimeout(()=>notice='',5500);
+    return ()=>clearTimeout(timer);
+  });
   $effect(()=>{scene?.pause(paused);});
-  $effect(()=>{scene?.setPainted(painted);});
   $effect(()=>{const current=scene;if(current){current.update(plan,reveal);reveal=false;}});
   async function open(which:typeof panel){
     if(busy)return;
@@ -155,35 +160,27 @@
     {/each}
   {/if}
   {#if opening}<ValleyLoading label={ready?'Opening the valley…':'Opening your journal…'} onExit={guest?onExit:undefined}/>{/if}
-  <div class="upper" inert={opening}>
-    <div class="city-label"><div class="scope">{guest?'Example city':'Your city'}</div>
-      {#if cityAudio}<div class="city-audio">{@render cityAudio()}</div>{/if}
-    </div>
-    <div class="tools">
-      {#if guest}<button onclick={onExit}>Leave visit</button>{/if}
+  <h1 class="sr-only" tabindex="-1">{guest?'Example city':'Your city'}</h1>
+  {#if !opening}
+    <Masthead floating disabled={busy}>
+      {#snippet heading()}<p class="city-summary">{guest?'Example city':'Your city'} · {entries.length} {entries.length===1?'page':'pages'}{#if latest}<small>Last written {date.format(latest.created_at*1000)}</small>{/if}</p>{/snippet}
       <button onclick={()=>open('pages')} disabled={!ready}>Pages</button>
-      {#if scene?.hasPaint}<button class="finish" aria-pressed={painted} onclick={()=>painted=!painted}>Gouache</button>{/if}
-      <button class="motion" aria-label={paused?'Resume ambient motion':'Pause ambient motion'} onclick={()=>paused=!paused}>{paused?'▷':'Ⅱ'}</button>
-    </div>
-  </div>
-  <div class="bottom" inert={opening}>
-    <div>
-      <p class="status" role="status">{error||(!ready?'Opening your journal…':graphicsError?'City view unavailable. Your journal is open.':!scene?'Opening the valley…':notice)}</p>
       {#if scene}
-        <nav class="viewpoints" aria-label="Valley viewpoints">
-          {#each valleyViews as view}<button onclick={()=>scene?.visit(view)}>{view}</button>{/each}
-        </nav>
+        {#each valleyViews as view}<button onclick={()=>scene?.visit(view)}>{view==='City'?'City view':view}</button>{/each}
+        <button onclick={()=>paused=!paused}>{paused?'Resume ambient motion':'Pause ambient motion'}</button>
       {/if}
-      <h1>{plan.sites.length?'The valley city':'An unwritten valley'}</h1>
-      {#if latest}<p class="detail">{entries.length} {entries.length===1?'page':'pages'} <span>·</span> Last written {date.format(latest.created_at*1000)}</p>
-      {:else if ready}<p class="detail">{forgotten.length?'No pages left to read.':'Your first page begins the city.'}</p>{/if}
+      {@render navigation?.()}
+      {#if guest}<a href="/privacy">Privacy</a><button onclick={onExit}>Leave visit</button>{/if}
+    </Masthead>
+    <div class="bottom">
+      <p class="status" role="status">{error||(graphicsError?'City view unavailable. Your journal is open.':notice||(!entries.length&&ready?(forgotten.length?'No pages left to read.':'Your first page begins the city.') :''))}</p>
+      <div class="actions">
+        {#if graphicsError}<button onclick={graphics}>Retry city</button>{/if}
+        {#if !ready&&error}<button onclick={read}>Retry journal</button>{/if}
+        <button class="write" disabled={!ready||busy} onclick={()=>open('write')}>{draft?'Return to draft':'Write a page'} <span aria-hidden="true">↗</span></button>
+      </div>
     </div>
-    <div class="actions">
-      {#if graphicsError}<button onclick={graphics}>Retry city</button>{/if}
-      {#if !ready&&error}<button onclick={read}>Retry journal</button>{/if}
-      <button class="write" disabled={!ready||busy} onclick={()=>open('write')}>{draft?'Return to draft':'Write a page'} <span aria-hidden="true">↗</span></button>
-    </div>
-  </div>
+  {/if}
   <dialog bind:this={dialog} aria-labelledby="journal-heading" oncancel={e=>{if(busy)e.preventDefault();}}
     onclose={()=>{if(document.activeElement===document.body)canvas.focus({preventScroll:true});}}>
     <div class="folio" class:reading={panel==='read'||panel==='forget'}>
@@ -256,22 +253,14 @@
 <style>
   .coast{position:relative;height:100%;min-height:0;overflow:hidden;color:#fff4e8;background:linear-gradient(#8c8395,#3d5466)}
   canvas{content-visibility:auto;contain-intrinsic-size:auto 700px;width:100%;height:100%;display:block;touch-action:none;cursor:grab}canvas:active{cursor:grabbing}
-  .upper,.bottom{position:absolute;inset-inline:0;display:flex;align-items:center;justify-content:space-between;padding-inline:var(--gutter);pointer-events:none;gap:1rem}
-  .upper{top:clamp(.75rem,2.5vh,1.8rem)}.tools,.actions{display:flex;gap:.45rem;align-items:center}
+  .bottom{position:absolute;inset:auto var(--gutter) max(1rem,env(safe-area-inset-bottom));display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;pointer-events:none}
+  .actions{margin-left:auto;display:flex;gap:.4rem;pointer-events:auto}
   button{min-height:44px;cursor:pointer;font:500 .92rem/1.2 var(--font-ui)}
-  .upper button,.bottom button{pointer-events:auto;border-radius:3px;border:1px solid #ede4e179;background:#242833d9;color:#fff6e9;padding:.65rem 1rem}
-  .scope{font:500 .82rem var(--font-ui);letter-spacing:.05em;background:#282937bf;padding:.42rem .7rem;border-left:2px solid #ebc097}
-  .city-label{display:flex;align-items:center;gap:.4rem}
-  .city-audio{display:flex;pointer-events:auto;border-radius:50%;background:#242833d9}
-  .tools .finish[aria-pressed=true]{color:#243733;background:#e5d9bf;border-color:#e5d9bf}
-  @media(max-width:520px){.upper{align-items:flex-start;flex-wrap:wrap}.tools{flex-wrap:wrap;justify-content:flex-end}}
-  .tools .motion{width:44px;padding:0}.bottom{bottom:0;padding-block:3.6rem clamp(1.4rem,4vh,3rem);background:linear-gradient(transparent,#13232fee);align-items:flex-end}
-  h1,h2{font:400 clamp(2.25rem,4vw,4.3rem)/1 var(--font-reading);margin:0;letter-spacing:-.055em}
-  .status,.detail{margin:.55rem 0 0;color:#f2e5d7;font:.94rem/1.4 var(--font-ui)}.status{margin:0 0 .4rem}.status:empty{display:none}.detail span{margin:0 .35rem}
-  .actions .write,.ink{background:#f5eadb;color:#202b36;border:1px solid #f5eadb;padding:.8rem 1.15rem}.write span{margin-left:1rem}
-  .viewpoints{display:flex;align-items:center;gap:.15rem;width:fit-content;margin-bottom:.65rem;pointer-events:auto}
-  .bottom .viewpoints button{border:0;border-bottom:1px solid #f4e5cf80;border-radius:0;background:#172d30c4;font-size:.78rem;padding:.48rem .76rem;min-height:44px}
-  .bottom .viewpoints button:hover,.bottom .viewpoints button:focus-visible{background:#354e50}
+  .actions button{border-radius:4px;border:1px solid #dacdb1;background:#f5eadb;color:#233b31;padding:.75rem 1rem;box-shadow:0 2px 9px #142f2b40}
+  .write{white-space:nowrap}.write span{margin-left:.75rem}
+  .status{margin:0;background:#1d3730eb;color:#fff5df;padding:.6rem .8rem;border-radius:3px;font:.9rem/1.4 var(--font-ui)}.status:empty{display:none}
+  .city-summary{margin:.65rem .35rem;font:500 1.25rem var(--font-reading)}
+  .city-summary small{display:block;color:#56695b;font:.78rem/1.5 var(--font-ui)}
   .page-marker{position:absolute;transform:translate(-50%,-100%);height:49px;min-width:44px;padding:0 3px 13px;display:grid;place-items:center;background:transparent;border:0;color:#fff8df}
   .page-marker::after{content:'';position:absolute;bottom:0;height:13px;width:1px;background:#fff5cf;box-shadow:0 1px 2px #203a32}
   .marker-face{display:flex;align-items:center;gap:6px;border:1px solid #e9d69c;border-radius:20px;background:#1d3834f2;box-shadow:0 2px 7px #10272680;padding:7px}
@@ -324,7 +313,7 @@
   textarea:focus-visible{outline:0;box-shadow:inset 2px 0 #8f9d77;padding-left:.65rem}
   @media(prefers-reduced-motion:no-preference){dialog[open]{animation:unfold .22s ease-out}@keyframes unfold{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}}
   @media(max-width:600px){
-    .bottom{flex-wrap:wrap}.upper{gap:.4rem}.upper button{padding:.5rem .65rem}.scope{font-size:.73rem}.tools{gap:.2rem}.detail{font-size:.81rem}
+    .bottom{flex-wrap:wrap}
     dialog{max-height:92dvh}.folio{display:flex;flex-direction:column;min-height:0}.cover{min-height:5rem;background-position:center 55%}
     .imprint,.reading .imprint{padding:.65rem 1.3rem}.imprint strong{font-size:1.7rem}
     .reading .cover{flex-direction:row-reverse;justify-content:space-between;align-items:center}

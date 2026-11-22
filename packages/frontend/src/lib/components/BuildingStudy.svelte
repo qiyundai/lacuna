@@ -9,7 +9,6 @@
   let canvas: HTMLCanvasElement;
   let count = $state(4);
   let study = $state.raw<ReturnType<typeof openBuildingStudy>>();
-  let painted = $state(true);
   let failed = $state(false);
   onMount(() => {
     count = hall ? 5 : 4;
@@ -25,7 +24,6 @@
     return () => { closed = true; study?.dispose(); };
   });
   $effect(() => { study?.setCount(count); });
-  $effect(() => { study?.setPainted(painted); });
 </script>
 
 <svelte:head><title>{title} · Lacuna</title></svelte:head>
@@ -40,7 +38,6 @@
   </div>
   <footer>
     <div class="floors"><label for="count">{hall ? 'Bays' : 'Floors'}</label><input id="count" type="range" min={hall ? 3 : 1} max={hall ? 9 : 18} step={hall ? 2 : 1} bind:value={count} disabled={!study}/><output for="count">{count}</output></div>
-    {#if study?.hasPaint}<label class="finish"><input type="checkbox" bind:checked={painted}/> Gouache</label>{/if}
     <div class="turn"><button aria-label="Turn left one quarter" onclick={() => study?.turn(Math.PI / 2)} disabled={!study}>↶</button><button aria-label="Turn right one quarter" onclick={() => study?.turn(-Math.PI / 2)} disabled={!study}>↷</button></div>
   </footer>
 </main>
@@ -56,7 +53,6 @@
   p{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);padding:4px 10px;text-align:center;background:#253d3c;color:#f2e9d8;font-size:.85rem}
   footer{border-top:1px solid #d5d6c42e}
   .floors,.turn{display:flex;align-items:center;gap:clamp(.45rem,1.7vw,1.3rem)}
-  .finish{display:inline-flex;align-items:center;gap:7px;min-height:44px;cursor:pointer}.finish input{accent-color:#e6c799}
   input[type=range]{width:clamp(80px,18vw,230px);height:44px;accent-color:#e6c799}output{min-width:2ch;font-variant-numeric:tabular-nums}
   .turn{gap:4px}button{background:transparent;color:inherit;border:1px solid #b7c0b77d;border-radius:3px;min-width:44px;height:44px;cursor:pointer;font:1.45rem var(--font-ui)}
   @media(max-width:420px){footer{gap:5px;padding-inline:9px}.floors{gap:4px}.turn{gap:2px}}

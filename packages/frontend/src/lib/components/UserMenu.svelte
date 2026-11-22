@@ -39,10 +39,7 @@
     return () => { mounted = false; };
   });
 
-  function toggle() {
-    open = !open;
-    if (!open) confirming = false;
-  }
+  export function showSettings(){ open = true; }
 
   function close() {
     open = false;
@@ -92,13 +89,6 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<button
-  class="trigger"
-  onclick={toggle}
-  aria-label="Menu"
-  aria-expanded={open}
->Menu</button>
-
 {#if open}
   <div
     use:modal={{ dismiss: close }}
@@ -107,7 +97,7 @@
     role="dialog"
     tabindex="-1"
     aria-modal="true"
-    aria-label="Menu"
+    aria-label="Journal settings"
     onclick={(e) => { if (e.target === e.currentTarget) close(); }}
     onkeydown={(e) => { if (e.key === 'Escape') close(); }}
   >

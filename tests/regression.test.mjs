@@ -1568,6 +1568,52 @@ test('woodland floor shade stays at its planted position as the camera crosses t
   }finally{floor.dispose();}
 });
 
+test('valley gestures accumulate per frame and a two-finger gesture cannot open a page',async()=>{
+  const T=await import('three');
+  const {valleyInput}=await import('../packages/frontend/src/lib/town/valley-input.ts');
+  const canvas=Object.assign(new EventTarget(),{clientHeight:800,focus(){},setPointerCapture(){},ownerDocument:{defaultView:new EventTarget()}});
+  const camera=new T.PerspectiveCamera(47),target=new T.Vector3(),events=new AbortController();
+  camera.position.set(10,8,30);
+  let picks=0,homes=0;
+  const input=valleyInput(canvas,camera,target,events.signal,()=>{},()=>{},()=>homes++,()=>picks++);
+  const step=()=>input.step(performance.now());
+  function send(type,props){
+    canvas.dispatchEvent(Object.assign(new Event(type,{cancelable:true}),props));
+  }
+  function pointer(type,id,x,y){
+    send('pointer'+type,{pointerId:id,pointerType:'touch',button:0,clientX:x,clientY:y});
+  }
+  const start=camera.position.clone();
+  pointer('down',1,100,100);pointer('move',1,101,100);pointer('up',1,101,100);
+  step();assert.equal(picks,1);assert.ok(camera.position.equals(start));
+  pointer('down',1,100,100);pointer('move',1,106,100);
+  assert.ok(camera.position.equals(start));
+  step();assert.ok(camera.position.distanceTo(start)>0 && camera.position.distanceTo(start)<.2);
+  const radius=camera.position.distanceTo(target),beforePinch=camera.position.clone();
+  pointer('down',2,200,100);step();assert.ok(camera.position.equals(beforePinch));
+  pointer('move',2,201,100);step();
+  assert.ok(camera.position.distanceTo(target)<radius);
+  assert.ok(target.length()>0);
+  pointer('up',2,201,100);
+  const lifted=camera.position.clone();
+  pointer('move',1,106,100);pointer('up',1,106,100);step();
+  assert.ok(camera.position.equals(lifted));assert.equal(picks,1);assert.ok(!input.active());
+  send('wheel',{deltaY:.5,deltaMode:0});step();
+  assert.ok(camera.position.distanceTo(lifted)>0 && camera.position.distanceTo(lifted)<.1);
+  const beforeWheel=camera.position.clone();
+  send('wheel',{deltaY:100,deltaMode:0});
+  const wheelStart=performance.now();
+  input.step(wheelStart+16);
+  const firstWheelFrame=camera.position.distanceTo(beforeWheel);assert.ok(firstWheelFrame>0 && input.active());
+  input.step(wheelStart+90);
+  assert.ok(camera.position.distanceTo(beforeWheel)>firstWheelFrame*2 && !input.active());
+  send('keydown',{key:'+'});send('keyup',{key:'='});step();assert.ok(!input.active());
+  send('keydown',{key:'ArrowLeft'});step();assert.ok(input.active());
+  send('blur',{});assert.ok(!input.active());
+  send('keydown',{key:'Home'});assert.equal(homes,1);
+  events.abort();
+});
+
 test('valley orbit stays inside the forest and clears the graded slopes on its way to the eye',async()=>{
   const T=await import('three');
   const {constrainValleyView,valleyZoomLimit}=await import('../packages/frontend/src/lib/town/valley-camera.ts');
