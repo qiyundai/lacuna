@@ -1,3 +1,5 @@
+import {windowShafts,type RoomSource} from './room-light.js';
+import type {CityLight} from './city-clock.js';
 import * as T from 'three';
 import type { createLowCloud } from './low-cloud.js';
 import {sunbreak} from './sunbreak.js';
@@ -14,11 +16,12 @@ const screenVertex=`
 `;
 
 export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camera:T.PerspectiveCamera,
-  sun:T.DirectionalLight,direction:T.Vector3,mist:ReturnType<typeof createLowCloud>,afterglow=false){
+  sun:T.DirectionalLight,direction:T.Vector3,mist:ReturnType<typeof createLowCloud>,afterglow:boolean,daylight:T.IUniform<number>){
   const hdr=renderer.extensions.has('EXT_color_buffer_float');
   const targetType=hdr?T.HalfFloatType:T.UnsignedByteType;
   const beauty=new T.WebGLRenderTarget(1,1,{type:targetType,samples:Math.min(2,renderer.capabilities.maxSamples)});
   beauty.depthTexture=new T.DepthTexture(1,1,T.UnsignedIntType);
+  const windows=windowShafts(beauty.depthTexture,camera);
   const air=new T.WebGLRenderTarget(1,1,{type:targetType,depthBuffer:false});
   const vapor=new T.WebGLRenderTarget(1,1,{type:targetType,depthBuffer:false});
   const clearColor=new T.Color();
@@ -27,7 +30,7 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
   const pollen=afterglow?createSunlitPollen(direction,sun.shadow.matrix):null;
   if(pollen)scene.add(pollen.points);
   const uniforms={
-    geometryDepth:{value:beauty.depthTexture},shadowDepth:{value:null as T.DepthTexture|null},
+    daylight,geometryDepth:{value:beauty.depthTexture},shadowDepth:{value:null as T.DepthTexture|null},
     invProjection:{value:camera.projectionMatrixInverse},eyeFrame:{value:camera.matrixWorld},
     shadowFrame:{value:sun.shadow.matrix},sunDir:{value:direction},eye:{value:eye},seconds:{value:0}
   };
@@ -37,9 +40,10 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
     uniform highp sampler2DShadow shadowDepth;
     uniform mat4 invProjection,eyeFrame,shadowFrame;
     uniform vec3 sunDir,eye;
-    uniform float seconds;
+    uniform float seconds,daylight;
     ${afterglow?sunbreak:''}
     void main(){
+      if(daylight<.001){gl_FragColor=vec4(0.,0.,0.,1.);return;}
       float z=texture2D(geometryDepth,screenUv).r;
       vec4 endpoint=invProjection*vec4(screenUv*2.-1.,z*2.-1.,1.);
       vec3 sight=mat3(eyeFrame)*(endpoint.xyz/endpoint.w);
@@ -64,17 +68,17 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
         light+=visibility*layer*gap*exp(-d*.009)*stepSize;`}
       }
       float phase=.34+2.45*pow(max(dot(ray,sunDir),0.),9.);
-      gl_FragColor=vec4(${afterglow?'vec3(1.,.83,.53)*light*.012*(.64+.48*phase)':'vec3(1.,.72,.45)*light*.00130*phase'},1.);
+      gl_FragColor=vec4(${afterglow?'vec3(1.,.83,.53)*light*.012*(.64+.48*phase)':'vec3(1.,.72,.45)*light*.00130*phase'}*daylight,1.);
     }`});
   const shafts=new FullScreenQuad(haze);
   const combine=new ShaderPass(new T.ShaderMaterial({
-    uniforms:{beauty:{value:beauty.texture},vapor:{value:vapor.texture},air:{value:air.texture},geometryDepth:{value:beauty.depthTexture},
+    uniforms:{daylight,beauty:{value:beauty.texture},vapor:{value:vapor.texture},air:{value:air.texture},geometryDepth:{value:beauty.depthTexture},
       sunUv:{value:sunUv},aspect:{value:1},seconds:uniforms.seconds,sunDir:uniforms.sunDir,invProjection:uniforms.invProjection,
       eyeFrame:uniforms.eyeFrame,shadowFrame:uniforms.shadowFrame,shadowDepth:uniforms.shadowDepth},depthTest:false,depthWrite:false,vertexShader:screenVertex,fragmentShader:`
       varying vec2 screenUv;
       uniform sampler2D beauty,air,geometryDepth,vapor;
       uniform vec3 sunUv;
-      uniform float aspect;
+      uniform float aspect,daylight;
       ${afterglow?`
       uniform mat4 invProjection,eyeFrame,shadowFrame;
       uniform highp sampler2DShadow shadowDepth;
@@ -90,7 +94,7 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
         float shade=1.;
         if(all(greaterThan(sc,vec3(0.)))&&all(lessThan(sc,vec3(1.)))) shade=texture(shadowDepth,vec3(sc.xy,sc.z-.0004));
         pool*=shade*(1.-smoothstep(45.,100.,p.y));
-        return color*(1.+pool*vec3(.24,.17,.07));
+        return color*(1.+pool*daylight*vec3(.24,.17,.07));
       }`:''}
       void main(){
         vec3 lit=texture2D(beauty,screenUv).rgb;
@@ -114,28 +118,32 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
         float teal=length((screen+axis*.78)*aspectScale);
         vec3 flare=vec3(1.,.52,.22)*(.20*exp(-source*15.)+.033*(1.-smoothstep(.038,.054,amber)));
         flare+=vec3(.38,.84,.77)*(.028*exp(-pow(abs(teal-.074)/.014,2.))+.018*exp(-teal*17.));
-        gl_FragColor=vec4(lit+flare*visibility,1.);
+        gl_FragColor=vec4(lit+flare*visibility*daylight,1.);
       }`}));
   const composer=new EffectComposer(renderer,hdr?undefined:new T.WebGLRenderTarget(1,1,{type:targetType}));
   const bloom=new UnrealBloomPass(new T.Vector2(1,1),afterglow ? .36 : .23,.48,afterglow ? 1.24 : 1.12),output=new ShaderPass(worldGradeMaterial());
   composer.addPass(combine);if(hdr)composer.addPass(bloom);composer.addPass(output);
   return {
+    invalidateRooms:windows.invalidate,
     resize(w:number,h:number){
       const dpr=renderer.getPixelRatio();
       if(pollen)pollen.uniforms.pixelRatio.value=dpr;
       beauty.setSize(Math.round(w*dpr),Math.round(h*dpr));
-      air.setSize(Math.max(1,Math.round(w*dpr*.42)),Math.max(1,Math.round(h*dpr*.42)));
+      air.setSize(Math.max(1,Math.round(w*dpr*.36)),Math.max(1,Math.round(h*dpr*.36)));
+      windows.screen.set(air.width,air.height);
+      windows.invalidate();
       mist.screen.set(Math.max(1,Math.round(w*dpr*.55)),Math.max(1,Math.round(h*dpr*.55)));
       vapor.setSize(mist.screen.x,mist.screen.y);
       combine.uniforms.aspect!.value=w/h;
       composer.setSize(w,h);
     },
-    render(seconds:number){
+    render(seconds:number,sources:RoomSource[],light:CityLight,skip?:number){
+      output.uniforms.daylight!.value=light.daylight;
       uniforms.seconds.value=seconds;
       if(pollen){
         pollen.uniforms.seconds.value=seconds;
         pollen.uniforms.shadowDepth.value=sun.shadow.map?.depthTexture??null;
-        pollen.points.visible=Boolean(pollen.uniforms.shadowDepth.value);
+        pollen.points.visible=daylight.value>.25 && Boolean(pollen.uniforms.shadowDepth.value);
       }
       renderer.setRenderTarget(beauty);renderer.render(scene,camera);
       const clearAlpha=renderer.getClearAlpha();
@@ -147,12 +155,12 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
       const facing=sunUv.z<1;
       sunUv.set(sunUv.x*.5+.5,sunUv.y*.5+.5,Number(facing));
       uniforms.shadowDepth.value=sun.shadow.map?.depthTexture??null;
-      renderer.setRenderTarget(air);shafts.render(renderer);
+      renderer.setRenderTarget(air);shafts.render(renderer);windows.render(renderer,sources,light,seconds,skip);
       renderer.setRenderTarget(null);composer.render();
     },
     dispose(){
       if(pollen){scene.remove(pollen.points);pollen.dispose();}
-      beauty.dispose();vapor.dispose();air.dispose();shafts.dispose();haze.dispose();combine.dispose();bloom.dispose();output.dispose();composer.dispose();
+      windows.dispose();beauty.dispose();vapor.dispose();air.dispose();shafts.dispose();haze.dispose();combine.dispose();bloom.dispose();output.dispose();composer.dispose();
     }
   };
 }

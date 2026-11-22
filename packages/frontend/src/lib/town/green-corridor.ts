@@ -80,11 +80,11 @@ function corridorFloor(near:number,far:number,extent:number,cityEnd:number){
   return {geometry:g,height,gradeTown};
 }
 
-function wallMaterial(moss:T.Texture,normals:T.Texture,woods:T.Texture,driftTime:{value:number},sunDirection:T.Vector3){
-  const material=new T.ShaderMaterial({uniforms:{driftTime,sunDirection:{value:sunDirection},moss:{value:moss},relief:{value:normals},woods:{value:woods}},vertexShader:`
+function wallMaterial(moss:T.Texture,normals:T.Texture,woods:T.Texture,driftTime:{value:number},lighting:ValleyLighting){
+  const material=new T.ShaderMaterial({uniforms:{driftTime,sunDirection:{value:lighting.direction},skyColor:{value:lighting.sky},moss:{value:moss},relief:{value:normals},woods:{value:woods}},vertexShader:`
     varying vec3 p;varying vec3 surfaceNormal;
     void main(){p=(modelMatrix*vec4(position,1.)).xyz;surfaceNormal=normal;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-    fragmentShader:`uniform sampler2D moss,relief,woods;uniform vec3 sunDirection;varying vec3 p,surfaceNormal;${corridorShadow}
+    fragmentShader:`uniform sampler2D moss,relief,woods;uniform vec3 sunDirection,skyColor;varying vec3 p,surfaceNormal;${corridorShadow}
       void main(){
         vec3 n=normalize(surfaceNormal);
         vec3 w=pow(abs(n),vec3(8.));w/=dot(w,vec3(1.));
@@ -112,7 +112,7 @@ function wallMaterial(moss:T.Texture,normals:T.Texture,woods:T.Texture,driftTime
         float depth=length(cameraPosition-p);
         float air=1.-exp(-depth*.000087);
         color=mix(color,vec3(.135,.220,.241),air*.91);
-        gl_FragColor=vec4(color,1.);
+        gl_FragColor=vec4(color*min(vec3(1.),skyColor/vec3(.50,.59,.77)),1.);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`});return material;
@@ -161,18 +161,18 @@ export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighti
   ]);
   const eye=new T.Vector3();
   const driftTime={value:0};
-  const walls=wallMaterial(moss??heath,normal??heath,canopy??heath,driftTime,lighting.direction);
+  const walls=wallMaterial(moss??heath,normal??heath,canopy??heath,driftTime,lighting);
   const floor=new T.MeshLambertMaterial({map:heath,fog:false});
   if(grassFibres)floor.defines={...floor.defines,USE_GRASS_FIBRES:1};
   floor.onBeforeCompile=shader=>{
     shader.uniforms.grassFibres={value:grassFibres};
-    Object.assign(shader.uniforms,{driftTime,breezeTime:driftTime,forestEye:{value:eye},floorShade:{value:understory.texture},shadeLayout:{value:understory.layout}});
+    Object.assign(shader.uniforms,{skyColor:{value:lighting.sky},driftTime,breezeTime:driftTime,forestEye:{value:eye},floorShade:{value:understory.texture},shadeLayout:{value:understory.layout}});
     shader.vertexShader='attribute float woodland;uniform vec3 forestEye;varying vec3 floorPlace;varying float treeCover,floorDistance;\n'+shader.vertexShader.replace('#include <begin_vertex>',`
       #include <begin_vertex>
       floorPlace=position;
       floorDistance=distance(forestEye,position);
       treeCover=woodland;`);
-    shader.fragmentShader=corridorShadow+coastalBreeze+meadowPigment+'uniform sampler2D grassFibres,floorShade;uniform vec4 shadeLayout;varying vec3 floorPlace;varying float treeCover,floorDistance;\n'+shader.fragmentShader.replace('#include <map_fragment>',`
+    shader.fragmentShader=corridorShadow+coastalBreeze+meadowPigment+'uniform vec3 skyColor;uniform sampler2D grassFibres,floorShade;uniform vec4 shadeLayout;varying vec3 floorPlace;varying float treeCover,floorDistance;\n'+shader.fragmentShader.replace('#include <map_fragment>',`
       #ifdef USE_MAP
         vec2 land=floorPlace.xz;
         float gust=meadowWave(land,breezeTime);
@@ -207,7 +207,7 @@ export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighti
         float meadowEdge=smoothstep(.48,1.95,floorPlace.y+deposits*.68+(fibre-.5)*.64);
         diffuseColor.rgb=mix(shingle,diffuseColor.rgb,meadowEdge);
       #endif`)
-      .replace('#include <opaque_fragment>','outgoingLight=mix(outgoingLight*mix(vec3(.17,.27,.25),vec3(1.02,.95,.69),canopySunlight(floorPlace)),vec3(.135,.220,.241),(1.-exp(-floorDistance*.000087))*.97);\n#include <opaque_fragment>');
+      .replace('#include <opaque_fragment>','outgoingLight=mix(outgoingLight*mix(vec3(.17,.27,.25),vec3(1.02,.95,.69),canopySunlight(floorPlace)),vec3(.135,.220,.241)*min(vec3(1.),skyColor/vec3(.50,.59,.77)),(1.-exp(-floorDistance*.000087))*.97);\n#include <opaque_fragment>');
   };
   function add(g:T.BufferGeometry,material:T.Material){owned.push(g);const mesh=new T.Mesh(g,material);root.add(mesh);return mesh;}
   const west=add(wallGeometry(-1),walls),east=add(wallGeometry(1),walls);

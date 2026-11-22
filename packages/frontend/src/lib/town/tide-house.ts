@@ -8,8 +8,8 @@ const lobbyHeight = 2.32;
 const floorHeight = 1.54;
 const bayWidth = 1.52;
 
-export function createTideHouseKit(paint?: Gouache) {
-  const {module, boxShape, dispose} = createModelWorkshop(width, depth, paint);
+export function createTideHouseKit(paint?: Gouache,roomWindows=false) {
+  const {module, boxShape, dispose} = createModelWorkshop(width, depth, paint,roomWindows);
   function bays(side: number) {
     return side % 2 ? [-bayWidth / 2, bayWidth / 2] : [-bayWidth, 0, bayWidth];
   }
@@ -51,7 +51,7 @@ export function createTideHouseKit(paint?: Gouache) {
       p.rod('iron', p.vec(x, 1.52, .015), p.vec(sign * .67, 1.84, .56), .024);
       p.rod('gold', p.vec(x, 1.63, .02), p.vec(x, 1.63, .29), .026);
       p.box('iron', x, 1.59, .30, .17, .075, .18);
-      p.box('glow', x, 1.45, .30, .125, .22, .12);
+      p.box('lantern', x, 1.45, .30, .125, .22, .12);
       p.box('iron', x, 1.328, .30, .15, .045, .15);
     }
   }
@@ -156,7 +156,7 @@ export function createTideHouseKit(paint?: Gouache) {
         p.box('wood', x, .79, -.15, half * 2 + .045, 1.05, .07);
         const lit = (i + side * 2 + pattern) % 5;
         const pane = lit === 0 ? 'glow' : lit === 2 ? 'amber' : 'glass';
-        p.box(pane, x, .79, -.101, half * 2 - .083, .95, .022);
+        p.room(x,.79,0,()=>p.box(pane, x, .79, -.101, half * 2 - .083, .95, .022));
         p.box('iron', x, .79, -.068, .038, .99, .044);
         p.box('iron', x, .99, -.065, half * 2 - .03, .036, .044);
         for (const sign of [-1, 1]) {
@@ -165,7 +165,7 @@ export function createTideHouseKit(paint?: Gouache) {
         p.box('lintel', x, .272, .042, half * 2 + .22, .088, .21);
         p.box('stone', x, 1.321, .03, half * 2 + .19, .095, .16);
         if (wide) {
-          if (pattern % 2 === 0) oriel(p, pane);
+          if (pattern % 2 === 0) p.room(x,.79,0,()=>oriel(p, pane));
           else railing(p, x, .18, .70, .45);
         } else if (lit === 0) {
           p.box('stone', x - half * .64, .79, -.083, half * .39, .91, .02);

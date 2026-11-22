@@ -1,6 +1,7 @@
 import test from 'node:test';
 import './living-book.test.mjs';
 import './city-details.test.mjs';
+import './city-clock.test.mjs';
 import { journalDetails } from '../packages/frontend/src/lib/town/journal-details.ts';
 import { paintedCoast } from '../packages/frontend/src/lib/town/painted-coast.ts';
 import { emptyBook, nextBookTask, acceptBookResult } from '../packages/shared/living-book.ts';

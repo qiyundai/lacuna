@@ -24,6 +24,9 @@ export function siteHeading(site: Site, x: number) {
   const line=(station:number)=>bankPosition(station,site.bank,site.kind==='wharf'?0:laneDepth(station,site.lane));
   return (site.bank?Math.PI:0)-Math.atan(line(x + .5) - line(x - .5)) * .77 + (hashPage(site.id) % 15 - 7) * .014;
 }
+export function isWorkplace(kind:Site['kind']){
+  return ['market','warehouse','crane','station','civic','wharf','glasshouse','arches','belfry'].includes(kind);
+}
 export async function harborWorkshop(){
   const breezeTime={value:0};
   const textures=new T.TextureLoader();
@@ -170,12 +173,15 @@ export async function harborWorkshop(){
     const g=new T.Group(),seed=hashPage(s.id),w=s.width/16.5;
     const pos=sitePoint(s);g.position.copy(pos);
     g.rotation.y=siteHeading(s,pos.x);
+    g.userData.addressSeed=seed;
+    g.userData.quiet=!!s.quiet;
+    g.userData.workplace=isWorkplace(s.kind);
     const k=s.kind;
     if(k==='towers'){
-      tideHouse ??= createTideHouseKit(paint);
+      tideHouse ??= createTideHouseKit(paint,true);
       g.add(tideHouse.build(7+seed%5+s.lights, seed % 5));
     }else if(k==='wharf'){
-      ferryHall ??= createFerryHallKit(paint);
+      ferryHall ??= createFerryHallKit(paint,true);
       g.add(s.ferryTerminal ? ferryHall.build(5) : ferryHall.buildLanding());
     }else if(k==='pines'){
       for(let i=0;i<6;i++)tree(g,Math.sin(i*2.4)*w*.33,0,Math.cos(i*2.4)*2,3.1+i%3,seed+i);
@@ -186,9 +192,11 @@ export async function harborWorkshop(){
       }
     }
     for(let i=0;i<(s.litAdditions??s.lights);i++)lantern(g,-w*.36+i*1.9,.1,2.5);
-    if(s.quiet)g.traverse(part=>{
-      if(part instanceof T.Mesh && (part.material instanceof T.MeshBasicMaterial || part.material===materials.lamp))
-        part.material=materials.iron;
+    g.traverse(part=>{
+      if(!(part instanceof T.Mesh))return;
+      if(part.material instanceof T.MeshBasicMaterial || part.material===materials.lamp)
+        part.material=s.quiet?materials.iron:materials.lamp;
+      else if(s.quiet && part.geometry.userData.glassFinish)part.material=materials.iron;
     });
     return g;
   }

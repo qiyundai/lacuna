@@ -87,7 +87,7 @@ function roofBay(p: ModelTools) {
     p.rod('iron', p.vec(0, 2.53, 0), p.vec(0, 2.87, sign * .76), .027);
   }
   p.rod('gold', p.vec(0, 2.53, 0), p.vec(0, 2.16, 0), .023);
-  p.orb('glow', 0, 2.07, 0, .13);
+  p.orb('lantern', 0, 2.07, 0, .13);
   p.box('copper', 0, 2.19, 0, .25, .048, .25);
 }
 
@@ -203,8 +203,8 @@ function endScreen(p: ModelTools) {
   });
 }
 
-export function createFerryHallKit(paint?: Gouache) {
-  const {module, dispose} = createModelWorkshop(bayWidth, arcadeDepth, paint);
+export function createFerryHallKit(paint?: Gouache,roomWindows=false) {
+  const {module, dispose} = createModelWorkshop(bayWidth, arcadeDepth, paint,roomWindows);
   const quay = module(platform);
   const bay = module(roofBay);
   const supports = module(p => {

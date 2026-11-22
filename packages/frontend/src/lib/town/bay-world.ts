@@ -2,6 +2,8 @@ import * as T from 'three';
 import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js';
 import { cloudDriftRate } from './corridor-light.js';
 
+import {lightAt, type CityLight} from './city-clock.js';
+
 const relief = new ImprovedNoise();
 const sectorWidth = 640;
 const horizonVertex = `
@@ -48,7 +50,27 @@ const skyFragment = `
   uniform sampler2D weather;
   uniform vec3 sunDirection;
   uniform float seconds;
-  uniform float gouache;
+  uniform float gouache,daylight,twilight,dawn,starTime,meteorAge;
+  uniform vec2 meteorStart;
+  float hashStar(vec2 p){
+    vec3 q=fract(vec3(p.xyx)*vec3(.1031,.1030,.0973));
+    q+=dot(q,q.yzx+33.33);
+    return fract((q.x+q.y)*q.z);
+  }
+  vec3 stars(vec2 sky,float density,float strength){
+    vec2 grid=sky*density, cell=floor(grid);
+    float seed=hashStar(cell);
+    vec2 center=.2+.6*vec2(hashStar(cell+9.),hashStar(cell-17.));
+    float d=length(fract(grid)-center);
+    float pixel=clamp(length(fwidth(grid))*.42,.016,.3);
+    float radius=mix(.022,.108,pow(seed,7.));
+    float sparkle=.83+.17*sin(starTime*(.35+seed*.85)+82.*seed);
+    float point=(1.-smoothstep(max(0.,radius-pixel),radius+pixel,d))*min(1.,radius*radius/(pixel*pixel));
+    vec2 offset=abs(fract(grid)-center);
+    float rays=exp(-min(offset.x,offset.y)/max(.015,pixel*.45)-max(offset.x,offset.y)*11.);
+    point+=smoothstep(.965,1.,seed)*rays*.62;
+    return mix(vec3(.59,.69,1.),vec3(1.,.84,.70),seed)*point*sparkle*strength*(.35+3.3*pow(seed,5.));
+  }
   float sampleCloud(vec2 p) {
     float curl = texture2D(weather, p * .48 + .31).r;
     return texture2D(weather, p + vec2(curl*.16, curl*.11)).r * .83 +
@@ -83,6 +105,28 @@ const skyFragment = `
     float silver=exp(-52.*abs(cloudEdge));
     float facet=clamp(.20+.46*silver+(sampleCloud(bankUv*2.-sunDirection.xz*.044)-billow)*3.3+.35*billow,0.,1.);
     vec3 bankPigment=mix(vec3(.30,.29,.43),mix(vec3(.91,.96,1.12),vec3(1.59,.88,.48),facing),facet);
+    vec3 duskTint=mix(vec3(.98,.48,.61),vec3(.88,.74,1.02),dawn);
+    sky*=mix(vec3(1.),duskTint,twilight);
+    if(daylight<.9999){
+      vec2 dome=dir.xz/(1.+max(dir.y,0.));
+      float dust=texture2D(weather,dome*2.2+vec2(.2,.7)).r;
+      float band=exp(-9.*abs(dot(dir,normalize(vec3(.37,.77,.51)))+.13));
+      vec3 velvet=mix(vec3(.063,.049,.107),vec3(.007,.009,.032),smoothstep(.0,.45,altitude));
+      velvet+=band*(.24+dust*dust*2.)*vec3(.036,.023,.068);
+      vec3 points=stars(dome,135.,.95)+stars(dome+4.3,51.,2.7);
+      if(meteorAge>=0.){
+        vec2 travel=normalize(vec2(-meteorStart.y,meteorStart.x))*.022+meteorStart*.17;
+        vec2 head=meteorStart+travel*meteorAge;
+        vec2 offset=dome-head;
+        float along=clamp(-dot(offset,travel)/dot(travel,travel),0.,.25);
+        float width=max(.00038,length(fwidth(dome))*.46);
+        points+=vec3(1.8,2.1,2.7)*exp(-length(offset+along*travel)/width)*(1.-along*4.)
+          *smoothstep(0.,.09,meteorAge)*(1.-smoothstep(.64,1.1,meteorAge));
+      }
+      velvet+=points*smoothstep(.002,.052,altitude)*(1.-smoothstep(.44,.78,veil)*.69);
+      sky=mix(velvet,sky,daylight);
+    }
+    bankPigment*=mix(vec3(.085,.080,.14),mix(vec3(1.),duskTint,twilight),daylight);
     sky=mix(sky,bankPigment,bankCover*.94);
     float transmission=1.;
     vec3 clouds=vec3(0.);
@@ -107,9 +151,9 @@ const skyFragment = `
       clouds+=transmission*opacity*pigment;
       transmission*=1.-opacity;
     }
-    sky=sky*transmission+clouds;
+    sky=sky*transmission+clouds*mix(vec3(.031,.030,.064),mix(vec3(1.),duskTint,twilight),daylight);
     float valleyMist=pow(abs(dir.z),18.)*(1.-smoothstep(.002,.065,abs(dir.y)));
-    sky=mix(sky,vec3(.15,.24,.25),valleyMist*.94);
+    sky=mix(sky,mix(vec3(.026,.032,.058),vec3(.15,.24,.25),daylight),valleyMist*.94);
     gl_FragColor = vec4(sky,1.);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -168,9 +212,10 @@ export type ValleyLighting = { direction:T.Vector3; direct:T.Color; sky:T.Color;
 export function createBayWorld(scene: T.Scene, throughCorridor=false) {
   const noise = cloudNoise();
   const sunDirection = new T.Vector3();
+  const daylight={value:1},twilight={value:0},meteorAge={value:-1},meteorStart=new T.Vector2();
   const skyMaterial = new T.ShaderMaterial({
     uniforms: {
-      weather: { value: noise },
+      weather: { value: noise },daylight,twilight,dawn:{value:0},meteorAge,meteorStart:{value:meteorStart},starTime:{value:0},
       sunDirection: { value: sunDirection },
       seconds: { value: 0 },
       gouache: { value: 1 }
@@ -188,16 +233,17 @@ export function createBayWorld(scene: T.Scene, throughCorridor=false) {
   const mountain = new T.MeshLambertMaterial({vertexColors:true,fog:false});
   mountain.onBeforeCompile = shader => {
     shader.uniforms.sunDirection = {value: sunDirection};
+    shader.uniforms.daylight=daylight;
     shader.uniforms.bayPigment = {value: noise};
     shader.vertexShader = 'varying float bayDistance; varying vec3 bayPosition;\n'+shader.vertexShader.replace('#include <project_vertex>',
       '#include <project_vertex>\n bayDistance = length(mvPosition.xyz); bayPosition = position;');
-    shader.fragmentShader = 'varying float bayDistance; varying vec3 bayPosition; uniform sampler2D bayPigment; uniform vec3 sunDirection;\n'+shader.fragmentShader.replace('#include <opaque_fragment>', `
+    shader.fragmentShader = 'varying float bayDistance; varying vec3 bayPosition; uniform sampler2D bayPigment; uniform float daylight; uniform vec3 sunDirection;\n'+shader.fragmentShader.replace('#include <opaque_fragment>', `
       vec2 slope = vec2(bayPosition.x*.007 + bayPosition.z*.004, bayPosition.z*.004 - bayPosition.y*.008);
       float pigment = texture2D(bayPigment,slope).r;
       float face = dot(normalize(cross(dFdx(bayPosition),dFdy(bayPosition))),sunDirection);
       outgoingLight *= .91 + .31*smoothstep(.21,.68,pigment) + .32*face;
       outgoingLight += vec3(.019,.013,.008)*smoothstep(.46,.76,pigment)*max(0.,face);
-      outgoingLight = mix(outgoingLight,vec3(.40,.404,.49),smoothstep(230.,1320.,bayDistance)*.81);
+      outgoingLight = mix(outgoingLight,mix(vec3(.028,.032,.063),vec3(.40,.404,.49),daylight),smoothstep(230.,1320.,bayDistance)*.81);
       #include <opaque_fragment>`);
   };
   const tiles = new Map<number,T.Mesh<T.BufferGeometry,T.MeshLambertMaterial>>();
@@ -213,7 +259,10 @@ export function createBayWorld(scene: T.Scene, throughCorridor=false) {
   sun.shadow.bias=-.00028;
   Object.assign(sun.shadow.camera,{left:-82,right:82,top:73,bottom:-73,near:1,far:270});
   scene.add(sky,range,sun,sun.target,ambient);
-  function setTime(seconds: number, focusX: number, cameraX: number, focusZ=0) {
+  const daySun=sun.color.clone(),nightSun=new T.Color('#9fb6ff'),duskSun=new T.Color('#ffa884');
+  const daySky=ambient.color.clone(),nightSky=new T.Color('#94a0cd'),duskSky=new T.Color('#eebed1');
+  const dayGround=ambient.groundColor.clone(),nightGround=new T.Color('#666280');
+  function setTime(seconds: number, focusX: number, cameraX: number, focusZ=0,light:CityLight=lightAt(12),starSeconds=seconds) {
     const sector = Math.floor(cameraX/sectorWidth);
     if (centerSector!==sector) {
       for (let i=sector-3;i<=sector+3;i++) {
@@ -230,18 +279,27 @@ export function createBayWorld(scene: T.Scene, throughCorridor=false) {
       }
       centerSector=sector;
     }
-    const phase = seconds * Math.PI / 720;
-    const bearing = throughCorridor ? -.026+.012*Math.sin(phase) : Math.PI+.072+.019*Math.sin(phase);
-    const elevation = (throughCorridor ? .52 : .83) + .09*Math.sin(phase*.5);
+    const bearing=(throughCorridor?-.026:Math.PI+.072)+light.bearingOffset*(throughCorridor?.28:.90);
+    const elevation = T.MathUtils.lerp(.63,.12+(throughCorridor?.40:.71)*light.solarHeight,light.daylight);
     sunDirection.set(Math.sin(bearing),elevation,-Math.cos(bearing)).normalize();
     skyMaterial.uniforms.seconds!.value=seconds*cloudDriftRate;
     sun.target.position.set(focusX,4,focusZ);
     sun.position.copy(sun.target.position).addScaledVector(sunDirection,112);
-    sun.intensity = 2.38 + elevation*.52;
+    daylight.value=light.daylight;
+    twilight.value=light.twilight;
+    skyMaterial.uniforms.dawn!.value=Number(light.phase==='dawn');
+    skyMaterial.uniforms.starTime!.value=starSeconds;
+    sun.color.copy(nightSun).lerp(daySun,light.daylight).lerp(duskSun,light.twilight*.80);
+    ambient.color.copy(nightSky).lerp(daySky,light.daylight).lerp(duskSky,light.twilight*.55);
+    ambient.groundColor.copy(nightGround).lerp(dayGround,light.daylight);
+    sun.intensity=T.MathUtils.lerp(.40,2.38+elevation*.52,light.daylight);
+    ambient.intensity=T.MathUtils.lerp(.52,.84,light.daylight);
+    lighting.sky.copy(ambient.color).multiplyScalar(ambient.intensity);
+    lighting.ground.copy(ambient.groundColor).multiplyScalar(ambient.intensity);
     lighting.direct.copy(sun.color).multiplyScalar(sun.intensity);
   }
   return {
-    sun, sunDirection, lighting,
+    sun, sunDirection, lighting, daylight,meteorAge,meteorStart,
     setTime,
     setPainted(enabled: boolean) {
       skyMaterial.uniforms.gouache!.value = Number(enabled);

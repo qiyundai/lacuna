@@ -6,7 +6,7 @@ import { finishBuilding } from './surface-relief.js';
 export const colors = {
   stone: '#c4a78a', lintel: '#dfcbb0', shade: '#9a7969', plaster: '#bd8162',
   copper: '#487c77', seam: '#78a19a', gold: '#b29461',
-  iron: '#3e5457', glass: '#50666c', seaGlass: '#8da9a7', amber: '#d59b56', glow: '#f2c88a',
+  iron: '#3e5457', glass: '#50666c', seaGlass: '#8da9a7', amber: '#d59b56', glow: '#f2c88a', lantern: '#f2c88a',
   wood: '#674b3c', recess: '#363a39', slate: '#505b5a', clay: '#a96450',
   ochre: '#cd9d66', sage: '#93a797', chalk: '#d5c1a6', oxblood: '#97594e',
   foliage: '#526d55', zinc: '#6d8390', verdigris: '#92aba0', crystal: '#b3d4c9'
@@ -17,9 +17,16 @@ const surfaceKinds: Partial<Record<Pigment, number>> = {
   plaster:1, ochre:1, sage:1, chalk:1, oxblood:1, stone:2, shade:2, lintel:2, slate:3, clay:3
 };
 
-function sculpt(width: number, depth: number, boxShape: T.BufferGeometry, rodShape: T.BufferGeometry, sphere: T.BufferGeometry) {
+function sculpt(width: number, depth: number, boxShape: T.BufferGeometry, rodShape: T.BufferGeometry, sphere: T.BufferGeometry, roomWindows:boolean) {
   const batches: Record<Finish, T.BufferGeometry[]> = { mineral: [], metal: [], glazing: [], crystal: [], light: [] };
   let frame = new T.Matrix4();
+  let roomAnchor:T.Vector3|undefined;
+  function room(x:number,y:number,z:number,draw:()=>void){
+    const previous=roomAnchor;
+    roomAnchor=new T.Vector3(x,y,z).applyMatrix4(frame);
+    draw();
+    roomAnchor=previous;
+  }
   const markers: T.Object3D[] = [];
   function mark(name: string, x: number, y: number, z: number, heading = 0) {
     const marker = new T.Object3D();
@@ -35,11 +42,12 @@ function sculpt(width: number, depth: number, boxShape: T.BufferGeometry, rodSha
   function place(shape: T.BufferGeometry, color: Pigment, transform: T.Matrix4) {
     const geometry = shape.clone().applyMatrix4(transform.premultiply(frame));
     geometry.deleteAttribute('uv');
-    const tint = new T.Color(colors[color]);
+    const warmPane=color==='amber'||color==='glow';
+    const tint = new T.Color(colors[roomWindows&&warmPane?'seaGlass':color]);
     const rgb = new Float32Array(geometry.getAttribute('position').count * 3);
     const positions = shape.getAttribute('position');
     const glazing = color === 'glass' || color === 'seaGlass';
-    const pane = glazing || color === 'amber' || color === 'glow';
+    const pane = glazing || warmPane;
     for (let i = 0; i < positions.count; i++) {
       const lift = pane ? 1 - .32 * (positions.getY(i) + .5) + .12 * positions.getX(i) : 1;
       rgb[i * 3] = tint.r * lift;
@@ -47,8 +55,20 @@ function sculpt(width: number, depth: number, boxShape: T.BufferGeometry, rodSha
       rgb[i * 3 + 2] = tint.b * lift;
     }
     geometry.setAttribute('color', new T.BufferAttribute(rgb, 3));
-    const finish = color === 'glow' || color === 'amber' ? 'light'
-      : glazing ? 'glazing' : color === 'crystal' ? 'crystal' : ['copper', 'seam', 'gold', 'iron'].includes(color) ? 'metal' : 'mineral';
+    const finish = color === 'lantern' || (!roomWindows&&warmPane) ? 'light'
+      : pane ? 'glazing' : color === 'crystal' ? 'crystal' : ['copper', 'seam', 'gold', 'iron'].includes(color) ? 'metal' : 'mineral';
+    if(roomWindows&&(finish==='glazing'||finish==='crystal')){
+      geometry.computeBoundingBox();
+      const center=geometry.boundingBox!.getCenter(new T.Vector3());
+      const anchor=roomAnchor??center;
+      const key=finish==='crystal'?0:Math.round(anchor.x*8)*17+Math.round(anchor.z*8)*67+Math.round(anchor.y*8)*43;
+      const threshold=((Math.imul(key,2654435761)>>>0)/4294967296);
+      geometry.setAttribute('roomThreshold',new T.Float32BufferAttribute(new Float32Array(positions.count).fill(threshold),1));
+      const size=geometry.boundingBox!.getSize(new T.Vector3());
+      const axis=size.x<size.z?'x':'z';
+      const normal=new T.Vector3();normal[axis]=Math.sign(center[axis])||1;
+      geometry.userData.emitter={center,normal,threshold};
+    }
     if(finish==='mineral') geometry.setAttribute('surfaceKind',new T.BufferAttribute(new Float32Array(positions.count).fill(surfaceKinds[color]??0),1));
     batches[finish].push(geometry);
   }
@@ -76,12 +96,12 @@ function sculpt(width: number, depth: number, boxShape: T.BufferGeometry, rodSha
     fn();
     frame = previous;
   }
-  return { batches, markers, mark, entrance, vec, box, rod, orb, relief, face, place };
+  return { batches, markers, room, mark, entrance, vec, box, rod, orb, relief, face, place };
 }
 
 export type ModelTools = ReturnType<typeof sculpt>;
 
-export function createModelWorkshop(width: number, depth: number, paint?: Gouache) {
+export function createModelWorkshop(width: number, depth: number, paint?: Gouache,roomWindows=true) {
   const finishes = {
     mineral: new T.MeshStandardMaterial({ vertexColors: true, roughness: .84 }),
     metal: new T.MeshStandardMaterial({ vertexColors: true, metalness: .38, roughness: .54 }),
@@ -100,12 +120,16 @@ export function createModelWorkshop(width: number, depth: number, paint?: Gouach
   const meshes: T.BufferGeometry[] = [];
 
   function module(build: (parts: ReturnType<typeof sculpt>) => void) {
-    const parts = sculpt(width, depth, boxShape, rodShape, sphere);
+    const parts = sculpt(width, depth, boxShape, rodShape, sphere,roomWindows);
     build(parts);
     const group = new T.Group();
     for (const [finish, pieces] of Object.entries(parts.batches)) {
       if (!pieces.length) continue;
       const geometry = mergeGeometries(pieces)!;
+      if(roomWindows&&(finish==='glazing'||finish==='crystal')){
+        geometry.userData.emitters=pieces.map(piece=>piece.userData.emitter);
+        geometry.userData.glassFinish=finish;
+      }
       pieces.forEach(piece => piece.dispose());
       meshes.push(geometry);
       const mesh = new T.Mesh(geometry, finishes[finish as Finish]);

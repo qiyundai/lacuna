@@ -1,3 +1,5 @@
+import {lightAt,localHour,meteorClock} from './city-clock.js';
+import {floorSeed,roomLighting,type WindowEmitter} from './room-light.js';
 import { batchPlantings } from './tree-batches.js';
 import type { WoodlandTree } from './woodland-boughs.js';
 import { groveCell } from './corridor-vegetation.js';
@@ -9,7 +11,7 @@ import { createGreenCorridor } from './green-corridor.js';
 import { bankEdge, inValley, valleyOrigin,riverWidth } from './valley-river.js';
 import { createBayWater } from './bay-water.js';
 import { createBayAtmosphere } from './bay-atmosphere.js';
-import { harborWorkshop, landHeight, shoreline, siteHeading, sitePoint, type Workshop } from './harbor-workshop.js';
+import { harborWorkshop, landHeight, shoreline, siteHeading, sitePoint, isWorkplace, type Workshop } from './harbor-workshop.js';
 import { buildingArrival } from './building-arrival.js';
 import { connectDoors, hillsidePassage, neighborhoodPassages, placeLot, streetFurniture, streetLine } from './harbor-streets.js';
 import { courtTemplates, cutBuildingPlots, gardenClearance, landscapeWaterfront, loadGardenPlants } from './waterfront-gardens.js';
@@ -22,11 +24,16 @@ import type { CityDetails } from './journal-details.js';
 import { furnishAddress, loadJournalFurniture } from './journal-furnishings.js';
 import { createMeadow, groveDensity, plantGroves } from './waterfront-meadow.js';
 
-function bake(source:T.Object3D,plant:(trees:WoodlandTree[],rotation:number)=>T.Group){
+function bake(source:T.Object3D,plant:(trees:WoodlandTree[],rotation:number)=>T.Group,rooms?:ReturnType<typeof roomLighting>){
   source.updateMatrixWorld(true);
   const parts=new Map<T.BufferGeometry,Map<T.Material,T.Matrix4[]>>();
   const trees:WoodlandTree[]=[];
-  function collect(o:T.Object3D){
+  const seeds=new Map<T.Matrix4,T.Color>();
+  function collect(o:T.Object3D,address=0,workplace=false,rootInverse?:T.Matrix4,quiet=false){
+    if(o.userData.addressSeed!==undefined){
+      address=o.userData.addressSeed;workplace=!!o.userData.workplace;quiet=!!o.userData.quiet;
+      rootInverse=o.matrixWorld.clone().invert();
+    }
     const species=o.userData.treeSpecies;
     if(typeof species==='number'){
       const e=o.matrixWorld.elements,x=e[12]!,y=e[13]!,z=e[14]!;
@@ -37,15 +44,35 @@ function bake(source:T.Object3D,plant:(trees:WoodlandTree[],rotation:number)=>T.
     }
     if(o instanceof T.Mesh && !Array.isArray(o.material)){
       const bySkin=parts.get(o.geometry)??new Map<T.Material,T.Matrix4[]>();
-      const list=bySkin.get(o.material)??[];list.push(o.matrixWorld.clone());
-      bySkin.set(o.material,list);parts.set(o.geometry,bySkin);
+      const matrix=o.matrixWorld.clone();
+      const finish=o.geometry.userData.glassFinish;
+      let material=o.material;
+      if(rooms && !quiet && (finish || material===rooms.proxy)){
+        const seed=floorSeed(address,rootInverse?new T.Matrix4().multiplyMatrices(rootInverse,matrix):matrix);
+        seeds.set(matrix,new T.Color(seed,Number(workplace),1));
+        if(finish){
+          material=finish==='crystal'?rooms.crystal:rooms.glazing;
+          const transform=new T.Matrix4().makeRotationY(Math.PI/2).setPosition(valleyOrigin.x,0,valleyOrigin.z).multiply(matrix);
+          const used=new Set<number>();
+          for(const pane of o.geometry.userData.emitters as WindowEmitter[]){
+            if(used.has(pane.threshold))continue;
+            used.add(pane.threshold);
+            rooms.sources.push({address,workplace,threshold:(pane.threshold+seed)%1,
+              center:pane.center.clone().applyMatrix4(transform),normal:pane.normal.clone().transformDirection(transform)});
+          }
+        }
+      }
+      const list=bySkin.get(material)??[];list.push(matrix);
+      bySkin.set(material,list);parts.set(o.geometry,bySkin);
     }
-    for(const child of o.children)collect(child);
+    for(const child of o.children)collect(child,address,workplace,rootInverse,quiet);
   }
   collect(source);
   const result=plant(trees,Math.PI/2);
   for(const [geometry,bySkin] of parts)for(const [material,instances] of bySkin){
-    result.add(batchPlantings(geometry,material,instances));
+    const batch=batchPlantings(geometry,material,instances,seeds.has(instances[0]!)?instances.map(m=>seeds.get(m)!):undefined);
+    if(material===rooms?.glazing)batch.castShadow=false;
+    result.add(batch);
   }
   return result;
 }
@@ -113,11 +140,14 @@ function streetDeck(shop:Workshop,points:T.Vector3[],width:number){
   const mesh=new T.Mesh(g,[shop.materials.ashlar,shop.materials.gravel]);mesh.receiveShadow=true;mesh.castShadow=true;return mesh;
 }
 export type ValleyView='City'|'Overlook';
-export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=>void,afterglow=false,onMarkers?:(markers:PageMarker[])=>void){
+export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=>void,afterglow=false,onMarkers?:(markers:PageMarker[])=>void,fixedHour?:number){
   const [shop,gardens,furniture]=await Promise.all([harborWorkshop(),loadGardenPlants(),loadJournalFurniture()]);
   const courts=courtTemplates(shop,gardens.props);
   const renderer=new T.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
   const scene=new T.Scene();
+  const rooms=roomLighting(),meteor=meteorClock(),look=new T.Vector3(),meteorRay=new T.Vector3();
+  let hour=fixedHour??localHour(),light=lightAt(hour),clockCheck=-Infinity;
+  const dayFog=new T.Color('#66827f'),nightFog=new T.Color('#38384f'),duskFog=new T.Color('#a77c88');
   const world=createBayWorld(scene,afterglow);
   const valley=await createGreenCorridor(shop.materials.heath.map!,shop.treeModels,world.lighting,shop.paint,afterglow);
   renderer.localClippingEnabled=true;
@@ -125,8 +155,8 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   renderer.shadowMap.autoUpdate=false;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;
   const camera=new T.PerspectiveCamera(47,1,.30,valley.far);
   scene.fog=new T.FogExp2('#66827f',.00014);
-  const sea=createBayWater(world.sunDirection,world.sun,renderer.extensions.has('EXT_color_buffer_float'),afterglow),water=sea.water;
-  const atmosphere=createBayAtmosphere(renderer,scene,camera,world.sun,world.sunDirection,valley.mist,afterglow);
+  const sea=createBayWater(world.sunDirection,world.sun,renderer.extensions.has('EXT_color_buffer_float'),afterglow,world.daylight),water=sea.water;
+  const atmosphere=createBayAtmosphere(renderer,scene,camera,world.sun,world.sunDirection,valley.mist,afterglow,world.daylight);
   scene.add(water,valley.root);
   const city=new T.Group();city.position.set(valleyOrigin.x,0,valleyOrigin.z);city.rotation.y=Math.PI/2;scene.add(city);
   const localEye=new T.Vector3();
@@ -143,19 +173,20 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   const tram=new T.Group();shop.box(tram,'copper',0,.25,0,1.86,.48,.58);shop.box(tram,'lamp',0,.33,0,1.57,.19,.6);shop.box(tram,'iron',0,.54,0,1.9,.10,.65);travel.add(tram);
   const beamGeometry=new T.CylinderGeometry(.028,.91,17,24,1,true);
   beamGeometry.rotateZ(Math.PI/2);beamGeometry.translate(8.5,0,0);
-  const beamMaterial=new T.ShaderMaterial({transparent:true,depthWrite:false,side:T.DoubleSide,blending:T.AdditiveBlending,
+  const beamMaterial=new T.ShaderMaterial({uniforms:{strength:{value:0}},transparent:true,depthWrite:false,side:T.DoubleSide,blending:T.AdditiveBlending,
     vertexShader:'varying float along;void main(){along=position.x/17.;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-    fragmentShader:'varying float along;void main(){gl_FragColor=vec4(1.,.77,.42,.061*pow(max(0.,1.-along),1.8));}'});
+    fragmentShader:'uniform float strength;varying float along;void main(){gl_FragColor=vec4(1.,.77,.42,strength*.061*pow(max(0.,1.-along),1.8));}'});
   const beam=new T.Mesh(beamGeometry,beamMaterial);beam.renderOrder=2;travel.add(beam);
   const signals=new AbortController(),options={signal:signals.signal};
   type HarborPlan = Coast & {details?: CityDetails};
   let rangeKey='',plan:HarborPlan={sites:[],addresses:new Map(),rooms:new Map(),neighborhoods:new Map(),ferries:[],service:0,start:0,end:1800};
   let meadow:ReturnType<typeof createMeadow>|undefined;
   const glows=new T.Points(new T.BufferGeometry(),new T.ShaderMaterial({
-    uniforms:{screen:{value:500}},transparent:true,depthWrite:false,blending:T.AdditiveBlending,
+    uniforms:{screen:{value:500},strength:{value:0}},transparent:true,depthWrite:false,blending:T.AdditiveBlending,
     vertexShader:'uniform float screen;attribute float radius;void main(){vec4 p=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*p;gl_PointSize=clamp(radius*screen/max(1.,-p.z),2.,76.);}',
-    fragmentShader:'void main(){float r=length(gl_PointCoord-.5)*2.;float a=exp(-5.6*r*r)*(1.-smoothstep(.76,1.,r));gl_FragColor=vec4(1.,.54,.22,a*.40);}'
+    fragmentShader:'uniform float strength;void main(){float r=length(gl_PointCoord-.5)*2.;float a=exp(-5.6*r*r)*(1.-smoothstep(.76,1.,r));gl_FragColor=vec4(1.,.54,.22,a*.40*strength);}'
   }));glows.renderOrder=2;city.add(glows);
+  const motionPreference=matchMedia('(prefers-reduced-motion: reduce)');
   let frame=0,paused=false,skipped=false,dead=false,last=0,time=afterglow?133:0,framed=false,inspected=false;
   let lastShadowTime = -Infinity;
   const shadowEye=new T.Vector3(Infinity,0,0);
@@ -225,13 +256,13 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       if (progress===1) {
         construction.arrival.finish();
         construction=undefined;
+        atmosphere.invalidateRooms();
       }
       if (!construction || time-lastShadowTime>.10) {
         renderer.shadowMap.needsUpdate=true;
         lastShadowTime=time;
       }
     }
-    beam.visible=beamReady && construction?.site.kind!=='beacon';
     tram.visible=tramReady && construction?.site!==rail;
     beam.rotation.y=-Math.PI*.5+Math.sin(time*.18)*1.20;
     for(const [i,{boat,course,route,phase,wake}] of fleet.entries()){
@@ -247,8 +278,31 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     }
     if(rail){const p=sitePoint(rail);tram.position.copy(p);tram.rotation.y=siteHeading(rail,p.x);
       tram.translateX(Math.sin(time*.105)*4.85);tram.position.y+=2.99;}
-    world.setTime(time,valleyOrigin.x+shoreline(focusX)-15,camera.position.x,valleyOrigin.z-focusX);
-    if (time - lastShadowTime >= 3 || shadowEye.distanceToSquared(camera.position)>(paused?0:2.25)) {
+    if(now-clockCheck>=1000){
+      clockCheck=now;
+      const nextHour=fixedHour??localHour();
+      if(hour!==nextHour){
+        if(Math.abs(nextHour-hour)>1/120 || paused){water.forceUpdate=true;renderer.shadowMap.needsUpdate=true;}
+        hour=nextHour;light=lightAt(hour);
+      }
+    }
+    applyLight();
+    const night=light.daylight<.22;
+    let skyInView=false,altitude=0;
+    if(night && !paused && !motionPreference.matches){
+      camera.getWorldDirection(look);
+      altitude=T.MathUtils.clamp(Math.asin(look.y)+T.MathUtils.degToRad(camera.fov)*.34,.13,.85);
+      meteorRay.set(0,Math.sin(altitude),Math.sign(look.z)*Math.cos(altitude))
+        .multiplyScalar(400).add(camera.position).project(camera);
+      skyInView=Math.abs(meteorRay.x)<.88 && Math.abs(meteorRay.y)<.91 && meteorRay.z<1;
+    }
+    const age=meteor(dt,night,!paused&&!motionPreference.matches,skyInView);
+    world.meteorAge.value=age;
+    if(age===0){
+      const radius=Math.cos(altitude)/(1+Math.sin(altitude));
+      world.meteorStart.set((Math.random()-.5)*.021,Math.sign(look.z)*radius);
+    }
+    if (time - lastShadowTime >= 3 || shadowEye.distanceToSquared(camera.position)>2.25) {
       renderer.shadowMap.needsUpdate = true;
       lastShadowTime = time;
     }
@@ -257,10 +311,20 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     water.position.z=camera.position.z;
     shop.breezeTime.value=time;
     city.worldToLocal(localEye.copy(camera.position));meadow?.view();
-    valley.tick(time,camera.position);sea.clock.value=time;atmosphere.render(time);
+    valley.tick(time,camera.position);sea.clock.value=time;atmosphere.render(time,rooms.sources,light,construction?hashPage(construction.site.id):undefined);
     const selected=selectedPage?plan.addresses.get(selectedPage):undefined;
     if(onMarkers)pageTargets.update(selected??plan.latest,selected?selectedPage:undefined);
     if(!paused)schedule();
+  }
+  function applyLight(){
+    world.setTime(time,valleyOrigin.x+shoreline(focusX)-15,camera.position.x,valleyOrigin.z-focusX,light,motionPreference.matches?0:time);
+    rooms.apply(light);
+    (scene.fog as T.FogExp2).color.copy(nightFog).lerp(dayFog,light.daylight).lerp(duskFog,light.twilight*.68);
+    shop.materials.lamp.emissiveIntensity=2.2*(1-light.daylight);
+    glows.material.uniforms.strength!.value=1-light.daylight;
+    glows.visible=light.daylight<.999 && (glows.geometry.getAttribute('position')?.count??0)>0;
+    beam.visible=beamReady && light.daylight<.99 && construction?.site.kind!=='beacon';
+    beamMaterial.uniforms.strength!.value=1-light.daylight;
   }
   function fit(glide=false){
     moveTo(cityPose(focusX),glide);
@@ -310,7 +374,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       sailings(start,end);
       return;
     }
-    refreshTerrain(start,end);releaseInstances(structures);
+    refreshTerrain(start,end);releaseInstances(structures);rooms.sources.length=0;atmosphere.invalidateRooms();
     detailViews.clear();
     for(const p of paths.children)if(p instanceof T.Mesh)p.geometry.dispose();paths.clear();
     const cluster=new T.Group(),visible=next.sites.filter(s=>s.x>=start&&s.x<end);
@@ -322,7 +386,10 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       }
       const floors=site.kind==='towers'?8:site.kind==='apartments'||site.kind==='belfry'?5:2;
       const h=(floors+site.lights)*1.7;
-      shop.box(cluster,'masonry',p.x,p.y+h/2,p.z,width,h,4).rotation.y=angle;
+      const facade:T.Mesh=shop.box(cluster,'masonry',p.x,p.y+h/2,p.z,width,h,4);facade.rotation.y=angle;
+      if(!site.quiet){
+        facade.material=rooms.proxy;facade.userData.addressSeed=hashPage(site.id);facade.userData.workplace=isWorkplace(site.kind);
+      }
       shop.box(cluster,'copper',p.x,p.y+h+.24,p.z,width+.28,.6,4.24).rotation.y=angle;
     }
     const lots=visible.map(site=>placeLot(site,shop.site(site)));
@@ -381,7 +448,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       access.traverse(clearWalk);
       model.attach(access);
       if(reveal && site===next.latest && !paused && site.lights===0) {
-        const addition=bake(model,valley.plant);
+        const addition=bake(model,valley.plant,rooms);
         structures.add(addition);
         construction={arrival:buildingArrival(addition,model.position.y,Math.min(model.position.y-.65,...doors.map(door=>landHeight(door.exit.x,door.exit.z)))),start:time,site};
       } else cluster.add(model);
@@ -395,12 +462,12 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
         lots.filter(lot=>lot.site.bank===bank),streetsByBank.get(bank)??[],reserved,grade,footprints,paths,cluster,structures,(x,z,r)=>meadow?.mow(x,z,r),
         key => {const detail = next.details?.streets.get(key); return detail && furniture.build(shop,detail);});
     }
-    structures.add(bake(cluster,valley.plant));
+    structures.add(bake(cluster,valley.plant,rooms));
     const positions:number[]=[],radii:number[]=[];
     for(const subset of structures.children){
       subset.updateMatrixWorld(true);
       subset.traverse(item=>{
-        if(!(item instanceof T.InstancedMesh)||item.material!==shop.materials.lamp)return;
+        if(!(item instanceof T.InstancedMesh)||item.material!==shop.materials.lamp||item.geometry!==shop.geometries.plinth)return;
         const matrix=new T.Matrix4(),p=new T.Vector3(),scl=new T.Vector3();
         for(let i=0;i<item.count;i++){
           item.getMatrixAt(i,matrix);p.setFromMatrixPosition(matrix);scl.setFromMatrixScale(matrix);
@@ -426,13 +493,15 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   }
   function resize(){
     const w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return;
-    renderer.setSize(w,h,false);atmosphere.resize(w,h);glows.material.uniforms.screen!.value=h*renderer.getPixelRatio()*1.9;camera.aspect=w/h;camera.updateProjectionMatrix();checkedEye.x=Infinity;if(!inspected)fit();schedule();
+    renderer.setSize(w,h,false);sea.resize(w*renderer.getPixelRatio(),h*renderer.getPixelRatio());atmosphere.resize(w,h);glows.material.uniforms.screen!.value=h*renderer.getPixelRatio()*1.9;camera.aspect=w/h;camera.updateProjectionMatrix();checkedEye.x=Infinity;if(!inspected)fit();schedule();
   }
   function visibility(){
-    if(document.hidden||skipped){cancelAnimationFrame(frame);frame=0;last=0;}else schedule();
+    if(document.hidden||skipped){cancelAnimationFrame(frame);frame=0;last=0;}else {clockCheck=-Infinity;schedule();}
   }
   canvas.addEventListener('contentvisibilityautostatechange',e=>{skipped=(e as ContentVisibilityAutoStateChangeEvent).skipped;visibility();},options);
   document.addEventListener('visibilitychange',visibility,options);
+  window.addEventListener('pageshow',visibility,options);
+  const minuteTimer=window.setInterval(()=>{if(paused&&!document.hidden&&!skipped){clockCheck=-Infinity;schedule();}},60_000);
   let press:{x:number;y:number;id:number}|undefined;
   canvas.addEventListener('pointerdown',e=>{press=e.isPrimary&&e.button===0?{x:e.clientX,y:e.clientY,id:e.pointerId}:undefined;},options);
   canvas.addEventListener('pointermove',e=>{
@@ -464,14 +533,14 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     world.setPainted(enabled && !!shop.paint);
     if (!shop.paint) return;
     shop.paint.coverage.value = enabled ? 1 : 0;
-    (scene.fog as T.FogExp2).color.set(enabled ? '#66827f' : '#9d879b');
+    dayFog.set(enabled ? '#66827f' : '#9d879b');
     schedule();
   }
   setPainted(true);
   const observer=new ResizeObserver(resize);observer.observe(canvas);resize();
   return {update,visit,hasPaint:!!shop.paint,setPainted,pause(value:boolean){paused=value;last=0;schedule();},destroy(){
     construction?.arrival.finish();
-    meadow?.dispose();
+    meadow?.dispose();rooms.dispose();clearInterval(minuteTimer);
     dead=true;cancelAnimationFrame(frame);observer.disconnect();signals.abort();orbit.dispose();releaseInstances(structures);releaseInstances(scenery);
     for(const p of paths.children)if(p instanceof T.Mesh)p.geometry.dispose();
     for(const slot of fleet)releaseInstances(slot.boat);

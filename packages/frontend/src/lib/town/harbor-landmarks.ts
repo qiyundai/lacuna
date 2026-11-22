@@ -21,7 +21,7 @@ export function market(p: Parts, bays: number, awning: 'ochre' | 'sage' | 'clay'
   tileCourses(p, span + .89, 3.48, 2.36, .79, .91);
   for (const x of [-span * .38, 0, span * .38]) {
     p.rod('iron', p.vec(x, 2.48, 0), p.vec(x, 1.89, 0), .025);
-    p.orb('glow', x, 1.80, 0, .11);
+    p.orb('lantern', x, 1.80, 0, .11);
   }
   for (const side of [-1, 1]) {
     for (let i = 0; i < bays * 3; i++) {
@@ -334,9 +334,9 @@ export function lighthouse(p: Parts) {
     if (i % 2 === 0)
       p.rod('iron', point(.78, 7.85, a), point(.78, 9.22, a), .057);
   }
-  lathe(p, 'glow', 0, 8.17, 0, [[.29, 0], [.42, .17], [.42, .63], [.27, .84]], 20);
+  lathe(p, 'lantern', 0, 8.17, 0, [[.29, 0], [.42, .17], [.42, .63], [.27, .84]], 20);
   for (let i = 0; i < 5; i++)
-    lathe(p, 'amber', 0, 8.29 + i * .12, 0, [[.42, 0], [.47, .028], [.42, .06]], 20);
+    lathe(p, 'lantern', 0, 8.29 + i * .12, 0, [[.42, 0], [.47, .028], [.42, .06]], 20);
   lathe(p, 'copper', 0, 9.16, 0, [[1.03, 0], [1.09, .10], [.88, .24], [.64, .54], [.19, .89], [0, .98]], 24);
   p.rod('gold', p.vec(0, 10.08, 0), p.vec(0, 10.61, 0), .043);
 }

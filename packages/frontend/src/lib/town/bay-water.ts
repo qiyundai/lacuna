@@ -28,7 +28,7 @@ export function capillarySlopes() {
   return texture;
 }
 
-export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr:boolean,afterglow=false) {
+export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr:boolean,afterglow:boolean,daylight:T.IUniform<number>) {
   const geometry=new T.PlaneGeometry(12000,12000);
   const water=new Reflector(geometry,{textureWidth:960,textureHeight:640,multisample:0,clipBias:.003});
   if(!hdr)water.getRenderTarget().texture.type=T.UnsignedByteType;
@@ -38,7 +38,7 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
   const wakes=[ferryWake(),ferryWake()];
   const wakeCounts=new Int32Array(wakes.length);
   Object.assign(material.uniforms,{wakeTrail:{value:wakes.flatMap(w=>w.trail.value)},wakeCount:{value:wakeCounts},wakeBounds:{value:wakes.map(w=>w.bounds.value)}});
-  Object.assign(material.uniforms,{slopes:{value:slopes},sunDirection:{value:sunDirection},bounds:{value:bounds},clock});
+  Object.assign(material.uniforms,{daylight,slopes:{value:slopes},sunDirection:{value:sunDirection},bounds:{value:bounds},clock});
   material.uniforms.shadowFrame={value:sun.shadow.matrix};
   material.uniforms.shadowDepth={value:null};
   const reflect=water.onBeforeRender.bind(water);
@@ -69,7 +69,7 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
     uniform vec2 bounds;
     uniform mat4 shadowFrame;
     uniform highp sampler2DShadow shadowDepth;
-    uniform float clock;
+    uniform float clock,daylight;
     uniform int wakeCount[${wakes.length}];
     uniform vec4 wakeTrail[${wakeSamples*wakes.length}],wakeBounds[${wakes.length}];
     ${afterglow?sunbreak:''}
@@ -162,15 +162,20 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
       float sunlight=1.;
       if(all(greaterThan(sc,vec3(0.)))&&all(lessThan(sc,vec3(1.))))
         sunlight=texture(shadowDepth,vec3(sc.xy,sc.z-.0004));
+      body*=mix(vec3(.10,.13,.24),vec3(1.),daylight);
       vec3 color=mix(body*(.74+.26*sunlight),reflected,clamp(fresnel+.21,0.,1.))
-        +sunlight*glint*vec3(2.1,1.21,.52);
+        +sunlight*glint*mix(vec3(.10,.16,.33),vec3(2.1,1.21,.52),daylight);
       ${afterglow?`
-      color+=sunbreakAt(surface,clock,sunDirection)*sunlight*glint*vec3(1.45,.97,.44);`:''}
+      color+=daylight*sunbreakAt(surface,clock,sunDirection)*sunlight*glint*vec3(1.45,.97,.44);`:''}
       float foam=coast*exp(-1.9*abs(bankDistance-.5-field.x))*smoothstep(.52,.82,breeze);
-      color=mix(color,vec3(.55,.67,.58),clamp(foam*.36+propWash,0.,.8));
+      color=mix(color,vec3(.55,.67,.58)*mix(.12,1.,daylight),clamp(foam*.36+propWash,0.,.8));
       gl_FragColor=vec4(color,1.);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`;
-  return {water,bounds,clock,wakes,wakeCounts,dispose(){water.dispose();geometry.dispose();slopes.dispose();}};
+  return {water,bounds,clock,wakes,wakeCounts,resize(w:number,h:number){
+    const scale=Math.min(.52,800/w,512/h);
+    water.getRenderTarget().setSize(Math.max(1,Math.round(w*scale)),Math.max(1,Math.round(h*scale)));
+    water.forceUpdate=true;
+  },dispose(){water.dispose();geometry.dispose();slopes.dispose();}};
 }

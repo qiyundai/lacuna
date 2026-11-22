@@ -107,6 +107,7 @@ export function woodlandBoughs(lighting:ValleyLighting,clock:T.IUniform<number>,
           #include <clipping_planes_vertex>
         }`,
       fragmentShader:`
+        uniform vec3 skyColor;
         #include <clipping_planes_pars_fragment>
         ${leafy?'uniform sampler2D sprays; varying vec2 leafUv;':''}
         ${paint?'varying vec3 leafBrush;'+leafBrushPigment:''}
@@ -125,7 +126,7 @@ export function woodlandBoughs(lighting:ValleyLighting,clock:T.IUniform<number>,
           vec3 color=ambient*(1.-.25*shadow)+direct*(1.-.88*shadow);
           ${leafy?'if(foliage)color*=clamp(spray.r/(.70*max(spray.a,.12)),.55,1.40);':''}
           ${paint?'color*=leafBrushPigment(leafBrush);':''}
-          gl_FragColor=vec4(mix(color,vec3(.135,.220,.241),1.-exp(-range*.000087)),1.);
+          gl_FragColor=vec4(mix(color,vec3(.135,.220,.241)*min(vec3(1.),skyColor/vec3(.50,.59,.77)),1.-exp(-range*.000087)),1.);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`

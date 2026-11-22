@@ -24,14 +24,14 @@ const dreamcoreDaylight = `
 export function worldGradeMaterial(displayInput = false){
   return new ShaderMaterial({
     name: 'Dreamcore daylight',
-    uniforms: { tDiffuse: { value: null } },
+    uniforms: { tDiffuse: { value: null },daylight:{value:1} },
     depthTest: false,
     depthWrite: false,
     vertexShader: `
       varying vec2 screenUv;
       void main(){screenUv=uv;gl_Position=vec4(position.xy,0.,1.);}`,
     fragmentShader: `
-      uniform sampler2D tDiffuse;
+      uniform sampler2D tDiffuse;uniform float daylight;
       varying vec2 screenUv;
       ${dreamcoreDaylight}
       void main(){
@@ -39,7 +39,7 @@ export function worldGradeMaterial(displayInput = false){
         ${displayInput ? '' : `
         #include <tonemapping_fragment>
         #include <colorspace_fragment>`}
-        gl_FragColor.rgb=dreamcoreDaylight(gl_FragColor.rgb);
+        gl_FragColor.rgb=mix(gl_FragColor.rgb,dreamcoreDaylight(gl_FragColor.rgb),daylight);
       }`
   });
 }

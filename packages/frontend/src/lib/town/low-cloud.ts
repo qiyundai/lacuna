@@ -39,7 +39,7 @@ function cloudMaterial(volume:T.Data3DTexture,lighting:ValleyLighting,depth:T.IU
     volume:{value:volume},clock:{value:0},cloudTime:{value:0},humidity:{value:0},puffs:{value:Array.from({length:puffCount},()=>new T.Vector4())},
     supply:{value:new Float32Array(puffCount)},weatherPhase:{value:new T.Vector3()},
     wispBase:{value:new T.Vector4()},wispTip:{value:new T.Vector4()},
-    geometryDepth:depth,screen:{value:screen},sunDirection:{value:lighting.direction},sunColor:{value:lighting.direct}
+    geometryDepth:depth,screen:{value:screen},sunDirection:{value:lighting.direction},sunColor:{value:lighting.direct},skyColor:{value:lighting.sky}
   },transparent:true,side:T.BackSide,depthTest:false,depthWrite:false,vertexShader:`
     out vec3 cell;flat out vec3 eye;
     void main(){
@@ -58,7 +58,7 @@ function cloudMaterial(volume:T.Data3DTexture,lighting:ValleyLighting,depth:T.IU
     uniform vec4 wispBase,wispTip;
     uniform float supply[${puffCount}];
     uniform vec3 weatherPhase;
-    uniform vec3 sunColor,sunDirection;
+    uniform vec3 sunColor,sunDirection,skyColor;
     uniform mat4 projectionMatrix,modelViewMatrix,modelMatrix;
     in vec3 cell;flat in vec3 eye;out vec4 outColor;
     ${corridorLightField}
@@ -123,7 +123,7 @@ function cloudMaterial(volume:T.Data3DTexture,lighting:ValleyLighting,depth:T.IU
         float sun=exp(-1.70*shelter*humidity);
         float shaft=${afterglow?'sunbreakAt(world,clock,sunDirection)':'0.'};
         vec3 sky=mix(vec3(.038,.053,.067),vec3(.15,.18,.19),clamp(.5+eye.y+t*ray.y,0.,1.));
-        vec3 light=sky*(.72+.34*opening)+sunColor*sun*(.07+.63*opening+shaft*(.45+1.12*(1.-vapor)));
+        vec3 light=sky*min(vec3(1.),skyColor/vec3(.50,.59,.77))*(.72+.34*opening)+sunColor*sun*(.07+.63*opening+shaft*(.45+1.12*(1.-vapor)));
         scatter+=transmission*opacity*light;
         transmission*=1.-opacity;
         if(transmission<.018)break;

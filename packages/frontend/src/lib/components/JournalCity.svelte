@@ -20,7 +20,7 @@
     pines:'The pine grove',glasshouse:'The glasshouse',station:'The station',civic:'The town hall',
     belfry:'The belfry',towers:'The towers',arches:'The arches',wharf:'The wharf',beacon:'The beacon'
   };
-  let {guest=false,afterglow=false,onExit,cityAudio,busy=$bindable(false)}:{guest?:boolean;afterglow?:boolean;onExit?:()=>void;cityAudio?:Snippet;busy?:boolean}=$props();
+  let {guest=false,afterglow=false,fixedHour,onExit,cityAudio,busy=$bindable(false)}:{guest?:boolean;afterglow?:boolean;fixedHour?:number;onExit?:()=>void;cityAudio?:Snippet;busy?:boolean}=$props();
   const notes = [
     'The light was still on across the street.', 'Made tea before the alarm.', 'The morning train was nearly empty.',
     'I borrowed a blue bowl and forgot to give it back.', 'We walked home slowly.', 'There was a postcard in the mail.',
@@ -83,7 +83,7 @@
     try{
       const {createHarbor}=await import('$lib/town/harbor.js');
       if(!alive)return;
-      const city=await createHarbor(canvas,readPage,afterglow,next=>{if(alive)markers=next;});
+      const city=await createHarbor(canvas,readPage,afterglow,next=>{if(alive)markers=next;},fixedHour);
       if(alive)scene=city;else city.destroy();
     }catch{if(alive)graphicsError=true;}
   }
