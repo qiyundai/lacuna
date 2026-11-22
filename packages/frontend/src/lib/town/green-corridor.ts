@@ -1,5 +1,6 @@
 import { corridorShadow } from './corridor-light.js';
 import * as T from 'three';
+import { channelCenter, portalStation, hiddenStation, tunnelRadius } from './river-passage.js';
 import { riverGround, shoreline, riverWidth, valleyOrigin } from './valley-river.js';
 import { corridorForest, corridorGrass, distantCrowns, treeMeshes, woodlandAt } from './corridor-vegetation.js';
 import { woodlandFloor } from './woodland-floor.js';
@@ -22,7 +23,13 @@ export function overlookHeight(x:number,z:number){
   if(z<248||z>820)return river;
   const lateral=(x-112)/208,along=(z-526-(x-70)*.16)/151;
   const hill=161*Math.exp(-.67*lateral*lateral-Math.pow(Math.abs(along),3.4));
-  return Math.max(river,-4.2+hill+(2.6*noise.noise(x*.039,z*.028,7)+3.2*Math.sin(x*.041+z*.012))*Math.min(1,hill/40));
+  const ridge=Math.max(river,-4.2+hill+(2.6*noise.noise(x*.039,z*.028,7)+3.2*Math.sin(x*.041+z*.012))*Math.min(1,hill/40));
+  const station=valleyOrigin.z-z;
+  if(station<portalStation-5)return ridge;
+  const bank=Math.abs(x-valleyOrigin.x-channelCenter(station));
+  const bankSlope=T.MathUtils.smoothstep(bank,tunnelRadius+.6,tunnelRadius+8);
+  const roof=T.MathUtils.smoothstep(portalStation-station,0,5);
+  return T.MathUtils.lerp(river,ridge,Math.max(bankSlope,roof));
 }
 
 function corridorFloor(near:number,far:number,extent:number,cityEnd:number){
@@ -174,6 +181,12 @@ export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighti
       treeCover=woodland;`);
     shader.fragmentShader=corridorShadow+coastalBreeze+meadowPigment+'uniform vec3 skyColor;uniform sampler2D grassFibres,floorShade;uniform vec4 shadeLayout;varying vec3 floorPlace;varying float treeCover,floorDistance;\n'+shader.fragmentShader.replace('#include <map_fragment>',`
       #ifdef USE_MAP
+        float station=${valleyOrigin.z}.-floorPlace.z;
+        if(station<${portalStation+20}. && station>${hiddenStation-12}. && floorPlace.y<5.7){
+          float middle=${valleyOrigin.x+20}.+19.*sin(station*.012+.65)+8.*sin(station*.029)-2.4*cos(station*.056)+2.5*sin(station*.017)+2.*cos(station*.031);
+          float crossSection=(floorPlace.x-middle)/${tunnelRadius+.55};
+          if(crossSection*crossSection+pow(max(0.,floorPlace.y-1.5)/4.1,2.)<1.)discard;
+        }
         vec2 land=floorPlace.xz;
         float gust=meadowWave(land,breezeTime);
         float fibre=texture2D(map,vMapUv*.93+vec2(gust*.047,0.)).g;
@@ -229,6 +242,8 @@ export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighti
   const understory=woodlandFloor(ground,coverAt,bounds.west,bounds.east);
   const grass=corridorGrass(ground,(x,z)=>{
     const depth=valleyOrigin.x+shoreline(valleyOrigin.z-z)-x;
+    const station=valleyOrigin.z-z;
+    if(station<portalStation+8&&station>hiddenStation-12&&Math.abs(x-valleyOrigin.x-channelCenter(station))<tunnelRadius+2&&ground(x,z)<7.2)return true;
     return z>=detailNear-12&&z<=detailFar+12&&depth>=-riverWidth(valleyOrigin.z-z)-43&&depth<=86;
   },bounds.west,bounds.east,driftTime,eye,coverAt);
   root.add(grass.group);
@@ -266,8 +281,8 @@ export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighti
   }
   const gulls=corridorFlocks(ground,driftTime,bounds);root.add(gulls.group);
   const mist=createLowCloud(lighting,ground,(side,z,y)=>wallEdge(side,z/west.scale.z,y),afterglow);
-  return {root,mist,bounds,ground,plant,followRiver,gradeTown(grade:(x:number,z:number,y:number)=>number){surface.gradeTown(grade);},get far(){return extent+2300;},tick(t:number,camera:T.Vector3){
-    driftTime.value=t;eye.copy(camera);understory.view(eye.z);grass.view(eye);forest.view(eye);distant.view(eye);gulls.tick(t,camera.z);mist.tick(t,camera.z);
+  return {root,mist,bounds,ground,plant,followRiver,gradeTown(grade:(x:number,z:number,y:number)=>number){surface.gradeTown(grade);},get far(){return extent+2300;},tick(t:number,camera:T.Vector3,windTime=t){
+    driftTime.value=windTime;eye.copy(camera);understory.view(eye.z);grass.view(eye);forest.view(eye);distant.view(eye);gulls.tick(t,camera.z);mist.tick(t,camera.z);
   },dispose(){
     understory.dispose();grass.dispose();forest.clear();distant.dispose();gulls.dispose();mist.dispose();
     for(const g of owned)g.dispose();for(const tex of textures)tex.dispose();walls.dispose();floor.dispose();

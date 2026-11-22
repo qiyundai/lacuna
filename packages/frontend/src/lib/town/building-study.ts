@@ -1,4 +1,5 @@
 import * as T from 'three';
+import { localHour,onLocalMinute } from './city-clock.js';
 import type { Gouache } from './gouache.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -61,7 +62,8 @@ export function openBuildingStudy(canvas: HTMLCanvasElement, model: 'tide-house'
     composer.addPass(occlusion);
     composer.addPass(new OutputPass());
   }
-  const kit = model === 'ferry-hall' ? createFerryHallKit(paint) : createTideHouseKit(paint);
+  const clockHour={value:localHour()};
+  const kit = model === 'ferry-hall' ? createFerryHallKit(paint,false,clockHour) : createTideHouseKit(paint);
   let building: T.Group | undefined;
   let height = 1, radius = 1;
   const bounds = new T.Box3();
@@ -70,6 +72,7 @@ export function openBuildingStudy(canvas: HTMLCanvasElement, model: 'tide-house'
   function draw() {
     if (!frame) frame = requestAnimationFrame(() => {
       frame = 0;
+      clockHour.value=localHour();
       if (composer) composer.render();
       else renderer.render(scene, camera);
     });
@@ -137,7 +140,11 @@ export function openBuildingStudy(canvas: HTMLCanvasElement, model: 'tide-house'
   canvas.addEventListener('keydown', keydown);
   const observer = new ResizeObserver(frameModel);
   observer.observe(canvas);
+  const refreshClock=()=>{if(!document.hidden)draw();};
+  const stopClock=model==='ferry-hall'?onLocalMinute(refreshClock):undefined;
+  document.addEventListener('visibilitychange',refreshClock);
   return { setCount, turn, dispose() {
+    stopClock?.();document.removeEventListener('visibilitychange',refreshClock);
     observer.disconnect();
     controls.removeEventListener('change', draw);
     controls.dispose();

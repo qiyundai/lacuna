@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as T from 'three';
 import {lightAt,localHour,meteorClock,roomGlow,studioHour} from '../packages/frontend/src/lib/town/city-clock.ts';
-import {floorSeed} from '../packages/frontend/src/lib/town/room-light.ts';
+import {floorSeed,roomLighting} from '../packages/frontend/src/lib/town/room-light.ts';
 import {createBayWorld} from '../packages/frontend/src/lib/town/bay-world.ts';
 
 test('civil hours follow the device across midnight, sleep and timezone changes',()=>{
@@ -70,4 +70,16 @@ test('a stationary city relights the same scene on a wall clock change',()=>{
     world.setTime(4,0,0,0,lightAt(12));
     assert.ok(daylight.equals(world.lighting.sky));assert.equal(world.sun.intensity,sun);
   }finally{world.dispose();}
+});
+
+test('near and distant room lighting preserve GLSL directive boundaries',()=>{
+  const rooms=roomLighting();
+  for(const material of [rooms.glazing,rooms.crystal,rooms.proxy]){
+    const shader={...T.ShaderLib.lambert,uniforms:{}};
+    material.onBeforeCompile(shader);
+    for(const source of [shader.vertexShader,shader.fragmentShader]){
+      for(const line of source.split('\n'))if(line.includes('#'))assert.ok(line.trimStart().startsWith('#'),line);
+    }
+  }
+  rooms.dispose();
 });

@@ -1,6 +1,6 @@
 import * as T from 'three';
 import { createModelWorkshop, type ModelTools, type Pigment } from './model-workshop.js';
-import { around, chimneypot, foundation, roof, storey, tileCourses, type WindowStyle } from './architectural-parts.js';
+import { arch, around, chimneypot, foundation, roof, storey, tileCourses, type WindowStyle } from './architectural-parts.js';
 import * as landmarks from './harbor-landmarks.js';
 import type { Gouache } from './gouache.js';
 import type { Site } from './painted-coast.js';
@@ -51,7 +51,7 @@ function plantedTerrace(p: ModelTools) {
     for (let i = 0; i < 4; i++) {
       const x = -1.07 + Math.sin(i * 2.4) * .16, v = z + Math.cos(i * 2.4) * .11;
       p.rod('wood', p.vec(-1.07, .46, z), p.vec(x, .83, v), .031);
-      p.orb(i % 2 ? 'sage' : 'foliage', x, .75 + i * .045, v, .18);
+      p.orb('foliage', x, .75 + i * .045, v, .18);
     }
   }
 }
@@ -101,8 +101,8 @@ function mansard(p: ModelTools, w: number, d: number) {
   });
 }
 
-export function createHarborBuildings(paint?: Gouache) {
-  const workshop = createModelWorkshop(3.0, 3.15, paint);
+export function createHarborBuildings(paint?: Gouache,clockHour?:T.IUniform<number>,wind?:T.IUniform<number>) {
+  const workshop = createModelWorkshop(3.0, 3.15, paint,true,clockHour,wind);
   const templates = new Map<string, T.Group>();
   function part(key: string, make: (p: ModelTools) => void) {
     let source = templates.get(key);
@@ -197,8 +197,15 @@ export function createHarborBuildings(paint?: Gouache) {
         break;
       }
       case 'arches':
-        for (let i = -2; i <= 2; i++)
-          add(g, part('viaduct', landmarks.viaduct), i * 2.34);
+        add(g, part('public-loggia', p => {
+          foundation(p,5.1,2.8);
+          p.entrance(0,.16,1.4);
+          for(const side of [-1,1])for(const x of [-2.25,-.75,.75,2.25]){
+            p.box('stone',x,.98,side, .24,1.68,.29);
+            if(x<2)arch(p,'lintel',x+.78,1.35,side,.77,.65,.12,.19);
+          }
+          roof(p,5.23,2.95,2.08,.67,'slate');
+        }));
         break;
       case 'beacon':
         add(g, part('lighthouse', landmarks.lighthouse));

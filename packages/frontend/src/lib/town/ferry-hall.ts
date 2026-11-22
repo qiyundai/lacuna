@@ -4,7 +4,7 @@ import { createModelWorkshop, type ModelTools, type Pigment } from './model-work
 
 const bayWidth = 2.16;
 const arcadeDepth = 3.1;
-export const ferryBerthOffset = 4.00;
+
 
 function archBand(p: ModelTools, color: Pigment, x: number, y: number, z: number, radius: number, rise: number, band: number, thickness: number) {
   const path = new T.Shape();
@@ -88,6 +88,7 @@ function roofBay(p: ModelTools) {
   }
   p.rod('gold', p.vec(0, 2.53, 0), p.vec(0, 2.16, 0), .023);
   p.orb('lantern', 0, 2.07, 0, .13);
+  p.mark('Interior pendant',0,2.07,0);
   p.box('copper', 0, 2.19, 0, .25, .048, .25);
 }
 
@@ -123,9 +124,7 @@ function clockGate(p: ModelTools) {
       const tick = (r: number) => p.vec(Math.sin(a) * r, dialY + Math.cos(a) * r, .552);
       p.rod('iron', tick(i % 3 ? .25 : .225), tick(.286), .013);
     }
-    const center = p.vec(0, dialY, .574);
-    p.rod('iron', center, p.vec(-.131, dialY + .115, .574), .021);
-    p.rod('iron', center, p.vec(.169, dialY + .152, .574), .013);
+    p.clock(0,dialY,.574,.312);
     p.orb('gold', 0, dialY, .59, .032);
     p.orb('gold', 0, 3.92, .23, .09);
     p.rod('gold', p.vec(0, 3.78, .23), p.vec(0, 4.095, .23), .029);
@@ -203,13 +202,14 @@ function endScreen(p: ModelTools) {
   });
 }
 
-export function createFerryHallKit(paint?: Gouache,roomWindows=false) {
-  const {module, dispose} = createModelWorkshop(bayWidth, arcadeDepth, paint,roomWindows);
+export function createFerryHallKit(paint?: Gouache,roomWindows=false,clockHour?:T.IUniform<number>) {
+  const {module, dispose} = createModelWorkshop(bayWidth, arcadeDepth, paint,roomWindows,clockHour);
   const quay = module(platform);
   const bay = module(roofBay);
   const supports = module(p => {
     for (const z of [-1.55, 1.55]) pier(p, 0, z);
   });
+  const shoreEntry=module(p=>p.entrance(0,.15,-2.27,Math.PI));
   const landing = module(boardingLanding), ring = module(lifeRing);
   const gate = module(clockGate), bench = module(waitingBench), booth = module(ticketOffice), screen = module(endScreen);
   const mooring = module(p => {
@@ -229,13 +229,14 @@ export function createFerryHallKit(paint?: Gouache,roomWindows=false) {
         fitting.position.x = x;
         landing.add(fitting);
       }
-      landing.add(ring.clone());
+      landing.add(ring.clone(),shoreEntry.clone());
       return landing;
     },
     build(bays: number) {
       if (!Number.isSafeInteger(bays) || bays < 3) throw new RangeError('Ferry Hall needs at least three bays');
       const hall = new T.Group();
       hall.name = 'Ferry Hall';
+      hall.add(shoreEntry.clone());
       const entry = Math.floor(bays / 2);
       function add(template: T.Group, name: string, x: number) {
         const part = template.clone();

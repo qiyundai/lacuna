@@ -1,4 +1,5 @@
 import * as T from 'three';
+import { stirGroundPlants } from './coastal-breeze.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { hashPage } from './city-growth.js';
 import type { Bank } from './painted-coast.js';
@@ -39,7 +40,7 @@ export function courtTemplates(shop:Workshop,props:Map<keyof typeof yardProps,T.
   return templates;
 }
 
-export async function loadGardenPlants(){
+export async function loadGardenPlants(wind={value:0}){
   const loader=new GLTFLoader();
   const pigments=new Map<string,T.MeshStandardMaterial>();
   const geometries=new Set<T.BufferGeometry>();
@@ -53,10 +54,11 @@ export async function loadGardenPlants(){
       if(!(part instanceof T.Mesh))return;
       const source=part.material as T.MeshStandardMaterial;
       original.add(source);
-      const key=source.name;
+      const key=name+source.name;
       let pigment=pigments.get(key);
       if(!pigment){
-        pigment=new T.MeshStandardMaterial({color:key==='colorYellow'?'#f3ce85':'#719052',roughness:.95,side:T.DoubleSide});
+        pigment=new T.MeshStandardMaterial({color:source.name==='colorYellow'?'#f3ce85':'#719052',roughness:.95,side:T.DoubleSide});
+        stirGroundPlants(pigment,wind,name.startsWith('flower')?.24:.13);
         pigments.set(key,pigment);
       }
       const mesh=new T.Mesh(part.geometry,pigment);
@@ -77,7 +79,7 @@ export async function loadGardenPlants(){
         skins.add(m);
         if(m instanceof T.MeshStandardMaterial){
           m.metalness=0;m.roughness=.95;
-          if(key==='rows')m.color.set('#bdab66');
+          if(key==='rows'&&!m.userData.growing){m.color.set('#bdab66');stirGroundPlants(m,wind,.15);m.userData.growing=true;}
           if(key==='timber')m.color.set(m.name==='woodInner'?'#c19e76':'#795b46');
         }
         if(m.map)maps.add(m.map);
@@ -127,9 +129,9 @@ export function gardenClearance(){
 export function cutBuildingPlots(lots:WaterfrontLot[],walks:ReturnType<typeof gardenClearance>){
   const plots=new Map<number,{x:number;z:number;y:number;cos:number;sin:number;width:number}[]>();
   for(const {site,model} of lots){
-    if(site.kind==='wharf'||site.kind==='pines')continue;
+    if(site.kind==='pines')continue;
     const {x,y,z}=model.position;
-    const plot={x,y,z,cos:Math.cos(model.rotation.y),sin:Math.sin(model.rotation.y),width:site.width/35+.8};
+    const plot={x,y,z,cos:Math.cos(model.rotation.y),sin:Math.sin(model.rotation.y),width:site.kind==='wharf'?(site.ferryTerminal?5.4:3.24):site.width/35+.8};
     for(let i=Math.floor((x-10)/10);i<=Math.floor((x+10)/10);i++){
       const bucket=plots.get(i)??[];bucket.push(plot);plots.set(i,bucket);
     }

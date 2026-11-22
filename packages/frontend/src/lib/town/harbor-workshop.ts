@@ -1,4 +1,5 @@
-import {landHeight,bankPosition,laneDepth} from './valley-river.js';
+import { publicFixtures } from './public-fixtures.js';
+import {landHeight,bankPosition,laneDepth,bankEdge} from './valley-river.js';
 export {landHeight,shoreline} from './valley-river.js';
 import * as T from 'three';
 import { loadGouache, paintMaterial } from './gouache.js';
@@ -24,11 +25,16 @@ export function siteHeading(site: Site, x: number) {
   const line=(station:number)=>bankPosition(station,site.bank,site.kind==='wharf'?0:laneDepth(station,site.lane));
   return (site.bank?Math.PI:0)-Math.atan(line(x + .5) - line(x - .5)) * .77 + (hashPage(site.id) % 15 - 7) * .014;
 }
+export function mooring(site:Site){
+  const quay=sitePoint(site),heading=siteHeading(site,quay.x);
+  const station=quay.x+4.45*Math.sin(heading),z=quay.z+4.45*Math.cos(heading);
+  return {station,bank:site.bank,offset:Math.abs(z-bankEdge(station,site.bank)),slope:-Math.tan(heading)};
+}
 export function isWorkplace(kind:Site['kind']){
   return ['market','warehouse','crane','station','civic','wharf','glasshouse','arches','belfry'].includes(kind);
 }
-export async function harborWorkshop(){
-  const breezeTime={value:0};
+export async function harborWorkshop(breezeTime={value:0}){
+  const clockHour={value:0},fixtures=publicFixtures();
   const textures=new T.TextureLoader();
   const materials={} as Record<Skin,T.MeshStandardMaterial>;
   const loaded=await Promise.all(surfaceNames.map(async name=>{
@@ -166,7 +172,7 @@ export async function harborWorkshop(){
     for(const name of ['gardenEarth','court'] as const)paintMaterial(materials[name],paint);
     for (const name of ['masonry','copper','bark','cream','hull','iron'] as const) paintMaterial(materials[name], paint, 'architecture', true);
   }
-  const buildings = createHarborBuildings(paint);
+  const buildings = createHarborBuildings(paint,clockHour,breezeTime);
   let ferryHall: ReturnType<typeof createFerryHallKit> | undefined;
   let tideHouse: ReturnType<typeof createTideHouseKit> | undefined;
   function site(s:Site){
@@ -181,7 +187,7 @@ export async function harborWorkshop(){
       tideHouse ??= createTideHouseKit(paint,true);
       g.add(tideHouse.build(7+seed%5+s.lights, seed % 5));
     }else if(k==='wharf'){
-      ferryHall ??= createFerryHallKit(paint,true);
+      ferryHall ??= createFerryHallKit(paint,true,clockHour);
       g.add(s.ferryTerminal ? ferryHall.build(5) : ferryHall.buildLanding());
     }else if(k==='pines'){
       for(let i=0;i<6;i++)tree(g,Math.sin(i*2.4)*w*.33,0,Math.cos(i*2.4)*2,3.1+i%3,seed+i);
@@ -198,8 +204,10 @@ export async function harborWorkshop(){
         part.material=s.quiet?materials.iron:materials.lamp;
       else if(s.quiet && part.geometry.userData.glassFinish)part.material=materials.iron;
     });
+    if(!s.quiet&&(k==='market'||k==='wharf'))fixtures.dress(g,k,materials.lamp);
     return g;
   }
+  const hullPaint=new Map<T.Material,T.MeshStandardMaterial>();
   function ferry(){
     const g=new T.Group();
     const hull=new T.Shape();hull.moveTo(-1.9,-.52);hull.quadraticCurveTo(-2.42,0,-1.85,.52);hull.lineTo(1.36,.53);hull.quadraticCurveTo(2.07,.38,2.56,0);hull.quadraticCurveTo(2.06,-.41,1.36,-.53);hull.closePath();
@@ -207,10 +215,20 @@ export async function harborWorkshop(){
     const boat=new T.Mesh(hullGeometry,materials.hull);g.add(boat);
     box(g,'cream',-.18,.72,0,3.22,.53,.94);box(g,'copper',-.13,1.04,0,3.46,.12,1.13);
     for(let i=0;i<8;i++)for(const z of [-.48,.48])box(g,i%3?'lamp':'glass',-1.5+i*.36,.77,z,.19,.23,.035);
-    box(g,'cream',.83,1.23,0,.95,.37,.73);pole(g,'iron',-.49,1.45,0,.28,.8);return g;
+    box(g,'cream',.83,1.23,0,.95,.37,.73);pole(g,'iron',-.49,1.45,0,.28,.8);
+    if(paint)g.traverse(part=>{
+      if(!(part instanceof T.Mesh)||!(part.material instanceof T.MeshStandardMaterial))return;
+      if(part.material===materials.lamp||part.material===materials.glass)return;
+      const original=part.material;
+      let skin=hullPaint.get(original);
+      if(!skin){skin=original.clone();paintMaterial(skin,paint,'architecture','moving');hullPaint.set(original,skin);}
+      part.material=skin;
+    });
+    return g;
   }
-  return {paint,breezeTime,materials,piece,box,pole,tree,treeModels,site,ferry,outbuilding:buildings.outbuilding,lantern,geometries,dispose(){
-    forest.dispose();
+  return {paint,breezeTime,clockHour,fixtures,materials,piece,box,pole,tree,treeModels,site,ferry,outbuilding:buildings.outbuilding,lantern,geometries,dispose(){
+    for(const skin of hullPaint.values())skin.dispose();
+    fixtures.dispose();forest.dispose();
     paint?.dispose();
     tideHouse?.dispose();
     ferryHall?.dispose();

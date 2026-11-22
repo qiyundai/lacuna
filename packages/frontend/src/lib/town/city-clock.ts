@@ -4,6 +4,15 @@ export function localHour(date = new Date()) {
   return date.getHours() + date.getMinutes()/60 + date.getSeconds()/3600;
 }
 
+export function onLocalMinute(refresh:()=>void){
+  let timer:number;
+  function next(){
+    timer=window.setTimeout(()=>{refresh();next();},60_000-Date.now()%60_000);
+  }
+  next();
+  return ()=>window.clearTimeout(timer);
+}
+
 export function studioHour(value: string | null) {
   if (!value || !/^(?:[01]?\d|2[0-3])(?::[0-5]\d)?$/.test(value)) return undefined;
   const [hour, minute] = value.split(':').map(Number);

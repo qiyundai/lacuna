@@ -37,6 +37,8 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
   const bounds=new T.Vector2(),clock={value:0};
   const wakes=[ferryWake(),ferryWake()];
   const wakeCounts=new Int32Array(wakes.length);
+  const hulls=wakes.map(()=>new T.Vector4(0,0,0,0));
+  material.uniforms.hulls={value:hulls};
   Object.assign(material.uniforms,{wakeTrail:{value:wakes.flatMap(w=>w.trail.value)},wakeCount:{value:wakeCounts},wakeBounds:{value:wakes.map(w=>w.bounds.value)}});
   Object.assign(material.uniforms,{daylight,slopes:{value:slopes},sunDirection:{value:sunDirection},bounds:{value:bounds},clock});
   material.uniforms.shadowFrame={value:sun.shadow.matrix};
@@ -70,6 +72,7 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
     uniform mat4 shadowFrame;
     uniform highp sampler2DShadow shadowDepth;
     uniform float clock,daylight;
+    uniform vec4 hulls[${wakes.length}];
     uniform int wakeCount[${wakes.length}];
     uniform vec4 wakeTrail[${wakeSamples*wakes.length}],wakeBounds[${wakes.length}];
     ${afterglow?sunbreak:''}
@@ -162,6 +165,13 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
       float sunlight=1.;
       if(all(greaterThan(sc,vec3(0.)))&&all(lessThan(sc,vec3(1.))))
         sunlight=texture(shadowDepth,vec3(sc.xy,sc.z-.0004));
+      for(int i=0;i<${wakes.length};i++){
+        vec4 hull=hulls[i];
+        vec2 offset=p-hull.xy+sunDirection.xz*.48/max(.38,sunDirection.y);
+        vec2 along=hull.zw;
+        vec2 local=vec2(dot(offset,along)/2.48,dot(offset,vec2(-along.y,along.x))/.77);
+        if(dot(along,along)>.5) sunlight*=smoothstep(.42,1.22,length(local));
+      }
       body*=mix(vec3(.10,.13,.24),vec3(1.),daylight);
       vec3 color=mix(body*(.74+.26*sunlight),reflected,clamp(fresnel+.21,0.,1.))
         +sunlight*glint*mix(vec3(.10,.16,.33),vec3(2.1,1.21,.52),daylight);
@@ -173,7 +183,7 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`;
-  return {water,bounds,clock,wakes,wakeCounts,resize(w:number,h:number){
+  return {water,bounds,clock,wakes,wakeCounts,hulls,resize(w:number,h:number){
     const scale=Math.min(.52,800/w,512/h);
     water.getRenderTarget().setSize(Math.max(1,Math.round(w*scale)),Math.max(1,Math.round(h*scale)));
     water.forceUpdate=true;

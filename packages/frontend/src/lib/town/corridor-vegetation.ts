@@ -1,3 +1,4 @@
+import { channelCenter, portalStation, hiddenStation, tunnelRadius } from './river-passage.js';
 import { boughEnd, farCrownStart, farCrownEnd, woodlandEnd } from './tree-dither.js';
 import { batchPlantings } from './tree-batches.js';
 import * as T from 'three';
@@ -13,6 +14,7 @@ const noise=new ImprovedNoise();
 
 export function woodlandAt(x:number,z:number,height:number,cityEnd:number){
   const station=valleyOrigin.z-z;
+  if(station<portalStation+20&&station>hiddenStation-12&&height<6.5&&Math.abs(x-valleyOrigin.x-channelCenter(station))<tunnelRadius+2)return 0;
   const west=shoreline(station)+valleyOrigin.x-x;
   const depth=Math.max(west,-riverWidth(station)-west);
   const street=z<218 && z>valleyOrigin.z-cityEnd-16 && depth>=-2 ? T.MathUtils.smoothstep(depth,39,55) : 1;

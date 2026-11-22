@@ -87,10 +87,10 @@ const surfacePigment: Record<PaintSurface, string> = {
   `
 };
 
-export function paintMaterial(material: T.MeshStandardMaterial, paint: Gouache, surface: PaintSurface = 'architecture', partSpace = false) {
+export function paintMaterial(material: T.MeshStandardMaterial, paint: Gouache, surface: PaintSurface = 'architecture', partSpace:boolean|'moving' = false) {
   const prepare = material.onBeforeCompile.bind(material);
   const cacheKey = material.customProgramCacheKey();
-  material.customProgramCacheKey = () => cacheKey + '/gouache/' + surface + (partSpace ? '/part' : '');
+  material.customProgramCacheKey = () => cacheKey + '/gouache/' + surface + (partSpace ? '/'+partSpace : '');
   material.onBeforeCompile = (shader, renderer) => {
     prepare(shader, renderer);
     shader.uniforms.gouacheMap = {value: paint.strokes};
@@ -110,7 +110,10 @@ export function paintMaterial(material: T.MeshStandardMaterial, paint: Gouache, 
       vec3 localNormal = normal;
       paintNormal = basis * (localNormal / max(scaleSquared,vec3(.000001)));
       ${partSpace ? `
-      #ifndef USE_INSTANCING
+      #if defined(USE_INSTANCING) && ${partSpace==='moving'?'1':'0'}
+        paintPoint = (instanceMatrix * vec4(position,1.)).xyz;
+        paintNormal = mat3(instanceMatrix) * (normal / max(scaleSquared,vec3(.000001)));
+      #elif !defined(USE_INSTANCING)
         vec3 partScale = sqrt(max(scaleSquared, vec3(.000001)));
         paintPoint = position * partScale;
         paintNormal = normal / partScale;

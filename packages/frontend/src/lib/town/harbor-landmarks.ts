@@ -22,6 +22,7 @@ export function market(p: Parts, bays: number, awning: 'ochre' | 'sage' | 'clay'
   for (const x of [-span * .38, 0, span * .38]) {
     p.rod('iron', p.vec(x, 2.48, 0), p.vec(x, 1.89, 0), .025);
     p.orb('lantern', x, 1.80, 0, .11);
+    p.mark('Interior pendant',x,1.8,0);
   }
   for (const side of [-1, 1]) {
     for (let i = 0; i < bays * 3; i++) {
@@ -201,8 +202,7 @@ export function station(p: Parts) {
   const dial = new T.Shape();
   dial.absarc(0, 0, .425, 0, Math.PI * 2, false);
   p.relief('chalk', dial, .08, 0, 3.77, 1.83);
-  p.rod('iron', p.vec(0, 3.76, 1.93), p.vec(.18, 3.91, 1.93), .028);
-  p.rod('iron', p.vec(0, 3.76, 1.93), p.vec(-.11, 4.03, 1.93), .034);
+  p.clock(0,3.77,1.93,.425);
   for (const x of [-.53, 0, .53])
     p.box('wood', x, 1.13, 1.81, .43, 1.99, .09);
   for (const x of [-2.85, -1.42, 0, 1.42, 2.85]) {
@@ -274,35 +274,6 @@ export function belfry(p: Parts) {
   lathe(p, 'copper', 0, 7.84, 0, [[1.69, 0], [1.18, .29], [.61, 1.26], [.11, 2.27], [0, 2.46]], 4);
   p.rod('gold', p.vec(0, 10.10, 0), p.vec(0, 10.82, 0), .045);
   p.orb('gold', 0, 10.39, 0, .13);
-}
-
-export function viaduct(p: Parts) {
-  const w = 2.34;
-  const span = new T.Shape();
-  span.moveTo(-w / 2, -1.47);
-  span.lineTo(-.88, -1.47);
-  span.lineTo(-.88, .85);
-  span.absellipse(0, .85, .88, 1.10, Math.PI, 0, true, 0);
-  span.lineTo(.88, -1.47);
-  span.lineTo(w / 2, -1.47);
-  span.lineTo(w / 2, 2.62);
-  span.lineTo(-w / 2, 2.62);
-  span.closePath();
-  p.relief('shade', span, 1.76, 0, 0, -.88);
-  for (const side of [-1, 1]) {
-    const z = side === 1 ? .88 : -1.01;
-    arch(p, 'stone', 0, .85, z, 1.05, 1.30, .18, .13);
-    p.box('lintel', 0, 2.12, side * .98, .22, .33, .21);
-    p.box('stone', -1.03, .05, side * .91, .28, 1.73, .22);
-    p.box('lintel', -1.03, .84, side * .91, .41, .13, .31);
-    p.box('stone', 0, 2.82, side * .99, w, .26, .18);
-    p.box('iron', 0, 3.06, side * .99, w, .065, .067);
-    for (const x of [-.91, -.30, .30, .91])
-      p.box('iron', x, 2.96, side * .99, .045, .21, .046);
-  }
-  p.box('stone', 0, 2.65, 0, w, .13, 2.13);
-  for (const z of [-.45, .45])
-    p.box('iron', 0, 2.75, z, w, .055, .068);
 }
 
 export function lighthouse(p: Parts) {

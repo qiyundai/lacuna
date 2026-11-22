@@ -76,29 +76,3 @@ export function parcelShelf({column,lane,bank}:RiverParcel){
   }
   return {relief,setback};
 }
-
-export type FerryService={departure:Site; arrival?:Site};
-
-export function sameFerryStops(a:FerryService|undefined,b:FerryService|undefined){
-  const sameLanding=(first?:Site,second?:Site)=>
-    first?.id===second?.id && first?.bank===second?.bank && first?.x===second?.x;
-  return sameLanding(a?.departure,b?.departure) && sameLanding(a?.arrival,b?.arrival);
-}
-
-export function ferryServices(sites:readonly Site[]):FerryService[]{
-  const services:FerryService[]=[];
-  const waiting:[FerryService[],FerryService[]]=[[],[]];
-  for(const site of sites){
-    if(!site.ferryTerminal)continue;
-    const opposite=waiting[site.bank===0?1:0];
-    if(opposite.length){
-      const nearest=opposite.reduce((a,b)=>Math.abs(a.departure.x-site.x)<=Math.abs(b.departure.x-site.x)?a:b);
-      nearest.arrival=site;
-      opposite.splice(opposite.indexOf(nearest),1);
-    }else{
-      const route={departure:site};
-      waiting[site.bank].push(route);services.push(route);
-    }
-  }
-  return services;
-}

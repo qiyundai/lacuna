@@ -38,7 +38,7 @@ export function roomLighting(){
             facadeGrid=max(vec2(1.),floor(vec2(span/1.45,length(instanceMatrix[1].xyz)/1.7)+.5));`:'float threshold=fract(household.x+roomThreshold);'+roomEmission+'roomColor=emission;'}
         `);
       shader.fragmentShader='varying vec3 roomColor;varying vec2 household;uniform vec3 occupancy;uniform float daylight;\n'+
-        (proxy?'varying vec3 facadePoint,facadeNormal;varying vec2 facadeGrid;':'')+shader.fragmentShader.replace('#include <opaque_fragment>',`
+        (proxy?'varying vec3 facadePoint,facadeNormal;varying vec2 facadeGrid;\n':'')+shader.fragmentShader.replace('#include <opaque_fragment>',`
         float threshold=household.x;
         ${proxy?`vec2 grid=vec2((abs(facadeNormal.x)>.5?facadePoint.z:facadePoint.x)+.5,facadePoint.y+.5)*facadeGrid;
           vec2 border=abs(fract(grid)-.5);

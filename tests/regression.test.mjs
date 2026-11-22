@@ -1063,19 +1063,19 @@ test('forgotten pages keep their parcel and historic floors as rooms and ferry s
   assert.equal(stillLit.readableId,rooms[1]);
   assert.equal(stillLit.litAdditions,shared.lights-1);
   assert.deepEqual(shape(plan),shape(initial));
-  const stop=initial.ferries.find(route=>route.arrival).arrival;
+  const stop=initial.ports.find(site=>site.bank===1 && site!==shared);
   const stopping=new Set([shared.id,stop.id]);
   for(const [id,site] of initial.addresses)if(id!==founder.id && stopping.has(site.id))forget(id);
   plan=coast();
   assert.deepEqual(shape(plan),shape(initial));
   assert.ok(plan.sites.filter(s=>stopping.has(s.id)).every(s=>s.quiet && s.litAdditions===0));
-  assert.ok(plan.ferries.every(r=>r.departure.id!==stop.id && r.arrival?.id!==stop.id));
+  assert.ok(plan.ports.every(site=>site.id!==stop.id));
   assert.ok(validCityHistory(journal.entries,journal.forgotten));
   assert.equal(validCityHistory(journal.entries,[{...founder,body:'must never be retained'}]),false);
   while(journal.entries.length)forget(journal.entries.at(-1).id);
   const empty=coast();
   assert.deepEqual(shape(empty),shape(initial));
-  assert.deepEqual([empty.addresses.size,empty.service,empty.ferries.length],[0,0,0]);
+  assert.deepEqual([empty.addresses.size,empty.service,empty.ports.length],[0,0,0]);
   assert.ok(empty.sites.every(s=>s.quiet));
   journal.entries.push(...Array.from({length:24},(_,i)=>page(120+i)));
   const regrown=coast();
@@ -1099,12 +1099,9 @@ test('mixed river editions keep archived addresses and append neighborhoods dete
     for(const page of past)assert.deepEqual(address(full.addresses.get(page.id)),address(old.addresses.get(page.id)));
     assert.ok([0,1].every(bank=>full.sites.filter(s=>s.bank===bank).length>35));
     assert.ok(new Set(full.sites.map(s=>s.district).filter(Boolean)).size>=3);
-    const pairs=plan=>plan.ferries.filter(r=>r.arrival).map(r=>[r.departure.id,r.arrival.id]);
-    assert.ok(pairs(full).length>=2);
-    for(const pair of pairs(early))assert.ok(pairs(full).some(p=>p[0]===pair[0] && p[1]===pair[1]));
-    const endpoints=full.ferries.flatMap(r=>r.arrival?[r.departure,r.arrival]:[r.departure]);
-    assert.equal(new Set(endpoints).size,full.sites.filter(s=>s.ferryTerminal).length);
-    assert.ok(full.ferries.every(r=>!r.arrival || r.arrival.bank!==r.departure.bank));
+    assert.ok(full.ports.length>=4);
+    assert.deepEqual(full.ports.slice(0,early.ports.length).map(s=>s.id),early.ports.map(s=>s.id));
+    assert.deepEqual(full.ports,full.sites.filter(s=>s.ferryTerminal&&!s.quiet));
     assert.deepEqual(early,paintedCoast([...past,...pages.slice(0,80)].map(p=>({...p,body:'Different words',created_at:p.created_at*86400}))));
   }
 });
@@ -1181,38 +1178,107 @@ test('door approaches retain the least-cost accessible landing on long streets',
 
 test('ferry courses follow relocated stops when an older journal page is removed',async()=>{
   const {paintedCoast}=await import('../packages/frontend/src/lib/town/painted-coast.ts');
-  const {sameFerryStops}=await import('../packages/frontend/src/lib/town/river-neighborhoods.ts');
+  const {mooring}=await import('../packages/frontend/src/lib/town/harbor-workshop.ts');
   const pages=Array.from({length:128},(_,i)=>({id:'0-review-'+i,created_at:i,riverEdition:3}));
-  const routes=paintedCoast(pages).ferries;
-  const edited=paintedCoast(pages.filter((_,i)=>i!==17)).ferries;
-  const original=routes.find(r=>r.departure.id==='0-review-111');
-  const moved=edited.find(r=>r.departure.id===original.departure.id);
-  assert.ok(moved && original.departure.x!==moved.departure.x);
-  assert.equal(sameFerryStops(original,moved),false);
-  const paired=routes.find(r=>r.arrival);
-  assert.ok(paired);
-  assert.equal(sameFerryStops(paired,structuredClone(paired)),true);
-  assert.equal(sameFerryStops(paired,{...paired,arrival:{...paired.arrival,x:paired.arrival.x+157}}),false);
-  assert.equal(sameFerryStops(paired,{departure:paired.departure}),false);
+  const original=paintedCoast(pages).ports.find(site=>site.id==='0-review-111');
+  const moved=paintedCoast(pages.filter((_,i)=>i!==17)).ports.find(site=>site.id===original.id);
+  assert.ok(moved && original.x!==moved.x);
+  assert.notEqual(mooring(original).station,mooring(moved).station);
+
 });
 
-test('the full turning ferry hull stays in navigable water on loops and crossings',async()=>{
+test('river traffic clears both banks and the crossing, berths, and reverses only beyond town',async()=>{
   const {FerryCourse}=await import('../packages/frontend/src/lib/town/ferry-course.ts');
   const {landHeight}=await import('../packages/frontend/src/lib/town/valley-river.ts');
-  for(let station=-60;station<1800;station+=41){
-    for(const bank of [0,1])for(const destination of [undefined,station-60,station+1,station+130]){
-      const course=new FerryCourse(station,bank,destination);
-      assert.ok(course.getPointAt(0).distanceTo(course.getPointAt(1))<1e-6);
-      assert.equal(course.progress(3),0);
-      for(let i=0;i<=160;i++){
-        const t=i/160,p=course.getPointAt(t),tangent=course.getTangentAt(t);
-        for(const length of [-2.5,0,2.55])for(const side of [-.62,.62]){
-          const x=p.x+length*tangent.x-side*tangent.z,z=p.z+length*tangent.z+side*tangent.x;
-          assert.ok(landHeight(x,z)<-.35,'insufficient hull clearance at '+x+','+z);
-        }
+  const {channelCenter,hiddenStation}=await import('../packages/frontend/src/lib/town/river-passage.ts');
+  for(const crossing of [-42,0,33,740])for(const bank of [0,1])for(const visiting of [false,true]){
+    const stop={station:crossing+7,bank,offset:4.6,slope:0};
+    const course=new FerryCourse(1800,bank?1:-1,visiting?stop:undefined,crossing);
+    assert.equal(course.getPoint(0).x,hiddenStation);
+    assert.equal(course.getPoint(1).x,1800);
+    assert.equal(course.sample(course.duration+8).visible,false);
+    assert.equal(course.sample(course.duration+45).direction,-1);
+    if(visiting){
+      const dwell=course.timeAt(stop.station)+4;
+      assert.equal(course.sample(dwell).progress,course.sample(dwell+7).progress);
+      assert.ok(Math.abs(course.getPointAt(course.sample(dwell).progress).x-stop.station)<.85);
+    }
+    for(const x of [crossing-3,crossing-1,crossing,crossing+1,crossing+3,...Array.from({length:480},(_,i)=>hiddenStation+i*4.2)]){
+      const t=(x-hiddenStation)/(course.end-hiddenStation);
+      const p=course.getPoint(t),tangent=course.getTangent(t);
+      for(const length of [-2.5,0,2.55])for(const side of [-.62,.62]){
+        const bow=p.x+length*tangent.x-side*tangent.z,z=p.z+length*tangent.z+side*tangent.x;
+        assert.ok(landHeight(bow,z)<-.35,'insufficient hull clearance at '+bow+','+z);
+        if(Math.abs(bow-crossing)<1)assert.ok(Math.abs(z-channelCenter(crossing))<3.3);
       }
     }
   }
+});
+
+test('a multi-arch footbridge meets the two street elevations and survives city growth',async()=>{
+  const {bridgeStation,channelCenter}=await import('../packages/frontend/src/lib/town/river-passage.ts');
+  const {paintedCoast}=await import('../packages/frontend/src/lib/town/painted-coast.ts');
+  const {footbridge}=await import('../packages/frontend/src/lib/town/footbridge.ts');
+  const {Raycaster,Vector3}=await import('three');
+  const pages=Array.from({length:150},(_,i)=>({id:'bridge-'+i,created_at:i,riverEdition:3}));
+  assert.equal(bridgeStation(paintedCoast(pages.slice(0,1)).sites),undefined);
+  const x=bridgeStation(paintedCoast(pages.slice(0,32)).sites);
+  assert.ok(Number.isFinite(x));assert.equal(bridgeStation(paintedCoast(pages).sites),x);
+  const center=channelCenter(x),a=new Vector3(x,1,center-11),b=new Vector3(x,1.35,center+13);
+  const bridge=footbridge(a,b);bridge.deck.updateMatrixWorld(true);
+  const down=new Raycaster(undefined,new Vector3(0,-1,0));
+  for(const [p,offset] of [[a,.02],[b,-.02]]){
+    down.ray.origin.set(x,12,p.z+offset);
+    const hit=down.intersectObject(bridge.deck)[0];
+    assert.ok(hit&&Math.abs(hit.point.y-p.y)<.04);
+  }
+  let openings=0,previous=false;
+  for(let z=a.z+.04;z<b.z;z+=.10){
+    const ray=new Raycaster(new Vector3(x-3,.55,z),new Vector3(1,0,0),0,6);
+    const open=ray.intersectObject(bridge.deck).length===0;
+    if(open&&!previous)openings++;
+    previous=open;
+  }
+  assert.ok(openings>=5);
+  for(const z of [-1.6,0,1.6]){
+    const navigation=new Raycaster(new Vector3(x-3,2.05,center+z),new Vector3(1,0,0),0,6);
+    assert.equal(navigation.intersectObject(bridge.deck).length,0);
+  }
+  bridge.dispose();
+});
+
+test('both founding quays leave the bridge clear and join their streets on the landward side',async()=>{
+  const {createFerryHallKit}=await import('../packages/frontend/src/lib/town/ferry-hall.ts');
+  const {bridgeStation}=await import('../packages/frontend/src/lib/town/river-passage.ts');
+  const {paintedCoast}=await import('../packages/frontend/src/lib/town/painted-coast.ts');
+  const {sitePoint,siteHeading}=await import('../packages/frontend/src/lib/town/harbor-workshop.ts');
+  const {placeLot,streetLine}=await import('../packages/frontend/src/lib/town/harbor-streets.ts');
+  const {Box3}=await import('three');
+  const kit=createFerryHallKit();
+  for(let seed=0;seed<8;seed++){
+    const coast=paintedCoast(Array.from({length:80},(_,i)=>({id:seed+'-district-'+i,created_at:i,riverEdition:3})));
+    const x=bridgeStation(coast.sites);
+    for(const site of coast.ports.filter(s=>Math.abs(sitePoint(s).x-x)<10)){
+      const model=kit.build(5);
+      model.position.copy(sitePoint(site));model.rotation.y=siteHeading(site,model.position.x);
+      const lot=placeLot(site,model,x);
+      const box=new Box3().setFromObject(model,true);
+      assert.ok(box.min.x>x+1.19 || box.max.x<x-1.19);
+      assert.ok(lot.doors.length>0 && model.worldToLocal(lot.doors[0].landing.clone()).z<-2.27);
+      const street=streetLine([lot],3,[x-1.5,x+1.5]);
+      const atDoor=street.reduce((a,b)=>Math.abs(a.x-model.position.x)<Math.abs(b.x-model.position.x)?a:b);
+      assert.ok(model.worldToLocal(atDoor.clone()).z<-3);
+    }
+  }
+  kit.dispose();
+});
+
+test('rail sections end on either side of a boarding opening',async()=>{
+  const {railClearance}=await import('../packages/frontend/src/lib/town/harbor-streets.ts');
+  const {Vector3}=await import('three');
+  const clear=railClearance([]);
+  clear.opening(new Vector3(0,0,-1),new Vector3(0,0,1),2);
+  assert.deepEqual(clear.sections(new Vector3(-2,0,0),new Vector3(2,0,0)),[[0,.25],[.75,1]]);
 });
 
 test('wake samples remain at earlier stern positions through a turn and lose energy at rest',async()=>{

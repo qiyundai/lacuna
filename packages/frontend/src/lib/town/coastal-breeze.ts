@@ -53,3 +53,28 @@ export function stirCanopy(material:T.MeshStandardMaterial|T.MeshLambertMaterial
     `);
   };
 }
+
+export function stirGroundPlants(material:T.MeshStandardMaterial,clock:T.IUniform<number>,flex:number,root=0){
+  const prepare=material.onBeforeCompile.bind(material);
+  const key=material.customProgramCacheKey();
+  material.customProgramCacheKey=()=>key+'/ground-plant/'+flex+'/'+root;
+  material.onBeforeCompile=(shader,renderer)=>{
+    prepare(shader,renderer);
+    shader.uniforms.breezeTime=clock;
+    shader.vertexShader=coastalBreeze+shader.vertexShader.replace('#include <begin_vertex>',`
+      #include <begin_vertex>
+      mat4 plantFrame=modelMatrix;
+      #ifdef USE_INSTANCING
+        plantFrame*=instanceMatrix;
+      #endif
+      vec3 place=(plantFrame*vec4(position,1.)).xyz;
+      float stem=max(0.,position.y-${root.toFixed(3)});
+      float gust=breezeAt(place.xz,breezeTime);
+      vec2 shift=breezeDirection*stem*length(plantFrame[1].xyz)*${flex.toFixed(3)}*
+        (.45+gust)*sin(dot(place.xz,vec2(.058,-.092))-breezeTime*1.08);
+      mat3 axes=mat3(plantFrame);
+      vec3 scaleSq=vec3(dot(axes[0],axes[0]),dot(axes[1],axes[1]),dot(axes[2],axes[2]));
+      transformed+=(vec3(shift.x,0.,shift.y)*axes)/max(scaleSq,vec3(.000001));
+    `);
+  };
+}

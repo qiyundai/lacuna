@@ -1,50 +1,68 @@
 import { Curve, MathUtils, Vector3 } from 'three';
-import { riverWidth, shoreline } from './valley-river.js';
-import { ferryBerthOffset } from './ferry-hall.js';
-import type { Bank } from './painted-coast.js';
+import { hiddenStation, sailingLine, type Berth } from './river-passage.js';
 
 export class FerryCourse extends Curve<Vector3> {
-  readonly station:number;
-  readonly bank:Bank;
-  readonly destination?:number;
-  private readonly outbound:number;
-  private readonly inbound:number;
-  private readonly length:number;
+  readonly duration:number;
+  readonly cruise=2.45;
+  private readonly before:number;
+  private readonly dwell:number;
+  private readonly distance:number;
 
-  constructor(station:number,bank:Bank,destination?:number) {
+  readonly end:number;
+  readonly side:number;
+  readonly berth?:Berth;
+  readonly crossing?:number;
+
+  constructor(end:number,side:number,berth?:Berth,crossing?:number){
     super();
-    this.station=station;
-    this.bank=bank;
-    this.destination=destination;
-    this.arcLengthDivisions=256;
+    this.end=end;this.side=side;this.berth=berth;this.crossing=crossing;
+    this.arcLengthDivisions=Math.ceil((end-hiddenStation)/1.5);
+    this.distance=this.getLength();
+    this.before=berth?this.timeAt(berth.station)*this.cruise:this.distance;
+    this.dwell=berth?14:0;
+    this.duration=this.distance/this.cruise+this.dwell+(berth?6:0);
+  }
+
+  getPoint(t:number,point=new Vector3()){
+    const x=MathUtils.lerp(hiddenStation,this.end,t);
+    return point.set(x,.09,sailingLine(x,this.side,this.berth,this.crossing));
+  }
+
+  sample(time:number){
+    const leg=this.duration+38,elapsed=MathUtils.euclideanModulo(time,leg*2);
+    const reverse=elapsed>=leg,phase=elapsed%leg;
+    const t=reverse?this.duration-phase:phase;
+    let distance=t*this.cruise;
+    if(this.berth){
+      const brakeStart=this.before/this.cruise-3;
+      const leave=brakeStart+6+this.dwell;
+      if(t>=brakeStart&&t<leave){
+        const remaining=1-MathUtils.clamp((t-brakeStart)/6,0,1);
+        distance=this.before-3*this.cruise*remaining*remaining;
+      }else if(t>=leave){
+        const seconds=t-leave;
+        distance=this.before+this.cruise*(seconds<6?seconds*seconds/12:seconds-3);
+      }
+    }
+    return {progress:MathUtils.clamp(distance/this.distance,0,1),direction:reverse?-1:1,visible:phase<this.duration};
+  }
+
+  clockAt(station:number,reverse:boolean){
+    let elapsed=this.timeAt(station);
+    if(this.berth){
+      const distance=(elapsed-this.before/this.cruise)*this.cruise;
+      if(Math.abs(distance)<3*this.cruise){
+        const brake=Math.sqrt(12*Math.abs(distance)/this.cruise);
+        elapsed=this.before/this.cruise+3+(distance<=0?-brake:this.dwell+brake);
+      }else if(distance>0)elapsed+=this.dwell+6;
+    }
+    return reverse?2*this.duration+38-elapsed:elapsed;
+  }
+
+  timeAt(station:number){
     const lengths=this.getLengths();
-    this.length=lengths[this.arcLengthDivisions]!;
-    this.outbound=lengths[this.arcLengthDivisions/2]!/1.8;
-    this.inbound=this.length/1.8-this.outbound;
-  }
-
-  getPoint(t:number,point=new Vector3()) {
-    const angle=t*Math.PI*2;
-    const crossing=(1-Math.cos(angle))*.5;
-    const x=MathUtils.lerp(this.station,this.destination??this.station+15,crossing)+10*Math.sin(angle);
-    const width=riverWidth(x);
-    const dockDistance=this.destination===undefined?crossing:Math.min(crossing,1-crossing);
-    const margin=Math.min(ferryBerthOffset+2.2+1.2*MathUtils.smoothstep(dockDistance,0,.22),width*.44);
-    const span=this.destination===undefined ? .60 : 1;
-    const fromBank=margin+(width-2*margin)*crossing*span;
-    return point.set(x,.09,shoreline(x)+(this.bank===0?fromBank:width-fromBank));
-  }
-
-  progress(time:number) {
-    const layover=6,turnaround=this.destination===undefined?0:layover;
-    const elapsed=time%(layover+this.outbound+turnaround+this.inbound)-layover;
-    const dock=this.outbound*1.8/this.length;
-    const sail=(t:number,duration:number)=>{
-      const u=MathUtils.clamp(t/duration,0,1);
-      return u*u*(3-2*u);
-    };
-    if(this.destination===undefined)return sail(elapsed,this.outbound+this.inbound);
-    if(elapsed<=this.outbound)return dock*sail(elapsed,this.outbound);
-    return dock+(1-dock)*sail(elapsed-this.outbound-turnaround,this.inbound);
+    const offset=MathUtils.clamp((station-hiddenStation)/(this.end-hiddenStation),0,1)*this.arcLengthDivisions;
+    const i=Math.floor(offset);
+    return MathUtils.lerp(lengths[i]!,lengths[Math.min(i+1,this.arcLengthDivisions)]!,offset-i)/this.cruise;
   }
 }

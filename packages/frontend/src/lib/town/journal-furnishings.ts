@@ -1,3 +1,4 @@
+import { stirGroundPlants } from './coastal-breeze.js';
 import * as T from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { AddressDetail, Detail } from './journal-details.js';
@@ -44,12 +45,17 @@ const furnishings: Record<Detail, Arrangement> = {
   bookExchange: {pieces: [['bookcaseOpenLow', 1.38, -.27], ['chair', .87, .59, .22, .52]]}
 };
 
-export async function loadJournalFurniture() {
+export async function loadJournalFurniture(wind={value:0}) {
   const kit = await new GLTFLoader().loadAsync('/town/journal-furnishings.glb').catch(() => undefined);
   const models = new Map<string, T.Mesh>();
   const materials = new Set<T.Material>();
   kit?.scene.traverse(node => {
     if (!(node instanceof T.Mesh)) return;
+    if((node.name==='plantSmall1'||node.name==='pottedPlant')&&node.material instanceof T.MeshStandardMaterial){
+      materials.add(node.material);
+      node.material=node.material.clone();
+      stirGroundPlants(node.material,wind,.12,node.name==='pottedPlant'?.37:.50);
+    }
     models.set(node.name, node);
     for (const material of Array.isArray(node.material) ? node.material : [node.material]) materials.add(material);
     node.geometry.computeBoundingBox();

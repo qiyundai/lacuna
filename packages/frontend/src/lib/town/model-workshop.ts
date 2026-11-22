@@ -1,3 +1,5 @@
+import { localHour } from './city-clock.js';
+import { stirGroundPlants } from './coastal-breeze.js';
 import * as T from 'three';
 import { paintMaterial, type Gouache } from './gouache.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -12,13 +14,13 @@ export const colors = {
   foliage: '#526d55', zinc: '#6d8390', verdigris: '#92aba0', crystal: '#b3d4c9'
 } as const;
 export type Pigment = keyof typeof colors;
-type Finish = 'mineral' | 'metal' | 'glazing' | 'crystal' | 'light';
+type Finish = 'mineral' | 'metal' | 'glazing' | 'crystal' | 'light' | 'hands' | 'leaves';
 const surfaceKinds: Partial<Record<Pigment, number>> = {
   plaster:1, ochre:1, sage:1, chalk:1, oxblood:1, stone:2, shade:2, lintel:2, slate:3, clay:3
 };
 
 function sculpt(width: number, depth: number, boxShape: T.BufferGeometry, rodShape: T.BufferGeometry, sphere: T.BufferGeometry, roomWindows:boolean) {
-  const batches: Record<Finish, T.BufferGeometry[]> = { mineral: [], metal: [], glazing: [], crystal: [], light: [] };
+  const batches: Record<Finish, T.BufferGeometry[]> = { mineral: [], metal: [], glazing: [], crystal: [], light: [], hands: [], leaves: [] };
   let frame = new T.Matrix4();
   let roomAnchor:T.Vector3|undefined;
   function room(x:number,y:number,z:number,draw:()=>void){
@@ -55,7 +57,7 @@ function sculpt(width: number, depth: number, boxShape: T.BufferGeometry, rodSha
       rgb[i * 3 + 2] = tint.b * lift;
     }
     geometry.setAttribute('color', new T.BufferAttribute(rgb, 3));
-    const finish = color === 'lantern' || (!roomWindows&&warmPane) ? 'light'
+    const finish = color==='foliage'?'leaves':color === 'lantern' || (!roomWindows&&warmPane) ? 'light'
       : pane ? 'glazing' : color === 'crystal' ? 'crystal' : ['copper', 'seam', 'gold', 'iron'].includes(color) ? 'metal' : 'mineral';
     if(roomWindows&&(finish==='glazing'||finish==='crystal')){
       geometry.computeBoundingBox();
@@ -83,6 +85,19 @@ function sculpt(width: number, depth: number, boxShape: T.BufferGeometry, rodSha
   function orb(c: Pigment, x: number, y: number, z: number, r: number) {
     place(sphere, c, new T.Matrix4().makeScale(r, r, r).setPosition(x, y, z));
   }
+  function clock(x:number,y:number,z:number,radius:number){
+    const center=vec(x,y,z);
+    for(const minute of [false,true]){
+      rod('iron',center,vec(x,y+radius*(minute?.84:.57),z),radius*(minute?.043:.065));
+      const hand=batches.metal.pop()!;
+      const pivot=center.clone().applyMatrix4(frame),axis=vec(0,0,1).transformDirection(frame);
+      const count=hand.getAttribute('position').count;
+      hand.setAttribute('pivot',new T.Float32BufferAttribute(Array.from({length:count},()=>pivot.toArray()).flat(),3));
+      hand.setAttribute('dialAxis',new T.Float32BufferAttribute(Array.from({length:count},()=>axis.toArray()).flat(),3));
+      hand.setAttribute('minuteHand',new T.Float32BufferAttribute(new Float32Array(count).fill(Number(minute)),1));
+      batches.hands.push(hand);
+    }
+  }
   function relief(c: Pigment, path: T.Shape, thickness: number, x: number, y: number, z: number) {
     const g = new T.ExtrudeGeometry(path, { depth: thickness, bevelEnabled: false, curveSegments: 12 });
     place(g, c, new T.Matrix4().makeTranslation(x, y, z));
@@ -96,18 +111,29 @@ function sculpt(width: number, depth: number, boxShape: T.BufferGeometry, rodSha
     fn();
     frame = previous;
   }
-  return { batches, markers, room, mark, entrance, vec, box, rod, orb, relief, face, place };
+  return { batches, markers, room, mark, entrance, clock, vec, box, rod, orb, relief, face, place };
 }
 
 export type ModelTools = ReturnType<typeof sculpt>;
 
-export function createModelWorkshop(width: number, depth: number, paint?: Gouache,roomWindows=true) {
+export function createModelWorkshop(width: number, depth: number, paint?: Gouache,roomWindows=true,clockHour:T.IUniform<number>={value:localHour()},wind:T.IUniform<number>={value:0}) {
   const finishes = {
     mineral: new T.MeshStandardMaterial({ vertexColors: true, roughness: .84 }),
     metal: new T.MeshStandardMaterial({ vertexColors: true, metalness: .38, roughness: .54 }),
     glazing: new T.MeshStandardMaterial({ vertexColors: true, metalness: .24, roughness: .22 }),
     crystal: new T.MeshStandardMaterial({vertexColors:true, transparent:true, opacity:.34, depthWrite:false, roughness:.24}),
+    leaves: new T.MeshStandardMaterial({vertexColors:true,roughness:.92}),
+    hands: new T.MeshLambertMaterial({vertexColors:true}),
     light: new T.MeshBasicMaterial({ vertexColors: true })
+  };
+  stirGroundPlants(finishes.leaves,wind,.075,.48);
+  finishes.hands.onBeforeCompile=shader=>{
+    shader.uniforms.clockHour=clockHour;
+    shader.vertexShader='uniform float clockHour;attribute vec3 pivot,dialAxis;attribute float minuteHand;\n'+shader.vertexShader.replace('#include <begin_vertex>',`
+      vec3 arm=position-pivot;
+      float angle=-6.2831853*clockHour*mix(1./12.,1.,minuteHand);
+      vec3 transformed=pivot+arm*cos(angle)+cross(dialAxis,arm)*sin(angle)+dialAxis*dot(dialAxis,arm)*(1.-cos(angle));
+    `);
   };
   if (paint?.relief) finishBuilding(finishes.mineral,paint.relief);
   if (paint) {
