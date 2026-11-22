@@ -1,5 +1,8 @@
 import test from 'node:test';
 import './living-book.test.mjs';
+import './city-details.test.mjs';
+import { journalDetails } from '../packages/frontend/src/lib/town/journal-details.ts';
+import { paintedCoast } from '../packages/frontend/src/lib/town/painted-coast.ts';
 import { emptyBook, nextBookTask, acceptBookResult } from '../packages/shared/living-book.ts';
 import assert from 'node:assert/strict';
 import { districts } from '../packages/frontend/src/lib/town/districts.ts';
@@ -851,6 +854,25 @@ test('phone encrypted backups restore on another device, preserve conflict copie
   time += 15 * 60 * 1000 + 1; assert.equal((await vault.status()).locked, true);
   await vault.unlock(samplePassphrase); await webRequest('/auth/account', 'DELETE', undefined, vault);
   assert.equal(storage.current, null); assert.equal(storage.backups.length, 0);
+});
+test('an encrypted city backup reconstructs its furnishings after forgetting and locking', async () => {
+  const vault=new WebVault(webStorage());
+  await vault.unlock(samplePassphrase,true);
+  for(let i=0;i<18;i++)await webRequest('/entries','POST',{...thought(i,'I swam at dawn, then made tea.'),city:true},vault);
+  function decorations(journal){
+    return journalDetails(paintedCoast(journal.entries,journal.forgotten),journal.entries);
+  }
+  const first=decorations(vault.read());
+  assert.ok(first.addresses.size>1);
+  const removed=[...first.addresses.values()][0][0].page;
+  await webRequest('/entries/'+removed,'DELETE',undefined,vault);
+  const expected=decorations(vault.read()),backup=await vault.backup();
+  vault.lock();
+  const restored=new WebVault(webStorage());
+  await restored.restore(backup,samplePassphrase);
+  assert.deepEqual(decorations(restored.read()),expected);
+  assert.ok(![...expected.addresses.values()].flat().some(detail=>detail.page===removed));
+  assert.ok(!JSON.stringify(restored.read().forgotten).includes('detail'));
 });
 test('phone archive searches and kept markers use the complete encrypted local journal', async () => {
   const vault = new WebVault(webStorage()); await vault.unlock(samplePassphrase, true);

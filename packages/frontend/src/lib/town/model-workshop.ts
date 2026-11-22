@@ -20,13 +20,16 @@ const surfaceKinds: Partial<Record<Pigment, number>> = {
 function sculpt(width: number, depth: number, boxShape: T.BufferGeometry, rodShape: T.BufferGeometry, sphere: T.BufferGeometry) {
   const batches: Record<Finish, T.BufferGeometry[]> = { mineral: [], metal: [], glazing: [], crystal: [], light: [] };
   let frame = new T.Matrix4();
-  const thresholds: T.Object3D[] = [];
-  function entrance(x: number, y: number, z: number, heading = 0) {
+  const markers: T.Object3D[] = [];
+  function mark(name: string, x: number, y: number, z: number, heading = 0) {
     const marker = new T.Object3D();
-    marker.name = 'Door threshold';
+    marker.name = name;
     const transform = new T.Matrix4().makeRotationY(heading).setPosition(x,y,z);
     transform.premultiply(frame).decompose(marker.position, marker.quaternion, marker.scale);
-    thresholds.push(marker);
+    markers.push(marker);
+  }
+  function entrance(x: number, y: number, z: number, heading = 0) {
+    mark('Door threshold', x, y, z, heading);
   }
   const vec = (x: number, y: number, z: number) => new T.Vector3(x, y, z);
   function place(shape: T.BufferGeometry, color: Pigment, transform: T.Matrix4) {
@@ -73,7 +76,7 @@ function sculpt(width: number, depth: number, boxShape: T.BufferGeometry, rodSha
     fn();
     frame = previous;
   }
-  return { batches, thresholds, entrance, vec, box, rod, orb, relief, face, place };
+  return { batches, markers, mark, entrance, vec, box, rod, orb, relief, face, place };
 }
 
 export type ModelTools = ReturnType<typeof sculpt>;
@@ -110,7 +113,7 @@ export function createModelWorkshop(width: number, depth: number, paint?: Gouach
       mesh.receiveShadow = true;
       group.add(mesh);
     }
-    for (const threshold of parts.thresholds) group.add(threshold);
+    for (const marker of parts.markers) group.add(marker);
     return group;
   }
 

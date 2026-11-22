@@ -5,6 +5,8 @@ https://creativecommons.org/licenses/by/3.0/
 Texture converted to an external WebP; model resized and animated in the village.
 
 Villagers by Kenney, CC0. See folk/License.txt.
+Journal furnishings from Kenney's Furniture Kit (CC0), adapted to vertex colors and packed into one GLB.
+https://opengameart.org/content/furniture-kit
 Valley, cedar, rooftiles, cottage fronts, and maple boughs were generated for Lacuna.
 
 Village skybox uses Belfast Sunset (Pure Sky), CC0, by Dimitrios Savva, Greg Zaal, and Jarod Guest.

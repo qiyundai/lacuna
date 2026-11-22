@@ -8,6 +8,8 @@
   import { forgetAddress, type ForgottenAddress } from '../../../../shared/city-address.js';
   import { hashPage } from '$lib/town/city-growth.js';
   import { paintedCoast, type Site } from '$lib/town/painted-coast.js';
+  import { journalDetails } from '$lib/town/journal-details.js';
+  import type { SceneCues } from '$lib/town/journal-scenes.js';
   import type { createHarbor } from '$lib/town/harbor.js';
 
   import type { PageMarker } from '$lib/town/city-page-markers.js';
@@ -46,7 +48,11 @@
   let panel=$state<'write'|'pages'|'read'|'forget'>('write'),draft=$state(''),draftId='',alive=false,reveal=false;
   const ordered=$derived([...entries].sort((a,b)=>b.created_at-a.created_at||b.id.localeCompare(a.id)));
   const latest=$derived(ordered[0]);
-  const plan=$derived(paintedCoast(entries,forgotten));
+  const seen = new WeakMap<EntryData, SceneCues>();
+  const plan=$derived.by(()=>{
+    const coast = paintedCoast(entries,forgotten);
+    return {...coast, details: journalDetails(coast,entries,seen)};
+  });
   const openedPage=$derived(entries.find(entry=>entry.id===readId));
   const site=$derived(plan.addresses.get(readId));
   const neighbors=$derived(site?ordered.filter(page=>plan.addresses.get(page.id)===site):[]);
@@ -56,12 +62,21 @@
   const weekday=new Intl.DateTimeFormat(undefined,{weekday:'long'});
   const opening=$derived((!ready||!scene)&&!error&&!graphicsError);
   const date=new Intl.DateTimeFormat(undefined,{year:'numeric',month:'short',day:'numeric'});
+  let readRequest=0;
   async function read(){
+    const request=++readRequest, version=sessionVersion.value;
     try{
       const journal=guest?{entries:examples(),forgotten:[]}:await api.city.get();
-      if(alive){entries=journal.entries;forgotten=journal.forgotten;ready=true;error='';}
+      if(!alive || request!==readRequest || version!==sessionVersion.value)return;
+      entries=journal.entries;forgotten=journal.forgotten;
+      ready=true;error='';
+      if(readId && !entries.some(e=>e.id===readId)){readId='';dialog?.close();}
     }
-    catch{if(alive)error='Your journal could not be opened.';}
+    catch{if(alive && request===readRequest){entries=[];forgotten=[];ready=false;readId='';dialog?.close();error='Your journal could not be opened.';}}
+  }
+  function refreshCity(event:Event){
+    if(busy && event instanceof CustomEvent && event.detail?.saved)return;
+    void read();
   }
   async function graphics(){
     graphicsError=false;
@@ -76,7 +91,8 @@
     alive=true;const preference=matchMedia('(prefers-reduced-motion: reduce)');
     const sync=()=>{paused=preference.matches;};sync();preference.addEventListener('change',sync);
     void read();void graphics();
-    return ()=>{alive=false;preference.removeEventListener('change',sync);scene?.destroy();};
+    if(!guest)window.addEventListener('lacuna:journal-changed',refreshCity);
+    return ()=>{alive=false;preference.removeEventListener('change',sync);window.removeEventListener('lacuna:journal-changed',refreshCity);scene?.destroy();};
   });
   $effect(()=>{scene?.pause(paused);});
   $effect(()=>{scene?.setPainted(painted);});

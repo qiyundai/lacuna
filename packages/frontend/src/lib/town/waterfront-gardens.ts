@@ -150,7 +150,8 @@ export function cutBuildingPlots(lots:WaterfrontLot[],walks:ReturnType<typeof ga
 }
 
 export function landscapeWaterfront(shop:Workshop,plants:T.Group[],templates:ReturnType<typeof courtTemplates>,neighborhoods:Neighborhoods,bankSide:Bank,from:number,to:number,lots:WaterfrontLot[],streets:T.Vector3[][],
-  reserved:ReturnType<typeof gardenClearance>,grade:ReturnType<typeof cutBuildingPlots>,buildings:T.Box3[],ground:T.Group,planting:T.Group,details:T.Group,mow:(x:number,z:number,r:number)=>void){
+  reserved:ReturnType<typeof gardenClearance>,grade:ReturnType<typeof cutBuildingPlots>,buildings:T.Box3[],ground:T.Group,planting:T.Group,details:T.Group,mow:(x:number,z:number,r:number)=>void,
+  streetFurnishing?: (key:number)=>T.Group|undefined){
   const outward=bankSide===0?1:-1;
   const fixtures=gardenClearance();
   const approaches=new Map<number,T.Vector3[]>();
@@ -301,6 +302,29 @@ export function landscapeWaterfront(shop:Workshop,plants:T.Group[],templates:Ret
           planting.add(group);fixtures.mark(q.x,q.z,Math.max(rx,rz));mow(q.x,q.z,Math.max(rx,rz));
           break;
         }
+      }
+    }
+    const streetItem = streetFurnishing?.(districtKey({column,lane,bank:bankSide}));
+    if (streetItem) {
+      const size = new T.Box3().setFromObject(streetItem).getSize(new T.Vector3());
+      const radius = Math.hypot(size.x, size.z) / 2 + .08;
+      for (const u of [.20,.80,.33,.67,.12,.88,.5]) {
+        let placed = false;
+        for (const v of [.76,.58,.40,.25]) {
+          const q = surfacePoint(u,v);
+          if (q.y < .5 || !open(q.x,q.z,radius) || reserved.overlaps(q.x,q.z,radius,radius)) continue;
+          const du=radius/12.56, dv=radius/Math.max(1,Math.abs(surfacePoint(u,1).z-surfacePoint(u,0).z));
+          if (u-du<0 || u+du>1 || v-dv<0 || v+dv>1) continue;
+          const heights=[-1,1].flatMap(a=>[-1,1].map(b=>surfacePoint(u+a*du,v+b*dv).y));
+          const high=Math.max(q.y,...heights), foundation=high-Math.min(q.y,...heights)+.10;
+          if (foundation>.62) continue;
+          streetItem.position.set(q.x,high+.035,q.z);
+          streetItem.rotation.y=bankSide ? Math.PI : 0;
+          shop.box(streetItem,'ashlar',0,-foundation/2,0,size.x+.1,foundation,size.z+.1);
+          planting.add(streetItem); fixtures.mark(q.x,q.z,radius); mow(q.x,q.z,radius);
+          placed=true; break;
+        }
+        if(placed) break;
       }
     }
     if(lot&&!quay){

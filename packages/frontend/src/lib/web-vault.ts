@@ -219,7 +219,7 @@ let channel: BroadcastChannel | undefined;
 export function browserVault() {
   if (!instance) {
     instance = new WebVault(indexedVaultStorage(),Date.now,saved=>{
-      window.dispatchEvent(new Event('lacuna:journal-changed'));
+      window.dispatchEvent(new CustomEvent('lacuna:journal-changed',{detail:{saved:!!saved}}));
       if(saved)channel?.postMessage('saved');
     });
     if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {

@@ -7,7 +7,7 @@ export const frontage = ['houses','steps','terraces','crescent','apartments','ma
 export type Bank = 0 | 1;
 type Architecture = typeof frontage[number];
 export type Site = { id:string; kind:Architecture; bank:Bank; ferryTerminal?:boolean; setback?:number; district?:RiverDistrict; x:number; y:number; width:number; mirror:boolean; lane:number; lights:number; quiet?:boolean; readableId?:string; litAdditions?:number; predecessor?:Site };
-export type Coast = { neighborhoods:Neighborhoods; ferries:FerryService[]; sites:Site[]; addresses:Map<string,Site>; latest?:Site; service:number; start:number; end:number };
+export type Coast = { neighborhoods:Neighborhoods; ferries:FerryService[]; sites:Site[]; addresses:Map<string,Site>; rooms:Map<string,number>; latest?:Site; service:number; start:number; end:number };
 
 const lanes:readonly Architecture[][] = [
   ['terraces','houses','steps','pines','apartments'],
@@ -30,6 +30,7 @@ const key=(column:number,lane:number,bank:Bank)=>column*8+bank*4+lane;
 
 export function paintedCoast(entries:readonly CityPage[],forgotten:readonly ForgottenAddress[]=[]):Coast {
   const sites:Site[]=[],addresses=new Map<string,Site>(),occupied=new Map<number,Site>(),front=new Map<number,Parcel>();
+  const rooms=new Map<string,number>();
   const neighborhoods:Neighborhoods=new Map(),shelves=new Map<number,ReturnType<typeof parcelShelf>>();
   const sequence=citySequence(entries,forgotten);
   const positions=new Map(sequence.map((page,i)=>[page.id,i]));
@@ -37,7 +38,7 @@ export function paintedCoast(entries:readonly CityPage[],forgotten:readonly Forg
   const occupiedUntil=new Map<Site,number>();
   const pages=sequence.sort((a,b)=>a.created_at-b.created_at);
   let latest:Site|undefined,service=0,end=1800;
-  if(!pages.length)return {sites,addresses,neighborhoods,ferries:[],service,start:0,end};
+  if(!pages.length)return {sites,addresses,rooms,neighborhoods,ferries:[],service,start:0,end};
   const seed=hashPage(pages[0]!.id);
   const startLane=1+(seed%2);
   front.set(key(4,startLane,0),{column:4,lane:startLane,bank:0});
@@ -63,7 +64,7 @@ export function paintedCoast(entries:readonly CityPage[],forgotten:readonly Forg
     if(last>5 && salt%8===2 && recent.length){
       latest=recent[(salt>>>9)%recent.length]!;
       occupiedUntil.set(latest,Math.max(occupiedUntil.get(latest)!,until));
-      latest.lights++;influenceAround(neighborhoods,latest,true);addresses.set(page.id,latest);service++;continue;
+      latest.lights++;rooms.set(page.id,latest.lights);influenceAround(neighborhoods,latest,true);addresses.set(page.id,latest);service++;continue;
     }
     let choice:Parcel|undefined,score=-Infinity,adjacent=0;
     for(const parcel of front.values()){
@@ -136,7 +137,7 @@ export function paintedCoast(entries:readonly CityPage[],forgotten:readonly Forg
   if(forgotten.length){
     const residents=new Map<Site,string[]>();
     for(const [id,site] of addresses){
-      if(forgottenAfter.has(id)){addresses.delete(id);continue;}
+      if(forgottenAfter.has(id)){addresses.delete(id);rooms.delete(id);continue;}
       const ids=residents.get(site)??[];ids.push(id);residents.set(site,ids);
     }
     neighborhoods.clear();service=0;
@@ -149,5 +150,5 @@ export function paintedCoast(entries:readonly CityPage[],forgotten:readonly Forg
       service+=site.litAdditions+Number(site.ferryTerminal);
     }
   }
-  return {sites,latest,addresses,neighborhoods,ferries:ferries.filter(r=>!r.departure.quiet&&!r.arrival?.quiet),service,start:0,end};
+  return {sites,latest,addresses,rooms,neighborhoods,ferries:ferries.filter(r=>!r.departure.quiet&&!r.arrival?.quiet),service,start:0,end};
 }

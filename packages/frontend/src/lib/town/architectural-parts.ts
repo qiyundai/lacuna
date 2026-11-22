@@ -215,6 +215,8 @@ export function storey(p: ModelTools, w: number, d: number, h: number, wall: Pig
       p.box(wall, x, sill / 2, -.085, open, sill, .17);
       p.box(wall, x, (top + h) / 2, -.085, open, h - top, .17);
       p.box('lintel', x, sill, .012, open + .14, .083, .22);
+      if (!ground && side === 0 && (i === 0 || i === bays - 1))
+        p.mark('Window ledge', x, sill + .04, unit === 'oriel' ? .57 : pattern === 'gallery' ? .49 : .14);
       if (!door) windowBay(p, unit, x, sill, top, open, wall, room);
       if (door) {
         if (markDoor) p.entrance(x, .105, .30);

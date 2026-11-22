@@ -14,7 +14,7 @@ export async function createPanorama(canvas:HTMLCanvasElement){
   const world=ctx;
   const features=new Map<number,Site[]>();
   const layers=new Map<number,HTMLCanvasElement>();
-  let coast:Coast={sites:[],addresses:new Map(),neighborhoods:new Map(),ferries:[],service:0,start:0,end:W};
+  let coast:Coast={sites:[],addresses:new Map(),rooms:new Map(),neighborhoods:new Map(),ferries:[],service:0,start:0,end:W};
   let width=1,height=1,pixel=1,zoom=1,centerX=965,centerY=448,manual=false;
   let paused=false,skipped=false,destroyed=false,frame=0,last=0,time=0;
   let reveal:{site:Site;elapsed:number;old:HTMLCanvasElement}|null=null;
