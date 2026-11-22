@@ -59,5 +59,5 @@
   .flight-control{position:absolute;right:var(--gutter);bottom:clamp(18px,4vh,42px);width:44px;height:44px;display:grid;place-items:center;border:1px solid #e5e8db91;border-radius:50%;background:#152925bf;color:#fff3d9;cursor:pointer}
   .flight-control:hover{background:#152925}.flight-control span{width:0;height:0;border-left:10px solid currentColor;border-block:6px solid transparent;margin-left:3px}
   .flight-control .playing{width:10px;height:12px;border:0;border-inline:3px solid currentColor;margin:0}
-  @media(max-width:600px){video{object-position:64% center}.flight-control{top:calc(var(--mast-height) + 10px);bottom:auto}}
+  @media(max-width:600px){video{object-position:64% center}.flight-control{inset:calc(var(--mast-height) + 10px) auto auto var(--gutter)}}
 </style>
