@@ -13,10 +13,10 @@ Saved encrypted in this browser. No installation.
 Passphrase
 Repeat passphrase
 Create my private space
-Restore a backup · Privacy
+Restore from backup · Link a synced journal · Privacy
 ```
 
-Returning users see one unlock field. Choosing a passphrase stays with the user. A visible “save thought” button appears while writing, so no gesture needs to be learned. No preflight consent overlay is needed for local-only writing; AI sharing needs its own explicit permission if/when available. Explain that clearing site data can erase the only copy. Offer an encrypted backup and explicit restore. Do not promise a reset or cloud recovery.
+Returning users see one unlock field. Choosing a passphrase stays with the user. A visible “save thought” button appears while writing, so no gesture needs to be learned. No preflight consent overlay is needed for local-only writing; AI sharing needs its own explicit permission if/when available. Explain that clearing site data can erase the only copy. Offer an encrypted backup and explicit restore. A paired browser can restore its online copy with the pairing code and original passphrase. Lacuna cannot reset a lost passphrase.
 
 Review: this follows Lacuna's established aesthetic instead of introducing another landing-page visual system. The one meaningful change is making the first screen a useful action on the current phone. Avoid a dead-end ChatGPT button or a link to localhost on the hosted site.
 
@@ -24,4 +24,4 @@ Review: this follows Lacuna's established aesthetic instead of introducing anoth
 
 Browser-native AES-256-GCM and PBKDF2-HMAC-SHA256 (600,000 iterations, random salt) protect a versioned ciphertext envelope in IndexedDB. The passphrase/key are not persisted. IndexedDB updates compare the previous envelope's token in one read/write transaction; conflicting tabs cannot overwrite silently. Failures leave the previous ciphertext intact. The existing companion vault format and data must remain unchanged.
 
-Hosted ChatGPT plan usage needs OpenAI registration/access, per the official OSS and website guides. The repository has a working local OSS registration, not a hosted registration. Do not claim hosted sign-in or inference is available until a registered client and supported hosted flow are configured and tested. The implementation proceeds with private writing first while clarification is pending, preserving desktop plan support. Browser AI and account sync remain explicitly unavailable.
+Browser sync is optional and account-free. Enable it in Journal settings → Privacy & storage, then use Link a synced journal on another device. AI reflections and subscriptions are coming soon.

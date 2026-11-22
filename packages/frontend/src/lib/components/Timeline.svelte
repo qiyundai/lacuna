@@ -140,7 +140,7 @@
       </div>
       {#if confirming}
         <div class="release" transition:fade={{ duration: 250 }}>
-          <p>The words will be permanently removed from this journal. Its address will stay. Readings and memoir passages that drew on this page will disappear.</p>
+          <p>This removes the words and related readings from your active journal. The address stays. Earlier backups and exports may still contain the page.</p>
           <button disabled={busy} onclick={() => confirming = false}>Keep this page</button>
           <button class="danger" disabled={busy} onclick={forgetThought}>Forget page</button>
         </div>

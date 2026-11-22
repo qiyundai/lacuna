@@ -41,9 +41,9 @@
       <a class="hint" href="/privacy">Read the full privacy declaration</a>
       <p class="hint">Disconnecting ChatGPT removes credentials here. Manage app access and usage in ChatGPT settings.</p>
       {:else}
-        <p>Your journal is encrypted in this browser. Your passphrase and encryption key are never saved or sent to a server.</p>
-        <p>AI reflections are coming soon. Journal pages stay in your browser.</p>
-        <p>Clearing browser storage or losing your device can erase the only copy. Download an encrypted backup from privacy & storage and keep its passphrase safe. There is no password reset.</p>
+        <p>Your journal starts encrypted in this browser. Lacuna cannot recover your passphrase.</p>
+        <p>If you enable sync in Privacy &amp; storage, Lacuna stores a copy that requires your private pairing code and journal passphrase to open. The service sees the size and timing of transfers. AI reflections are coming soon.</p>
+        <p>Pausing sync keeps the online copy. You can delete it in Privacy &amp; storage. Encrypted backups need your passphrase. Markdown and JSON exports can be read by anyone with the file.</p>
         <a class="hint" href="/privacy">Read the full privacy declaration</a>
       {/if}
       {#if consentMode}<button class="atlas-primary" onclick={acknowledge}>Acknowledge and continue</button>{/if}

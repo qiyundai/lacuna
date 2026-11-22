@@ -1,7 +1,6 @@
 import { attachPresence, remember, reviseThread } from '../../../shared/village.js';
-import { forgetPageAt } from '../../../shared/city-address.js';
-import { forgetFromBook, localWritingDay } from '../../../shared/living-book.js';
-import { browserVault, WebVault, WebVaultError, announceBrowserLock } from './web-vault.js';
+import { localWritingDay } from '../../../shared/living-book.js';
+import { browserVault, WebVault, WebVaultError, announceBrowserLock, forgetWebPage } from './web-vault.js';
 import type { EntryData } from './api.js';
 import { canSettle, isSettlement, morning, nextMorning, population } from '../../../shared/river.js';
 
@@ -72,9 +71,7 @@ export async function webRequest(path: string, method = 'GET', value?: unknown, 
     if (index < 0) throw new WebVaultError('NOT_FOUND', 'This thought is no longer in the archive.');
     if (method === 'DELETE') {
       journal.river=morning(journal,timestamp);
-      const address=forgetPageAt(journal,index);
-      if(journal.book)forgetFromBook(journal.book,address.id);
-      journal.memoirs=[]; journal.weights={}; journal.graph={nodes:[],processed_count:0};
+      const address=forgetWebPage(journal,index);
       return {ok:true,address};
     }
     if (typeof body?.kept !== 'boolean') throw new WebVaultError('BAD_REQUEST', 'Choose whether to keep this thought close.');
@@ -95,7 +92,7 @@ export async function webRequest(path: string, method = 'GET', value?: unknown, 
 }
 export async function webControl(path: string, method: string, value?: unknown): Promise<unknown> {
   const vault = browserVault(), body = value as { passphrase?: string; create?: boolean; envelope?: unknown };
-  if (path === 'vault/status') { const status = await vault.status(); return { ...status, aiAllowed: false, automaticAI: false, migrated: true, sync: { enabled: false, version: 0, error: '' } }; }
+  if (path === 'vault/status') { const status = await vault.status(),pair=vault.pairing; return { ...status, aiAllowed: false, automaticAI: false, migrated: true, sync: { enabled: pair?.enabled??false, version: pair?.version??0, error: '' } }; }
   if (path === 'vault/unlock' && method === 'POST') { await vault.unlock(body?.passphrase ?? '', body?.create === true); return { ok: true }; }
   if (path === 'vault/lock' && method === 'POST') { vault.lock(); announceBrowserLock(); return { ok: true }; }
   if (path === 'vault/activity' && method === 'POST') { vault.activity(); return { ok: true }; }

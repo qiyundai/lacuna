@@ -13,6 +13,14 @@ The browser encrypts the journal using Web Crypto AES-256-GCM and PBKDF2-HMAC-SH
 
 Restore `.lacuna-web-vault` backups in another browser with their original passphrase. An existing encrypted copy is kept before replacement and can be downloaded under privacy & storage. Deleting this browser journal removes its active copy and those restore copies, not downloaded backups or other devices.
 
+## Optional browser sync
+
+In **Journal settings → Privacy & storage**, enable encrypted sync and save the private pairing code. On another device choose **Link a synced journal** from the passphrase screen. Enter the code and the original journal passphrase. Sync works while the journal is unlocked. Local saves continue offline. Compatible additions from both devices are combined. If other changes conflict, sync keeps both versions and offers to back up the local journal before using the online copy.
+
+The browser generates a 256-bit random pairing secret. HKDF-SHA-256 derives independent storage access and AES-GCM keys. The browser encrypts a portable, passphrase-encrypted vault again with a fresh 96-bit IV and authenticates its version. Device pairing settings and AI consent are excluded from the transferred journal. The service receives a bearer credential and opaque ciphertext. It stores a hash of the credential as the storage address. No email or subscription is required. Deleting the active online copy leaves a version tombstone to prevent stale uploads. Downloaded backups still work independently.
+
+Apply Worker D1 migration `0008_browser_sync.sql` before releasing the Worker and frontend. Set the Worker's `JWT_SECRET` for pseudonymous rate limits and `FRONTEND_ORIGIN` to the frontend origin. Browsers send encrypted transfers directly to the existing API origin at `/journal-sync`. The ciphertext limit is 8 MiB after encoding. A larger journal remains usable locally.
+
 ## Living memoir subscriptions · Coming soon
 
 The public release disables background analysis and subscription endpoints. The following describes the implementation reserved for launch.
@@ -41,9 +49,12 @@ pnpm companion
 1. Open `http://127.0.0.1:1455` using this exact host.
 2. Acknowledge data and privacy, then **Continue with ChatGPT**. No Lacuna email link is needed.
 3. Complete OpenAI sign-in and authorize eligible ChatGPT plan use. Create a long, unique vault passphrase and save it in your password manager. **There is no passphrase recovery.** Returning users unlock their existing vault.
-4. Open **Menu → privacy & storage** to migrate an older cloud journal, download an encrypted backup, and choose whether to enable AI sharing or cloud sync. These choices are separate from signing in. **AI & ChatGPT plan** selects an available model.
-5. **Test ChatGPT connection** makes a small inference request without journal content. It uses plan allowance or credits and does not save an entry.
-6. If you allow journal sharing, **refresh reflections** sends context directly to OpenAI. Automatic reflections require a second opt-in. Extraction processes up to ten thoughts per run; refresh again while a backlog remains. Requests use plan allowance or credits.
+4. Open **Menu → privacy & storage** to migrate an older cloud journal, download an encrypted backup, and choose whether to enable the companion’s encrypted cloud copy. Signing in does not enable sync. AI reflections are marked Coming soon in this release.
+
+In development builds with reflections enabled, the following controls become available.
+
+- **Test ChatGPT connection** makes a small inference request without journal content. It uses plan allowance or credits and does not save an entry.
+- If you allow journal sharing, **refresh reflections** sends context directly to OpenAI. Automatic reflections require a second opt-in. Extraction processes up to ten thoughts per run; refresh again while a backlog remains. Requests use plan allowance or credits.
 
 The companion follows [OpenAI's open-source registration flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in). OpenAI determines eligibility, models, and limits. **Manage usage** opens [ChatGPT settings](https://chatgpt.com/settings/usage). Sign-in can succeed without plan-use permission; reconnect to grant it. There is no fallback provider or API key requirement.
 

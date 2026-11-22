@@ -3,7 +3,8 @@
   import { onMount } from 'svelte';
   import { aiAvailable } from '../../../shared/ai-release.js';
   import { backgroundBook } from '$lib/reflection-service.js';
-  import { session, hydrateSession, setAuthed, signOut } from '$lib/stores/session.svelte.js';
+  import { watchBrowserSync } from '$lib/browser-sync.js';
+  import { session, hydrateSession, setAuthed, signOut, resetJournalData } from '$lib/stores/session.svelte.js';
   import { initWeather } from '$lib/stores/weather.svelte.js';
   import { page } from '$app/state';
   import { isCompanion } from '$lib/api.js';
@@ -33,6 +34,8 @@
   onMount(() => {
     document.getElementById('initial-arrival')?.remove();
     hydrateSession();
+    const stopSync=isCompanion?undefined:watchBrowserSync();
+    window.addEventListener('lacuna:sync-applied',resetJournalData);
     const stopBook=aiAvailable && !isCompanion?backgroundBook():undefined;
     initWeather();
     const stored = readLocal('lacuna_consented');
@@ -66,6 +69,8 @@
     const timer = setInterval(() => { if (session.status === 'authed') loadVault().catch(() => {}); }, 5000);
     return () => {
       stopBook?.();
+      stopSync?.();
+      window.removeEventListener('lacuna:sync-applied',resetJournalData);
       clearInterval(timer); window.removeEventListener('lacuna:unauthorized', signOut); window.removeEventListener('lacuna:locked', didLock);
       for (const event of activityEvents) window.removeEventListener(event, activity);
     };

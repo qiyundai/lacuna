@@ -1,16 +1,29 @@
-// Browser-native vault. No network calls, persisted keys, or readable journal records.
 import type { EntryData, MemoirEdition, ModelWeights, StoryData } from './api.js';
 import type { RiverClock } from '../../../shared/river.js';
-import { validBook, type Book } from '../../../shared/living-book.js';
-import { validCityHistory, type ForgottenAddress } from '../../../shared/city-address.js';
+import { forgetFromBook, validBook, type Book } from '../../../shared/living-book.js';
+import { forgetPageAt, validCityHistory, type ForgottenAddress } from '../../../shared/city-address.js';
 
 export interface WebJournal {
+  deviceSync?: DeviceSync;
   book?: Book;
   reflectionConsent?: {account:string; epoch:number};
   forgotten?: ForgottenAddress[];
   river?: RiverClock;
   format: 'lacuna.web-journal.v1'; revision: number; entries: EntryData[];
   memoirs: MemoirEdition[]; weights: ModelWeights; graph: StoryData['graph'];
+}
+export interface DeviceSync {
+  code:string;
+  enabled:boolean;
+  version:number;
+  syncedRevision:number;
+  syncedPages:number;
+}
+export function forgetWebPage(journal:WebJournal,index:number) {
+  const address=forgetPageAt(journal,index);
+  if(journal.book) forgetFromBook(journal.book,address.id);
+  journal.memoirs=[];journal.weights={};journal.graph={nodes:[],processed_count:0};
+  return address;
 }
 export interface WebEnvelope {
   format: 'lacuna.web-vault.v1'; owner: string; kdf: 'pbkdf2-sha256-600000';
@@ -28,12 +41,12 @@ export class WebVaultError extends Error {
 const MAX_BYTES = 16 * 1024 * 1024;
 const LOCK_AFTER = 15 * 60 * 1000;
 const encoder = new TextEncoder();
-function base64(bytes: Uint8Array): string {
+export function base64(bytes: Uint8Array): string {
   let binary = '';
   for (let offset = 0; offset < bytes.length; offset += 8192) binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
   return btoa(binary);
 }
-function bytes(value: string): Uint8Array<ArrayBuffer> { return Uint8Array.from(atob(value), c => c.charCodeAt(0)); }
+export function bytes(value: string): Uint8Array<ArrayBuffer> { return Uint8Array.from(atob(value), c => c.charCodeAt(0)); }
 function random(length: number): string { return base64(crypto.getRandomValues(new Uint8Array(length))); }
 export const envelopeToken = (value: WebEnvelope | null) => value ? `${value.iv}:${value.ciphertext.slice(-24)}` : null;
 function aad(owner: string) { return encoder.encode(`lacuna.web-vault.v1:${owner}:pbkdf2-sha256-600000`); }
@@ -127,10 +140,10 @@ export class WebVault {
   private pending: Promise<unknown> = Promise.resolve();
   private lastActive = 0;
   private failures: number[] = [];
-  constructor(private storage: EncryptedStorage, private now = Date.now, private changed = (_saved?:boolean) => {}) {}
+  constructor(private storage: EncryptedStorage, private now = Date.now, private changed = (_saved?:boolean,_synced?:boolean) => {}) {}
   get sessionGeneration() { return this.generation; }
   async current() { return this.unlocked && envelopeToken(this.envelope)===envelopeToken(await this.storage.read()); }
-  async refresh() {
+  async refresh(synced=false) {
     await this.serial(async()=>{
       if(!this.unlocked || !this.key)return;
       const generation=this.generation, key=this.key;
@@ -138,7 +151,7 @@ export class WebVault {
       if(envelopeToken(latest)===envelopeToken(this.envelope))return;
       if(!latest || latest.owner!==this.envelope?.owner || latest.salt!==this.envelope.salt){this.lock();return;}
       const data=await open(latest,key);
-      if(this.unlocked && generation===this.generation){this.data=data;this.envelope=latest;this.changed();}
+      if(this.unlocked && generation===this.generation){this.data=data;this.envelope=latest;this.changed(false,synced);}
     });
   }
   private serial<T>(action: () => Promise<T>): Promise<T> {
@@ -151,7 +164,11 @@ export class WebVault {
   async status() { const envelope = await this.storage.read(); return { exists: !!envelope, locked: !this.unlocked, owner: envelope?.owner ?? null }; }
   activity() { if (this.unlocked) this.lastActive = this.now(); }
   lock() { this.generation++; this.key = null; this.data = null; this.changed(); }
-  read(): WebJournal { if (!this.unlocked || !this.data) throw new WebVaultError('VAULT_LOCKED', 'Unlock your private space first.'); return structuredClone(this.data); }
+  read(): WebJournal {
+    if (!this.unlocked || !this.data) throw new WebVaultError('VAULT_LOCKED', 'Unlock your private space first.');
+    const {deviceSync,...journal}=this.data;
+    return structuredClone(journal);
+  }
   async unlock(passphrase: string, create = false) {
     const generation = this.generation;
     return this.serial(async () => {
@@ -178,21 +195,62 @@ export class WebVault {
     return this.serial(async () => {
       const data = this.read(), generation = this.generation, previous = this.envelope!, key = this.key!;
       const result = action(data); data.revision++;
-      const envelope = await seal(data, key, previous.owner, previous.salt);
+      const pairing=this.pairing;
+      const stored=pairing?{...data,deviceSync:pairing}:data;
+      const envelope = await seal(stored, key, previous.owner, previous.salt);
       if (generation !== this.generation || !this.unlocked) throw new WebVaultError('VAULT_LOCKED', 'Your space locked before saving.');
       await this.storage.replace(envelopeToken(previous), envelope);
-      if (generation === this.generation && this.unlocked) { this.data = data; this.envelope = envelope; this.changed(true); }
+      if (generation === this.generation && this.unlocked) { this.data = stored; this.envelope = envelope; this.changed(true); }
       return result;
     });
   }
-  async backup() { this.read(); await this.pending.catch(() => {}); return this.storage.read(); }
+  async backup() {
+    return this.serial(async()=>{
+      const data=this.read(),generation=this.generation;
+      if (!await this.current() || !this.unlocked || this.generation!==generation) throw new Error('Reopen this journal to use the latest saved copy.');
+      if (!this.pairing && !data.reflectionConsent) return this.envelope!;
+      delete data.reflectionConsent;
+      return seal(data,this.key!,this.envelope!.owner,this.envelope!.salt);
+    });
+  }
+  get pairing() {
+    return this.unlocked && this.data?.deviceSync ? {...this.data.deviceSync} : undefined;
+  }
+  get syncRevision() {return this.unlocked ? this.data!.revision : -1;}
+  get pageCount() {return this.unlocked ? this.data!.entries.length : 0;}
+  async readSynced(envelope:WebEnvelope) {
+    validateEnvelope(envelope);
+    if (!this.unlocked || envelope.owner!==this.envelope?.owner || envelope.salt!==this.envelope.salt) throw new Error('This copy belongs to a different journal.');
+    const data=await open(envelope,this.key!);
+    delete data.deviceSync;
+    delete data.reflectionConsent;
+    return data;
+  }
+  async setPairing(expected:DeviceSync|undefined,next:DeviceSync|undefined, replacement?:{data:WebJournal; expectedRevision:number; backup:boolean}) {
+    const generation=this.generation;
+    return this.serial(async()=>{
+      const local=this.read(),previous=this.envelope!;
+      if (generation!==this.generation || JSON.stringify(this.pairing)!==JSON.stringify(expected) ||
+          (replacement && local.revision!==replacement.expectedRevision)) throw new Error('This journal changed. Retry sync.');
+      const data=replacement?.data ?? local;
+      if (local.reflectionConsent) data.reflectionConsent=local.reflectionConsent;
+      if (next) data.deviceSync=next;
+      else delete data.deviceSync;
+      const envelope=await seal(data,this.key!,previous.owner,previous.salt);
+      if (!this.unlocked || this.generation!==generation) throw new Error('Unlock the journal to sync.');
+      await this.storage.replace(envelopeToken(previous),envelope,replacement?.backup);
+      if (this.unlocked && this.generation===generation) {
+        this.data=data;this.envelope=envelope;this.changed(true,!!replacement);
+      }
+    });
+  }
   async recoveryCopies() { this.read(); return await this.storage.listBackups?.() ?? []; }
   async recoveryCopy(id: string) {
     this.read();
     if (!/^backup:[0-9]{13}:[a-f0-9-]{36}$/.test(id)) throw new WebVaultError('INVALID_BACKUP', 'Choose a saved restore copy.');
     const envelope = await this.storage.readBackup?.(id); validateEnvelope(envelope); return envelope;
   }
-  async restore(value: unknown, passphrase: string) {
+  async restore(value: unknown, passphrase: string, pairing?:{code:string;version:number}) {
     const generation = this.generation;
     return this.serial(async () => {
       validateEnvelope(value);
@@ -201,8 +259,10 @@ export class WebVault {
       catch (e) { if (e instanceof WebVaultError) throw e; throw new WebVaultError('UNLOCK_FAILED', 'The backup could not be unlocked. Your current copy has been kept.'); }
       const previous = await this.storage.read();
       if (generation !== this.generation) throw new WebVaultError('VAULT_LOCKED', 'Restore was cancelled. Your current copy has been kept.');
-      if(data.reflectionConsent){
+      if(data.reflectionConsent || data.deviceSync || pairing){
         delete data.reflectionConsent;
+        delete data.deviceSync;
+        if(pairing) data.deviceSync={...pairing,enabled:true,syncedRevision:data.revision,syncedPages:data.entries.length};
         value=await seal(data,key,value.owner,value.salt);
         validateEnvelope(value);
       }
@@ -218,14 +278,15 @@ let instance: WebVault | undefined;
 let channel: BroadcastChannel | undefined;
 export function browserVault() {
   if (!instance) {
-    instance = new WebVault(indexedVaultStorage(),Date.now,saved=>{
+    instance = new WebVault(indexedVaultStorage(),Date.now,(saved,synced)=>{
+      if(synced)window.dispatchEvent(new Event('lacuna:sync-applied'));
       window.dispatchEvent(new CustomEvent('lacuna:journal-changed',{detail:{saved:!!saved}}));
-      if(saved)channel?.postMessage('saved');
+      if(saved)channel?.postMessage(synced?'synced':'saved');
     });
     if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
       channel = new BroadcastChannel('lacuna-private-vault');
       channel.onmessage = event => {
-        if(event.data==='saved')void instance?.refresh().catch(()=>instance?.lock());
+        if(event.data==='saved' || event.data==='synced')void instance?.refresh(event.data==='synced').catch(()=>instance?.lock());
         if(event.data==='lock'){instance?.lock();window.dispatchEvent(new Event('lacuna:locked'));}
       };
     }

@@ -48,6 +48,7 @@ import { createTestDatabase } from './database.mjs';
 import { readFile, mkdtemp, rm, writeFile, readdir } from 'node:fs/promises';
 import { randomBytes, createHash } from 'node:crypto';
 import { createServer } from 'node:http';
+import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { SignJWT, generateKeyPair, createLocalJWKSet, exportJWK } from 'jose';
 import app from '../packages/worker/src/index.ts';
@@ -70,6 +71,7 @@ import { Vault, LOCK_AFTER_MS } from '../packages/companion/src/vault.mjs';
 import { journalRequest, snapshot, applyAnalysis, importLegacy } from '../packages/companion/src/journal.mjs';
 import { initWeather, weather } from '../packages/frontend/src/lib/stores/weather.svelte.ts';
 import { WebVault, envelopeToken } from '../packages/frontend/src/lib/web-vault.ts';
+import { newPairingCode, linkDevice, syncJournal, removeOnline, SyncConflict } from '../packages/frontend/src/lib/browser-sync.ts';
 import { webRequest } from '../packages/frontend/src/lib/web-api.ts';
 import { advance, firstMorning, home, population, workday } from '../packages/shared/river.ts';
 
@@ -810,6 +812,134 @@ function webStorage() {
     },
   };
 }
+test('release headers allow the configured encrypted sync endpoint and keep other connections same-origin', async t=>{
+  const directory=await mkdtemp(resolve('.test-output/headers-'));
+  t.after(()=>rm(directory,{recursive:true,force:true}));
+  const script=resolve('packages/frontend/build-headers.mjs');
+  const env={...process.env,LACUNA_BUILD_DIR:directory};
+  delete env.VITE_API_URL;
+  await writeFile(resolve(directory,'index.html'),'<script>start()</script>');
+  const headers=resolve(directory,'_headers');
+  for(const [setting,expected] of [
+    [undefined,"'self' https://lacuna-api.pianoquin4126.workers.dev/journal-sync"],
+    ['https://sync.example/api',"'self' https://sync.example/api/journal-sync"],
+    ['/api',"'self'"]
+  ]){
+    if(setting) await writeFile(resolve(directory,'.env.production'),'VITE_API_URL='+setting);
+    await writeFile(headers,'/*\n  Cache-Control: no-store\n');
+    execFileSync(process.execPath,[script],{cwd:directory,env});
+    const policy=await readFile(headers,'utf8');
+    assert.equal(/connect-src ([^;]+);/.exec(policy)?.[1],expected);
+    assert.match(policy,/script-src 'self' 'sha256-/);
+  }
+});
+
+test('browser devices pair privately, converge offline additions and preserve both sides of conflicting edits', async t=>{
+  const DB=await createTestDatabase();t.after(()=>DB.sqlite.close());
+  const origin='https://lacuna.example', env={DB,JWT_SECRET:'synthetic rate limit secret',FRONTEND_ORIGIN:origin};
+  const first=new WebVault(webStorage()),secondStorage=webStorage(),second=new WebVault(secondStorage);
+  const wire=[];
+  const send=async(path,init)=>{
+    wire.push({path,...init});
+    return app.request(new Request(new URL(path,origin),{...init,headers:{...init.headers,Origin:origin}}),undefined,env);
+  };
+  await first.unlock(samplePassphrase,true);
+  await webRequest('/entries','POST',{...thought(1,'an entirely private first page'),city:true},first);
+  await syncJournal(first,send);
+  assert.equal(wire.length,0);
+  const code=newPairingCode();
+  await first.setPairing(undefined,{code,enabled:true,version:0,syncedRevision:-1,syncedPages:0});
+  assert.equal(first.read().deviceSync,undefined);
+  await syncJournal(first,send);
+  assert.equal(first.pairing.version,1);
+  const upload=wire.find(r=>r.method==='PUT');
+  assert.deepEqual(Object.keys(JSON.parse(upload.body)).sort(),['ciphertext','iv','version']);
+  const stored=DB.sqlite.prepare('SELECT * FROM browser_sync JOIN browser_sync_chunks USING(slot)').all();
+  for(const secret of [code,samplePassphrase,'an entirely private first page',first.read().entries[0].id]){
+    assert.ok(!JSON.stringify(wire).includes(secret));assert.ok(!JSON.stringify(stored).includes(secret));
+  }
+  assert.ok(!JSON.stringify(stored).includes(upload.headers.Authorization.slice(7)));
+  await assert.rejects(linkDevice(second,newPairingCode(),samplePassphrase,send),/found/);
+  await assert.rejects(linkDevice(second,code,'another passphrase',send),/unlocked/);
+  assert.equal((await second.status()).exists,false);
+  await linkDevice(second,code,samplePassphrase,send);
+  assert.deepEqual(second.read().entries,first.read().entries);
+  const portableStorage=webStorage();
+  portableStorage.current=await first.backup();
+  const portable=new WebVault(portableStorage);
+  await portable.unlock(samplePassphrase);
+  assert.equal(portable.pairing,undefined);
+  await webRequest('/entries','POST',{...thought(2,'on the train'),city:true},first);
+  await webRequest('/entries','POST',{...thought(3,'at the station'),city:true},second);
+  await syncJournal(first,send);
+  await syncJournal(second,send);
+  await syncJournal(second,send);
+  await syncJournal(first,send);
+  assert.deepEqual(first.read().entries.map(p=>p.body),['an entirely private first page','on the train','at the station']);
+  assert.deepEqual(first.read().entries,second.read().entries);
+  const id=first.read().entries[0].id;
+  await webRequest('/entries/'+id,'DELETE',undefined,first);
+  await webRequest('/entries/'+id+'/keep','PATCH',{kept:true},second);
+  await syncJournal(first,send);
+  await assert.rejects(syncJournal(second,send),SyncConflict);
+  assert.equal(second.read().entries.length,3);
+  await syncJournal(second,send,true);
+  assert.equal(second.read().entries.length,2);assert.equal(second.read().forgotten[0].id,id);
+  assert.equal(secondStorage.backups.length,1);
+  const another=second.read().entries[0].id;
+  await webRequest('/entries/'+another,'DELETE',undefined,second);
+  await webRequest('/entries/'+another+'/keep','PATCH',{kept:true},first);
+  await syncJournal(first,send);
+  await assert.rejects(syncJournal(second,send),SyncConflict);
+  await syncJournal(second,send,true);
+  assert.ok(!second.read().entries.some(page=>page.id===another));
+  await syncJournal(second,send);
+  await syncJournal(first,send);
+  assert.ok(first.read().forgotten.some(address=>address.id===another));
+  const oldPacket=JSON.parse(upload.body);
+  await assert.rejects(linkDevice(new WebVault(webStorage()),code,samplePassphrase,async()=>Response.json({...oldPacket,version:99})));
+  assert.equal((await send('/journal-sync',upload)).status,409);
+  await second.setPairing(second.pairing,{...second.pairing,enabled:false});
+  const before=wire.length;await syncJournal(second,send);assert.equal(wire.length,before);
+  await removeOnline(second,send);
+  assert.equal(DB.sqlite.prepare('SELECT count(*) AS n FROM browser_sync_chunks').get().n,0);
+  await assert.rejects(syncJournal(first,send),/deleted/);assert.equal(first.pairing,undefined);
+  assert.equal((await send('/journal-sync',upload)).status,409);
+  assert.equal((await send('/journal-sync',{...upload,body:JSON.stringify({...oldPacket,body:'readable'})})).status,400);
+  assert.equal(first.read().entries.length,1);
+});
+
+test('browser sync retries an unacknowledged upload and ignores a download that outlives its unlock session',async t=>{
+  const DB=await createTestDatabase();t.after(()=>DB.sqlite.close());
+  const origin='https://lacuna.example', env={DB,JWT_SECRET:'fixture',FRONTEND_ORIGIN:origin};
+  const send=(url,init)=>app.request(new Request(url,{...init,headers:{...init.headers,Origin:origin}}),undefined,env);
+  const vault=new WebVault(webStorage()),peer=new WebVault(webStorage()),code=newPairingCode();
+  await vault.unlock(samplePassphrase,true);
+  await vault.setPairing(undefined,{code,enabled:true,version:0,syncedRevision:-1,syncedPages:0});
+  await assert.rejects(syncJournal(vault,async(url,init)=>{
+    const res=await send(url,init);
+    if(init.method==='PUT'){assert.equal(res.status,204);throw Error('Connection lost after commit');}
+    return res;
+  }),/after commit/);
+  assert.equal(vault.pairing.version,0);
+  await syncJournal(vault,send);
+  assert.equal(vault.pairing.version,1);
+  await linkDevice(peer,code,samplePassphrase,send);
+  await webRequest('/entries','POST',{...thought(2,'an offline arrival'),city:true},peer);
+  await syncJournal(peer,send);
+  await syncJournal(vault,async(url,init)=>{
+    const response=await send(url,init);
+    vault.lock();await vault.unlock(samplePassphrase);
+    return response;
+  });
+  assert.equal(vault.read().entries.length,0);
+  assert.equal(vault.pairing.version,1);
+  await syncJournal(vault,send);
+  assert.deepEqual(vault.read().entries,peer.read().entries);
+  assert.equal((await app.request(origin+'/journal-sync',{},env)).status,401);
+  assert.equal((await app.request(origin+'/journal-sync',{method:'DELETE',headers:{Origin:'https://other.example',Authorization:'Bearer '+'0'.repeat(64)}},env)).status,403);
+});
+
 test('phone vault persists ciphertext only and reopens without an account or network', async t => {
   const originalFetch = globalThis.fetch; t.after(() => globalThis.fetch = originalFetch);
   globalThis.fetch = () => { throw new Error('Browser journaling must not contact a server'); };

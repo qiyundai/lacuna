@@ -8,6 +8,7 @@
   import { companionRequest } from '$lib/stores/ai.svelte.js';
   import { downloadFile } from '$lib/story.js';
   import { isCompanion } from '$lib/api.js';
+  import BrowserSync from './BrowserSync.svelte';
   let { show = $bindable(false) }: { show: boolean } = $props();
   let busy = $state(false), error = $state(''), message = $state(''), confirmDelete = $state(false);
   let legacy = $state<{ migrated: boolean; entries: number } | null>(null);
@@ -65,11 +66,12 @@
         </section>
       {/if}
       {:else}
+        <BrowserSync/>
         <section>
           <h3>Your encrypted journal</h3>
-          <p>Your journal and book are saved in this browser. AI reflections are coming soon.</p>
+          <p>An encrypted backup opens with your original passphrase. A browser file restore starts with sync off.</p>
           <p>Clearing site data, using a private tab, losing your device, or browser storage cleanup can erase the only copy. Keep an encrypted backup somewhere safe. You can restore a browser backup on another phone or computer using its original passphrase.</p>
-          <p class="quiet">Browser backups and desktop companion backups have different formats. Existing companion journals remain on the computer that holds them.</p>
+          <p class="quiet">Browser backups and desktop companion backups have different formats. Use the desktop companion to open a companion backup.</p>
           {#if recoveryCopies.length}<h3>Copies kept before a restore.</h3><p>These files remain encrypted with their original passphrase.</p>{/if}
           {#each recoveryCopies as id}
             <button disabled={busy} onclick={() => run(async () => { const { browserVault } = await import('$lib/web-vault.js'); const encrypted = await browserVault().recoveryCopy(id); downloadFile(JSON.stringify(encrypted), `lacuna-restore-copy-${id.split(':')[1]}.lacuna-web-vault`, 'application/json'); })}>download copy from {new Date(Number(id.split(':')[1])).toLocaleString()}</button>

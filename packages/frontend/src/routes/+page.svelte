@@ -8,7 +8,13 @@
   import Masthead from '$lib/components/Masthead.svelte';
   import UserMenu from '$lib/components/UserMenu.svelte';
 
-  import { tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
+  let archiveRevision=$state(0);
+  onMount(()=>{
+    const refreshArchive=()=>archiveRevision++;
+    window.addEventListener('lacuna:sync-applied',refreshArchive);
+    return ()=>window.removeEventListener('lacuna:sync-applied',refreshArchive);
+  });
   let settings:UserMenu;
   let busy=$state(false),draft=$state(''),draftId=$state('');
   let view=$state<'town'|'journal'|'quiet'>('town');
@@ -37,7 +43,7 @@
   <div class="application">
     <Masthead>{@render navigation()}</Masthead>
     <div class="page" use:swipeDetector={{onSwipeDown:journal,onSwipeUp:town}}>
-      {#if view==='quiet'}<Void onSwipeDown={journal}/>{:else}<DownSpace active initial={section}/>{/if}
+      {#if view==='quiet'}<Void onSwipeDown={journal}/>{:else}{#key archiveRevision}<DownSpace active initial={section}/>{/key}{/if}
     </div>
   </div>
 {/if}

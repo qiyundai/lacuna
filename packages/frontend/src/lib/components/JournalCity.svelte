@@ -213,8 +213,8 @@
           </form>
         {:else if panel==='forget' && openedPage}
           <h2 id="journal-heading">Forget this page?</h2>
-          <p>The words will be permanently removed from this journal. {neighbors.length>1?'The other pages at this address will stay.':'The building will stay, and its lights will go out.'}</p>
-          {#if !guest}<p class="note">Readings and memoir passages that drew on this page will disappear.</p>{/if}
+          <p>This removes the words from your active journal. {neighbors.length>1?'The other pages at this address will stay.':'The building will stay, and its lights will go out.'}</p>
+          {#if !guest}<p class="note">Related readings will disappear. Earlier backups and exports can still contain the page.</p>{/if}
           <div class="leaf-foot">
             <button class="text-action" data-keep-page disabled={busy} onclick={()=>open('read')}>Keep this page</button>
             <button class="ink" disabled={busy} onclick={forgetPage}>{busy?'Forgetting…':'Forget page'}</button>

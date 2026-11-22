@@ -2,11 +2,12 @@ import type { Trace, VillageEntry } from '../../../shared/village.js';
 import type { ForgottenAddress } from '../../../shared/city-address.js';
 import type { Book } from '../../../shared/living-book.js';
 import { sessionVersion } from './session-version.js';
+import { defaultApiOrigin } from '../../../shared/sync-packet.js';
 import type { RiverClock, Settlement } from '../../../shared/river.js';
 export const isCompanion = typeof document !== 'undefined' && document.querySelector('meta[name="lacuna-companion"]') !== null;
 export const isBrowserApp = typeof document !== 'undefined' && !isCompanion;
-const BASE = isCompanion ? '/api' : import.meta.env.VITE_API_URL ?? (
-  import.meta.env.DEV ? 'http://localhost:8787' : 'https://lacuna-api.pianoquin4126.workers.dev'
+export const apiBase = isCompanion ? '/api' : import.meta.env.VITE_API_URL ?? (
+  import.meta.env.DEV ? 'http://localhost:8787' : defaultApiOrigin
 );
 
 async function request<T>(
@@ -23,7 +24,7 @@ async function request<T>(
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
-  const res = await fetch(`${BASE}${path}`, { ...options, credentials: 'same-origin', headers, signal: options.signal ?? AbortSignal.timeout(30000) });
+  const res = await fetch(`${apiBase}${path}`, { ...options, credentials: 'same-origin', headers, signal: options.signal ?? AbortSignal.timeout(30000) });
   if (!res.ok) {
     if (version === sessionVersion.value && auth && res.status === 401) window.dispatchEvent(new Event('lacuna:unauthorized'));
     if (version === sessionVersion.value && res.status === 423) window.dispatchEvent(new Event('lacuna:locked'));

@@ -29,7 +29,7 @@
       <p>Each page has an address in the city. Select its building to read it again.</p>
       <p>Soul Map and Living Memoir · Coming soon. Your journal already holds every saved page.</p>
       <p>Quiet writing gives you a blank page. Hold to save, or press Control or Command and Enter.</p>
-      <p>Manage encryption, backups, and exports in the menu.</p>
+      <p>Find encrypted sync and backups in Journal settings → Privacy &amp; storage. Choose Export journal to download a readable copy.</p>
       {#if aiAvailable && isCompanion}<div class="lenses-section">
         <p class="lenses-intro">as you write, we read through six lenses — not to label you, but to find the shape of what keeps returning.</p>
 

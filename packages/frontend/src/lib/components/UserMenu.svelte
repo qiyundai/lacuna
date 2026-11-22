@@ -116,7 +116,7 @@
         </button>
       </nav>
       <button class="atlas-link" onclick={close}>Close settings</button>
-      {#if confirming}<p class="deletion-scope">{isCompanion ? 'This removes the active server account, cloud copy, and this computer’s vault and encrypted conflict backups.' : 'This removes the journal and encrypted restore backups in this browser.'} It cannot be undone here. Downloaded files and other devices are separate. Download a backup first if you want to keep your words.</p>{/if}
+      {#if confirming}<p class="deletion-scope">{isCompanion ? 'This removes the active server account, cloud copy, and this computer’s vault and encrypted conflict backups.' : 'This removes this browser’s journal, pairing code and recovery copies. To erase a synced online copy, delete it first in Privacy & storage.'} It cannot be undone here. Downloaded files and other devices are separate. Download a backup first if you want to keep your words.</p>{/if}
       {#if error}<p role="alert">{error}</p>{/if}
     </div>
   </div>

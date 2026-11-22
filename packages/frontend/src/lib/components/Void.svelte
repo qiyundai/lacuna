@@ -632,7 +632,7 @@
   {#if nearLimit}
     <div class="char-limit" aria-live="polite">{charsLeft}</div>
   {/if}
-  <p class="plan-indicator">{vaultStore.status?.aiAllowed ? 'OpenAI reflections allowed' : isCompanion ? 'Encrypted on this computer · AI sharing off' : 'Encrypted in this browser · only on this device'}</p>
+  <p class="plan-indicator">{vaultStore.status?.aiAllowed ? 'OpenAI reflections allowed' : isCompanion ? 'Encrypted on this computer · AI sharing off' : vaultStore.status?.sync.enabled ? 'Encrypted sync on' : 'Encrypted in this browser'}</p>
 
   <button class="down-hint" class:faint={draft.isDirty} onclick={onSwipeDown} aria-label="Go to your story">
     <span>↓</span>

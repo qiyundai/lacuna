@@ -25,10 +25,10 @@
   <div class="export-screen" use:modal={{ dismiss: () => show = false }} role="dialog" aria-modal="true" aria-label="Take your words with you" tabindex="-1" onclick={e => { if (e.target === e.currentTarget) show = false; }} onkeydown={e => { if (e.key === 'Escape') show = false; }} transition:fade={{ duration: 400 }}>
     <div class="export-content journal-sheet">
       <h2>Export journal</h2>
-      <p>Take a copy of every saved thought and every memoir edition. These downloads are readable plaintext, outside your encrypted vault. Anyone who can open the file can read it. Keep it somewhere private.</p>
+      <p>Markdown and JSON exports contain your saved words in readable text. Anyone with the file can read them, even after you forget a page. For a file you can restore with your passphrase, choose Download an encrypted backup in Privacy &amp; storage.</p>
       <button disabled={busy} onclick={() => take('markdown')}>A readable book · Markdown</button>
       <button disabled={busy} onclick={() => take('json')}>The complete archive · JSON</button>
-      <p class="quiet">The complete archive also includes your concept map and generated reflections.</p>
+      <p class="quiet">JSON also includes any saved reflections and concept map data.</p>
       {#if done}<p role="status" class="quiet">Your archive is ready in your downloads.</p>{/if}
       {#if error}<p role="alert">{error}</p>{/if}
       <button class="return" onclick={() => show = false}>Return</button>
