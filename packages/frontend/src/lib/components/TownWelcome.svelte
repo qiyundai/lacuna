@@ -27,7 +27,7 @@
       <section class="river-view" aria-label="The valley city">
       <CorridorFlight/>
       {#if opened}
-        <div class="leaf" bind:this={controls}><button class="atlas-link" onclick={back}>← Back to the valley</button>{@render children()}</div>
+        <div class="leaf" bind:this={controls}><button class="atlas-link subtle back" onclick={back}>← Back to the valley</button>{@render children()}</div>
       {:else}
         <div class="intro">
           <h1>The valley city</h1>
@@ -43,14 +43,26 @@
 <style>
   .welcome{height:100%;position:relative}
   .menu .arrival{height:100%}
-  .arrival{overflow:auto;color:var(--scene-ink);background:var(--scene-shade)}.river-view{position:relative;isolation:isolate;min-height:100%;display:flex;align-items:safe end;padding:clamp(22px,6.5vw,110px) var(--gutter)}
-  .river-view{padding-top:calc(var(--mast-height) + 55px)}
+  .arrival{overflow:auto;color:var(--scene-ink);background:var(--scene-shade)}
+  .river-view{position:relative;isolation:isolate;min-height:100%;display:flex;align-items:safe end;padding:calc(var(--mast-height) + var(--space-7)) var(--gutter) clamp(var(--space-6),9vh,var(--space-9))}
   .river-view:before{position:absolute;inset:0;content:'';z-index:-1;background:linear-gradient(90deg,color-mix(in srgb,var(--scene-shade) 50%,transparent),transparent 65%),linear-gradient(0deg,color-mix(in srgb,var(--scene-shade) 91%,transparent),transparent 64%);pointer-events:none}
-  .intro{padding-bottom:min(3vh,30px);max-width:38rem}
-  h1{margin:0 0 .8rem;font:400 clamp(4.4rem,8.7vw,9.8rem)/.96 var(--font);letter-spacing:-.065em}
-  .intro p{max-width:28ch;font:400 clamp(1.25rem,2vw,1.75rem)/1.4 var(--font)}
-  .links{display:flex;align-items:center;gap:.5rem var(--space-6);flex-wrap:wrap;margin-top:var(--space-6)}.links button{min-height:48px;padding:0;border:0;background:transparent;color:inherit;font:400 1rem/1.3 var(--font);text-underline-offset:.35em;cursor:pointer}
-  .links .begin{font:400 1.4rem var(--font);text-decoration:underline;text-decoration-thickness:1px}.links button:hover,.links button:focus-visible{text-decoration:underline}.links button:focus-visible{outline-color:var(--scene-focus)}.visit{display:inline-flex;align-items:center;gap:var(--space-2)}
-  .leaf{align-self:safe center;width:min(100%,30rem);background:var(--paper);color:var(--ink);padding:var(--sheet-inset)}
-  .leaf>.atlas-link{margin-bottom:12px}@media(max-width:550px){.intro{padding-bottom:3vh}}
+  .intro{max-width:40rem;text-shadow:0 1px 18px color-mix(in srgb,var(--scene-shade) 60%,transparent)}
+  h1{font:400 var(--display-hero)/.94 var(--font);letter-spacing:var(--ls-hero);text-wrap:balance}
+  .intro p{max-width:26ch;margin-top:var(--space-5);font:400 var(--text-xl)/1.35 var(--font);letter-spacing:var(--ls-heading);color:var(--scene-ink-muted);text-wrap:pretty}
+  .links{display:flex;align-items:center;gap:var(--space-3) var(--space-6);flex-wrap:wrap;margin-top:var(--space-7)}
+  .links button{display:inline-flex;align-items:center;gap:var(--space-2);min-height:48px;border:0;font:400 var(--ui-lg)/1.2 var(--font);letter-spacing:var(--ls-ui);text-shadow:none;cursor:pointer}
+  /* Primary: a cream pill, the scene's raised tone. Secondary: underlined scene type. */
+  .begin{padding:0 var(--space-6);border-radius:var(--radius-pill);background:var(--scene-raised);color:var(--scene-on-raised);transition:background-color var(--dur-fast) var(--ease-soft),transform var(--dur-fast) var(--ease-soft)}
+  .begin:hover{background:var(--scene-ink)}.begin:active{transform:translateY(1px)}
+  .visit{padding:0;background:transparent;color:var(--scene-ink);text-decoration:underline;text-decoration-thickness:1px;text-decoration-color:color-mix(in srgb,var(--scene-ink) 45%,transparent);text-underline-offset:.35em;transition:text-decoration-color var(--dur-micro) var(--ease-soft)}
+  .visit:hover{text-decoration-color:currentColor}
+  .links button:focus-visible{outline-color:var(--scene-focus)}
+  .leaf{align-self:safe center;width:min(100%,var(--measure-form));display:grid;gap:var(--space-3);padding:var(--sheet-inset);border-radius:var(--radius-s);background:var(--paper);color:var(--ink);box-shadow:var(--shadow-sheet)}
+  .back{margin-left:0}
+  @media(prefers-reduced-motion:no-preference){
+    .intro > *{animation:arrive var(--dur-slow) var(--ease-out) backwards}
+    .intro p{animation-delay:80ms}.links{animation-delay:160ms}
+    .leaf{animation:arrive var(--dur-base) var(--ease-out) backwards}
+    @keyframes arrive{from{opacity:0;transform:translateY(12px)}}
+  }
 </style>

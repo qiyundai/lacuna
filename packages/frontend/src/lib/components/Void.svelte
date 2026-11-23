@@ -641,11 +641,13 @@
 </div>
 
 <style>
-  .writing-heading{position:absolute;top:18%;left:var(--gutter);right:var(--gutter);pointer-events:none}.writing-heading h1{font:400 clamp(2.4rem,5vw,4.6rem)/1 var(--font);letter-spacing:-.06em}.writing-heading p{font:1rem var(--font);color:var(--ink-muted);margin-block-start:.7rem}
-  .save-thought { position: absolute; bottom: 7rem; left: 50%; transform: translateX(-50%); z-index: 4; min-height: 44px; padding: .65rem 1.2rem; background: var(--paper); border: 1px solid var(--ink-subtle); border-radius: 2rem; color: var(--ink); font: inherit; cursor: pointer; }
+  .writing-heading{position:absolute;top:18%;left:var(--gutter);right:var(--gutter);pointer-events:none}.writing-heading h1{font:400 var(--display-1)/var(--lh-display) var(--font);letter-spacing:var(--ls-display)}.writing-heading p{font:400 var(--text-sm)/var(--lh-ui) var(--font);color:var(--ink-muted);margin-block-start:var(--space-3)}
+  .save-thought { position: absolute; bottom: 7rem; left: 50%; transform: translateX(-50%); z-index: 4; min-height: 48px; padding: 0 var(--space-5); background: var(--ink); border: 0; border-radius: var(--radius-pill); color: var(--paper); font: 400 var(--ui-md)/1 var(--font); letter-spacing: var(--ls-ui); cursor: pointer; transition: background-color var(--dur-fast) var(--ease-soft); }
+  .save-thought:enabled:hover { background: var(--accent); }
   .save-thought:disabled { opacity: .6; cursor: default; }
-  .plan-indicator { position: absolute; top: 1.5rem; width: 100%; text-align: center; font-size: var(--text-xs); color: var(--ink-subtle); }
-  .save-error { position: absolute; bottom: 5rem; left: 10%; width: 80%; text-align: center; color: var(--danger); font-size: var(--text-xs); line-height: 1.8; }
+  /* A whisper of where the words are kept, just above the way down */
+  .plan-indicator { position: absolute; left: var(--gutter); right: var(--gutter); bottom: calc(var(--space-6) + var(--control)); text-align: center; font: 400 var(--ui-xs)/var(--lh-ui) var(--font); letter-spacing: var(--ls-ui); color: var(--ink-subtle); pointer-events: none; }
+  .save-error { position: absolute; bottom: calc(7rem + 48px + var(--space-4)); left: 10%; width: 80%; text-align: center; color: var(--danger); font: 400 var(--ui-sm)/var(--lh-ui) var(--font); }
   .void {
     position: relative;
     width: 100%;

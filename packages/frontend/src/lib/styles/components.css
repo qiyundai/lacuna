@@ -93,89 +93,172 @@
 
 /* ── Paper buttons and links ────────────────────────────────── */
 .atlas-primary,
-.atlas-link { font: 400 var(--ui-md)/1.25 var(--font); cursor: pointer; min-height: 48px; }
+.atlas-link { font: 400 var(--ui-md)/1.25 var(--font); letter-spacing: var(--ls-ui); cursor: pointer; }
 .atlas-primary {
   justify-self: start;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  padding: .7rem 1.35rem;
+  min-height: 48px;
+  padding: 0 var(--space-5);
   border: 0;
   border-radius: var(--radius-pill);
   background: var(--ink);
   color: var(--paper);
-  transition: background var(--dur-fast) var(--ease-soft), transform var(--dur-fast) var(--ease-soft);
+  transition: background-color var(--dur-fast) var(--ease-soft), transform var(--dur-fast) var(--ease-soft);
 }
-.atlas-primary:hover { background: var(--accent); }
-.atlas-primary:active { transform: translateY(1px); }
+.atlas-primary:enabled:hover { background: var(--accent); }
+.atlas-primary:enabled:active { transform: translateY(1px); }
+.atlas-primary:disabled { opacity: 1; background: var(--valley); color: var(--ink-subtle); }
+.atlas-primary.danger { background: var(--danger); }
+.atlas-primary.danger:enabled:hover { background: color-mix(in srgb, var(--danger) 82%, var(--ink)); }
+/* Secondary actions on paper: underlined accent text with a 44px hit area */
 .atlas-link {
-  border: none;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control);
+  padding: 0;
+  border: 0;
   color: var(--accent);
   background: transparent;
   text-align: start;
   text-decoration: underline;
-  text-underline-offset: .2em;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-underline-offset: .3em;
+  transition: color var(--dur-micro) var(--ease-soft), text-decoration-color var(--dur-micro) var(--ease-soft);
 }
+.atlas-link:enabled:hover, a.atlas-link:hover { color: var(--ink); text-decoration-color: currentColor; }
+.atlas-link.danger { color: var(--danger); text-decoration-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.atlas-link.subtle { color: var(--ink-subtle); font-size: var(--ui-sm); text-decoration-color: var(--line); }
+/* A run of secondary links reads as one group: no extra gap between them */
+.atlas-links { display: grid; justify-items: start; }
+
+/* ── Quiet toggles ──────────────────────────────────────────────
+ * Lowercase text switches on reading pages (filters, map modes, tabs).
+ * The chosen one darkens and gains a short rule beneath it.
+ */
+.quiet-toggles { display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-5); }
+.quiet-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-subtle);
+  font: 400 var(--ui-sm)/1.4 var(--font);
+  letter-spacing: var(--ls-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-soft);
+}
+.quiet-toggle:enabled:hover, .quiet-toggle:is([aria-pressed=true], [aria-current=page]) { color: var(--ink); }
+.quiet-toggle::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 9px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur-base) var(--ease-out);
+}
+.quiet-toggle:is([aria-pressed=true], [aria-current=page])::after { transform: scaleX(1); }
+.quiet-toggle .count { color: var(--moss); font-variant-numeric: tabular-nums; }
 
 /* ── Forms ──────────────────────────────────────────────────── */
 .atlas-form { display: grid; gap: var(--space-5); font-family: var(--font); color: var(--ink); }
-.atlas-form h1 { font: 400 clamp(2rem, 3.5vw, 3.4rem)/1.03 var(--font); letter-spacing: -.055em; }
-.atlas-form > p { font-size: .98rem; line-height: 1.55; color: var(--ink-muted); }
-.atlas-form .field-note { font-size: var(--ui-sm); line-height: 1.5; }
-.atlas-form .form-error { color: var(--danger); }
-.field { display: grid; gap: .32rem; }
-.field label { font-size: .9rem; font-weight: 600; }
+.atlas-form h1 { font: 400 var(--display-2)/var(--lh-display) var(--font); letter-spacing: var(--ls-display); text-wrap: balance; }
+.atlas-form h1 + p { margin-top: calc(-1 * var(--space-2)); }
+.atlas-form > p { font-size: var(--text-md); line-height: var(--lh-ui); color: var(--ink-muted); text-wrap: pretty; }
+.atlas-form .field-note { font-size: var(--ui-sm); line-height: var(--lh-ui); color: var(--ink-subtle); }
+.atlas-form .field + .field-note { margin-top: calc(-1 * var(--space-3)); }
+.atlas-form .form-error { font-size: var(--ui-md); color: var(--danger); }
+.atlas-form .atlas-primary { margin-top: var(--space-2); }
+.field { display: grid; gap: var(--space-1); }
+.field label { font: 600 var(--ui-sm)/1.4 var(--font); letter-spacing: var(--ls-ui); color: var(--ink); }
 .field input {
   width: 100%;
   min-width: 0;
   min-height: 48px;
-  padding: .66rem .1rem;
+  padding: var(--space-2) 0;
   border: 0;
   border-bottom: 1px solid var(--line-strong);
   border-radius: 0;
   background: transparent;
   color: var(--ink);
-  font: inherit;
-  font-size: var(--ui-lg);
+  font: 400 var(--ui-lg)/1.4 var(--font);
+  transition: border-color var(--dur-micro) var(--ease-soft);
 }
+.field input:focus-visible { outline: 0; border-bottom-color: var(--ink); box-shadow: 0 1px 0 var(--ink); }
 .field input[aria-invalid=true] { border-color: var(--danger); }
 
 /* ── Reading pages ──────────────────────────────────────────── */
-.story-page { max-width: 57rem; margin: 0 auto; padding: clamp(6rem, 12vh, 9rem) 2.5rem 8rem; min-height: 100%; }
-.story-heading h1 { font: 400 clamp(2rem, 4.5vw, 3.3rem)/1.25 var(--font); letter-spacing: -.025em; margin: .7rem 0 1.2rem; text-wrap: balance; }
-.whisper { font-size: var(--ui-sm); color: var(--ink-subtle); letter-spacing: .045em; line-height: 1.8; }
-.quiet { color: var(--ink-subtle); font-size: .95rem; line-height: 1.9; }
+.story-page {
+  max-width: var(--measure-page);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: clamp(var(--space-8), 11vh, var(--space-9)) var(--gutter) var(--space-9);
+}
+.story-heading { margin-bottom: var(--space-7); }
+.story-heading h1 { font: 400 var(--display-1)/var(--lh-display) var(--font); letter-spacing: var(--ls-display); text-wrap: balance; }
+.story-heading p { margin-top: var(--space-3); }
+.whisper { font: 400 var(--ui-sm)/var(--lh-ui) var(--font); letter-spacing: var(--ls-ui); color: var(--ink-subtle); }
+.quiet { font: 400 var(--text-sm)/var(--lh-prose) var(--font); color: var(--ink-subtle); text-wrap: pretty; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.empty-story { min-height: 20rem; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 1.2rem; max-width: 35ch; margin: auto; }
-.empty-story > p:not(.quiet) { font: 1.45rem/1.6 var(--font); }
-.seed { color: var(--lavender); font-size: 2.2rem; margin-bottom: 1rem; }
-@media (max-width: 640px) { .story-page { padding: 6rem 1.5rem 7rem; } }
+.empty-story { min-height: 20rem; max-width: 34ch; margin: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-4); text-align: center; }
+.empty-story > p:not(.quiet) { font: 400 var(--text-xl)/var(--lh-heading) var(--font); letter-spacing: var(--ls-heading); text-wrap: balance; }
+.seed { color: var(--lavender); font-size: var(--text-xl); line-height: 1; margin-bottom: var(--space-2); }
 
-/* ── Journal sheets (settings dialogs on paper) ─────────────── */
-[role="dialog"] > .journal-sheet {
-  width: min(100%, 38rem);
-  max-width: 38rem;
-  height: fit-content;
-  max-height: none;
+/* ── Sheets ─────────────────────────────────────────────────────
+ * Full-screen paper layers for settings and notes. The screen is the
+ * dismiss target; the sheet is a single left-aligned column inside it.
+ *   <div class="sheet-screen" role="dialog">
+ *     <div class="journal-sheet">  h2 · p · section(h3 …) · .sheet-foot
+ */
+.sheet-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: clamp(var(--space-7), 12vh, var(--space-9)) var(--gutter);
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  cursor: pointer;
+}
+.journal-sheet {
+  width: min(100%, var(--measure-sheet));
   margin: auto;
-  padding: var(--sheet-inset);
   display: grid;
   gap: var(--space-5);
-  text-align: start;
+  align-content: start;
   color: var(--ink);
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  font: 1rem/1.6 var(--font);
-  letter-spacing: normal;
+  font: 400 var(--text-md)/var(--lh-prose) var(--font);
+  letter-spacing: var(--ls-prose);
+  text-align: start;
+  cursor: default;
 }
-.journal-sheet.journal-sheet h2 {
-  margin: 0 0 .5rem;
-  font: 400 clamp(2rem, 4vw, 3.1rem)/1.1 var(--font);
-  letter-spacing: -.045em;
+.journal-sheet h2 { margin-bottom: var(--space-2); font: 400 var(--display-2)/var(--lh-display) var(--font); letter-spacing: var(--ls-display); text-wrap: balance; }
+.journal-sheet h3 { font: 400 var(--display-3)/var(--lh-heading) var(--font); letter-spacing: var(--ls-heading); }
+.journal-sheet p { color: var(--ink-muted); text-wrap: pretty; }
+.journal-sheet .note { font: 400 var(--ui-sm)/var(--lh-ui) var(--font); letter-spacing: var(--ls-ui); color: var(--ink-subtle); }
+.journal-sheet section { display: grid; gap: var(--space-4); margin-top: var(--space-4); padding-top: var(--space-5); border-top: 1px solid var(--rule); }
+.journal-sheet section > h3 { margin-bottom: var(--space-1); }
+.journal-sheet label:has(> input[type=checkbox]) { display: flex; align-items: baseline; gap: var(--space-3); font-size: var(--ui-md); line-height: var(--lh-ui); cursor: pointer; }
+.journal-sheet input[type=checkbox] { flex: none; accent-color: var(--accent); }
+.sheet-foot { display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-5); margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--rule); }
+@media (prefers-reduced-motion: no-preference) {
+  .sheet-screen > .journal-sheet { animation: sheet-rise var(--dur-slow) var(--ease-out) both; }
+  @keyframes sheet-rise { from { opacity: 0; transform: translateY(10px); } }
 }
-.journal-sheet.journal-sheet p { color: var(--ink-muted); font: inherit; letter-spacing: normal; }
-.journal-sheet.journal-sheet :is(button, a) { min-height: var(--control); display: inline-flex; align-items: center; font: 400 .95rem/1.4 var(--font); text-align: start; }
-.journal-sheet.journal-sheet button:not(.atlas-primary) { border-radius: 0; border: 0; background: transparent; color: var(--accent); cursor: pointer; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: .32em; }
-[role="dialog"]:has(> .journal-sheet) { align-items: safe center; padding: clamp(12px, 4vw, 56px); background: var(--paper); overflow-y: auto; }

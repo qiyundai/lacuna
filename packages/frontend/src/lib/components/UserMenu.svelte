@@ -92,8 +92,8 @@
 {#if open}
   <div
     use:modal={{ dismiss: close }}
-    class="screen-overlay"
-    transition:fade={{ duration: 500, easing: cubicOut }}
+    class="sheet-screen"
+    transition:fade={{ duration: 400, easing: cubicOut }}
     role="dialog"
     tabindex="-1"
     aria-modal="true"
@@ -101,23 +101,27 @@
     onclick={(e) => { if (e.target === e.currentTarget) close(); }}
     onkeydown={(e) => { if (e.key === 'Escape') close(); }}
   >
-    <div class="menu-content">
-      <h2>Journal settings</h2>
-      <p class="menu-email">{session.user?.email}</p>
-      <nav class="menu-actions">
+    <div class="journal-sheet">
+      <header>
+        <h2>Journal settings</h2>
+        <p class="note">{session.user?.email}</p>
+      </header>
+      <nav class="menu-actions" aria-label="Settings">
         <button class="menu-item" onclick={() => { open = false; confirming = false; showInfo = true; }}>About Lacuna</button>
         <button class="menu-item" onclick={() => { open = false; confirming = false; showPrivacy = true; }}>Data and privacy</button>
         <button class="menu-item" onclick={() => { open = false; showVault = true; }}>Privacy &amp; storage</button>
-        <button class="menu-item" onclick={() => { open = false; showPlan = true; }}>{aiAvailable ? 'AI reflections' : 'AI reflections · Coming soon'}</button>
+        <button class="menu-item" onclick={() => { open = false; showPlan = true; }}>AI reflections{#if !aiAvailable}<span class="soon">Coming soon</span>{/if}</button>
         <button class="menu-item" onclick={() => { open = false; showExport = true; }}>Export journal</button>
         <button class="menu-item" onclick={handleSignOut}>{isCompanion ? 'Sign out' : 'Lock journal'}</button>
-        <button class="menu-item danger" disabled={deleting} onclick={handleDelete}>
+      </nav>
+      <div class="sheet-foot">
+        <button class="atlas-link" onclick={close}>Close settings</button>
+        <button class="atlas-link danger" disabled={deleting} onclick={handleDelete}>
           {confirming ? 'Confirm journal deletion' : isCompanion ? 'Delete account' : 'Delete this browser journal'}
         </button>
-      </nav>
-      <button class="atlas-link" onclick={close}>Close settings</button>
-      {#if confirming}<p class="deletion-scope">{isCompanion ? 'This removes the active server account, cloud copy, and this computer’s vault and encrypted conflict backups.' : 'This removes this browser’s journal, pairing code and recovery copies. To erase a synced online copy, delete it first in Privacy & storage.'} It cannot be undone here. Downloaded files and other devices are separate. Download a backup first if you want to keep your words.</p>{/if}
-      {#if error}<p role="alert">{error}</p>{/if}
+      </div>
+      {#if confirming}<p class="note" transition:fade={{ duration: 250 }}>{isCompanion ? 'This removes the active server account, cloud copy, and this computer’s vault and encrypted conflict backups.' : 'This removes this browser’s journal, pairing code and recovery copies. To erase a synced online copy, delete it first in Privacy & storage.'} It cannot be undone here. Downloaded files and other devices are separate. Download a backup first if you want to keep your words.</p>{/if}
+      {#if error}<p role="alert" class="note error">{error}</p>{/if}
     </div>
   </div>
 {/if}
@@ -129,25 +133,11 @@
 <VaultSettings bind:show={showVault} />
 
 <style>
-  .deletion-scope { max-width: 40ch; text-align: center; line-height: 1.8; color: var(--ink-muted); font-size: var(--ui-sm); padding: 0 1rem; }
-  .screen-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 200;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: color-mix(in srgb, var(--paper) 82%, transparent);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    cursor: pointer;
-  }
-
-  .screen-overlay{overflow:auto;align-items:safe center;background:var(--field);padding:22px}
-  .menu-content{width:min(100%,32rem);margin:auto;display:grid;gap:var(--space-5);cursor:default}
-  h2{font:400 2.65rem/1.1 var(--font);letter-spacing:-.05em}
-  .menu-email{color:var(--ink-muted);font:.9rem var(--font)}
-  .menu-actions{display:grid;justify-items:start;gap:.15rem;margin:.5rem 0}
-  .menu-item{font:400 1rem var(--font);min-height:48px;padding:.6rem .2rem;text-align:left;color:var(--ink);background:transparent;border:0;cursor:pointer}
-  .menu-item:is(:hover,:focus-visible){color:var(--accent);text-decoration:underline;text-underline-offset:.32em}.menu-item.danger{color:var(--danger)}
+  header{display:grid;gap:var(--space-1)}
+  header h2{margin:0}
+  .menu-actions{display:grid;justify-items:start;margin-top:var(--space-3)}
+  .menu-item{display:inline-flex;align-items:baseline;gap:var(--space-3);min-height:52px;padding:0;border:0;background:transparent;color:var(--ink);font:400 var(--display-3)/var(--lh-heading) var(--font);letter-spacing:var(--ls-heading);text-align:start;cursor:pointer;transition:color var(--dur-micro) var(--ease-soft)}
+  .menu-item:is(:hover,:focus-visible){color:var(--accent)}
+  .soon{font:400 var(--ui-sm)/1 var(--font);letter-spacing:var(--ls-ui);color:var(--ink-subtle)}
+  .error{color:var(--danger)}
 </style>

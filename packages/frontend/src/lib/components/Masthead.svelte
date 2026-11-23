@@ -5,7 +5,7 @@
   /*
    * Top bar: signature on the left, controls on the right.
    *   children — menu items (scene actions, navigation, exits)
-   *   sound    — sound toggles, grouped at the end of the menu with the music library
+   *   sound    — sound toggles, grouped at the end of the menu with Music
    *   audio    — show the master sound switch beside the menu button
    */
   let { children, sound, world, pageCount=0, floating=false, disabled=false, audio=false }: {
@@ -52,7 +52,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true">
         <path class="top" d="M4 6h16"/><path class="middle" d="M4 12h16"/><path class="base" d="M4 18h16"/>
       </svg>
-      <span class="scene-caption" aria-hidden="true">{open?'Close menu':'Menu'}</span>
+      {#if !open}<span class="scene-caption" aria-hidden="true">Menu</span>{/if}
     </button>
   </div>
   <nav id={menuId} popover="auto" bind:this={sheet} aria-label="Lacuna menu" onclickcapture={choose} ontoggle={e=>open=e.newState==='open'}>
@@ -66,7 +66,7 @@
 <style>
   .masthead{height:var(--mast-height);padding-inline:var(--gutter);display:flex;align-items:center;justify-content:space-between;color:var(--ink);background:var(--paper)}
   .floating{position:absolute;inset:0 0 auto;z-index:var(--z-chrome);pointer-events:none;background:var(--scene-scrim);color:var(--scene-ink)}
-  .signature{font:400 1.85rem/1 var(--font);letter-spacing:-.065em}.floating .signature{text-shadow:0 1px 6px var(--scene-shade)}
+  .signature{font:400 var(--text-signature)/1 var(--font);letter-spacing:var(--ls-hero)}.floating .signature{text-shadow:0 1px 6px var(--scene-shade)}
   .launcher{position:relative;display:flex;align-items:center;gap:var(--control-gap)}
 
 
@@ -83,8 +83,8 @@
   .masthead:not(.floating) :global(.scene-caption){color:var(--ink);text-shadow:none}
 
   .world{position:absolute;right:calc(100% + var(--space-2));width:max-content;max-width:calc(100vw - 2 * var(--gutter) - 2 * var(--control) - var(--control-gap) - var(--space-2));padding:3px var(--space-2);text-align:right;color:var(--scene-ink);text-shadow:var(--scene-type-shadow);pointer-events:none}
-  .world div{display:flex;gap:.65rem;align-items:baseline;justify-content:flex-end}
-  .world strong{font:400 1.24rem/1.15 var(--font);letter-spacing:-.035em}
+  .world div{display:flex;gap:var(--space-2);align-items:baseline;justify-content:flex-end}
+  .world strong{font:400 var(--ui-lg)/1.2 var(--font);letter-spacing:var(--ls-heading)}
   .meta{font:400 var(--ui-xs)/1.25 var(--font);color:var(--scene-ink-muted)}
   time{display:block;font-variant-numeric:tabular-nums}time span{padding:0 .15rem}
 

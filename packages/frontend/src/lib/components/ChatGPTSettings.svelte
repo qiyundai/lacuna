@@ -40,50 +40,46 @@
   });
 </script>
 {#if show}
-  <div class="plan-screen" use:modal={{ dismiss: () => show = false }} role="dialog" aria-modal="true" aria-label="AI reflections" tabindex="-1"
-    onclick={(event) => { if (event.target === event.currentTarget) show = false; }} onkeydown={(event) => { if (event.key === 'Escape') show = false; }} transition:fade={{ duration: 500, easing: cubicOut }}>
-    <div class="plan-content journal-sheet">
+  <div class="sheet-screen" style:z-index="210" use:modal={{ dismiss: () => show = false }} role="dialog" aria-modal="true" aria-label="AI reflections" tabindex="-1"
+    onclick={(event) => { if (event.target === event.currentTarget) show = false; }} onkeydown={(event) => { if (event.key === 'Escape') show = false; }} transition:fade={{ duration: 400, easing: cubicOut }}>
+    <div class="journal-sheet">
       <h2>AI reflections</h2>
       {#if !aiAvailable}
-        <p>Coming soon</p>
+        <p class="note soon">Coming soon</p>
         <p>The Soul Map will trace recurring threads in your pages. The Living Memoir will gather them into chapters.</p>
       {:else if isCompanion}
         <p>using your ChatGPT plan. eligible requests use your plan allowance or credits. enable journal sharing in privacy & storage before refreshing reflections.</p>
         {#if aiStore.companion?.connected}
           <p>{aiStore.companion.email}</p>
           {#if !aiStore.companion.planEnabled}<p>you’re signed in. reconnect and allow ChatGPT plan use to generate reflections.</p>{/if}
-          <button disabled={busy || aiStore.companion.state === 'running'} onclick={() => run(connect)}>Reconnect ChatGPT</button>
-          <p class="small">choose a model</p>
+          <button class="atlas-link" disabled={busy || aiStore.companion.state === 'running'} onclick={() => run(connect)}>Reconnect ChatGPT</button>
+          <p class="note">Choose a model</p>
           <div class="models">
             {#each models as model}
-              <button class:selected={(aiStore.companion.model ?? models[0]?.slug) === model.slug} disabled={busy} aria-pressed={(aiStore.companion.model ?? models[0]?.slug) === model.slug}
+              <button class="quiet-toggle" class:selected={(aiStore.companion.model ?? models[0]?.slug) === model.slug} disabled={busy} aria-pressed={(aiStore.companion.model ?? models[0]?.slug) === model.slug}
                 onclick={() => run(() => companionRequest('model', 'PATCH', { model: model.slug }))}>{model.name}</button>
             {/each}
           </div>
-          <button disabled={busy || aiStore.companion.state === 'running'} onclick={() => run(() => companionRequest('reflect', 'POST'))}>{aiStore.companion.state === 'running' ? 'reflecting…' : 'refresh reflections'}</button>
-          <button disabled={busy} onclick={() => run(async () => { testResult = ''; const result = await companionRequest<{ text: string }>('test', 'POST'); testResult = result.text; })}>Test ChatGPT connection</button>
+          <button class="atlas-link" disabled={busy || aiStore.companion.state === 'running'} onclick={() => run(() => companionRequest('reflect', 'POST'))}>{aiStore.companion.state === 'running' ? 'reflecting…' : 'refresh reflections'}</button>
+          <button class="atlas-link" disabled={busy} onclick={() => run(async () => { testResult = ''; const result = await companionRequest<{ text: string }>('test', 'POST'); testResult = result.text; })}>Test ChatGPT connection</button>
           {#if testResult}<p role="status">{testResult}</p>{/if}
-          <button disabled={busy} onclick={() => run(disconnect)}>Disconnect ChatGPT</button>
+          <button class="atlas-link" disabled={busy} onclick={() => run(disconnect)}>Disconnect ChatGPT</button>
         {:else}
           <p>use your ChatGPT plan for reflections. your journal is saved in your encrypted local vault; access and refresh tokens stay on this computer.</p>
-          <button disabled={busy} onclick={() => run(connect)}>Continue with ChatGPT</button>
+          <button class="atlas-link" disabled={busy} onclick={() => run(connect)}>Continue with ChatGPT</button>
         {/if}
         {#if aiStore.companion?.message}<p role="status">{aiStore.companion.message}</p>{/if}
       {:else}
         <ReflectionAccount/>
       {/if}
-      {#if aiAvailable && isCompanion}<a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">Manage usage</a>{/if}
-      {#if error}<p role="alert">{error}</p>{/if}
-      <button onclick={() => show = false}>Return</button>
+      {#if aiAvailable && isCompanion}<a class="atlas-link" href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">Manage usage</a>{/if}
+      {#if error}<p role="alert" class="error">{error}</p>{/if}
+      <div class="sheet-foot"><button class="atlas-link" onclick={() => show = false}>Return</button></div>
     </div>
   </div>
 {/if}
 <style>
-  .plan-screen { position: fixed; inset: 0; z-index: 210; background: color-mix(in srgb, var(--paper) 90%, transparent); backdrop-filter: blur(18px); display: flex; align-items: center; justify-content: center; padding: 2rem; overflow-y: auto; }
-  .plan-content { max-width: 42ch; max-height: 100%; text-align: center; display: flex; flex-direction: column; gap: 1.4rem; line-height: 1.8; letter-spacing: .03em; }
-  button, a { background: none; border: none; color: var(--ink-muted); font: inherit; cursor: pointer; text-decoration: none; line-height: 1.8; transition: color .35s ease; }
-  button:hover, a:hover, button.selected { color: var(--ink); }
-  button:disabled { opacity: .45; cursor: default; }
-  .small { font-size: var(--text-xs); color: var(--ink-subtle); }
-  .models { display: flex; flex-direction: column; gap: .7rem; }
+  .soon{margin-top:calc(-1 * var(--space-3))}
+  .models{display:grid;justify-items:start}
+  .error{color:var(--danger)}
 </style>

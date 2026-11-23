@@ -53,8 +53,27 @@ column are separated by `--control-gap` (8px).
 | `.scene-control.solid` | Controls always on screen over the scene: menu button, sound, film play/pause | `<IconAction tone="solid">` |
 | `.scene-control.raised` | The one primary action (write a page), and the open menu button | `<IconAction tone="raised">` |
 | `.paper-control` | Icon buttons on paper: close, sound, page turns | `<button class="paper-control"><Icon …/></button>` |
-| `.atlas-primary` | The main text button on a paper form | Pill, ink fill; icons inside are spaced by its `gap` |
-| `.atlas-link` | Secondary actions on paper | Underlined accent text |
+| `.atlas-primary` | The main text button on a paper form | Pill, ink fill; icons inside are spaced by its `gap`; add `.danger` for a destructive confirm |
+| `.atlas-link` | Secondary actions on paper | Underlined accent text, 44px tall; `.subtle` (small, quiet) and `.danger` variants. Wrap a run of them in `.atlas-links` so they stack without extra gaps |
+| `.quiet-toggle` | Lowercase text switches on reading pages: filters, map modes, the story-view tabs | Inside `.quiet-toggles`; the chosen one (`aria-pressed`/`aria-current`) darkens and gains a short rule. Counts go in `<span class="count">` |
+
+### Sheets
+
+Settings and notes are full-screen paper layers built from one pattern —
+don't give a sheet its own heading size, column width or button style:
+
+```html
+<div class="sheet-screen" role="dialog" …>   <!-- the dismiss target -->
+  <div class="journal-sheet">                <!-- one left-aligned column -->
+    <h2>…</h2> <p>…</p> <p class="note">…</p>
+    <section><h3>…</h3> …</section>          <!-- ruled off from the intro -->
+    <div class="sheet-foot">…atlas-links…</div>
+  </div>
+</div>
+```
+
+Stack order between sheets is set inline (`style:z-index`) when one sheet can
+open over another.
 
 Captions (`.scene-caption`) sit **left** of controls in vertical stacks and
 **below** controls in rows along the top edge (add `.captions-below` to the
@@ -85,9 +104,16 @@ Valley audio plays by default, so the controls follow a fixed pattern:
   (`<ValleyLoading audio>`), and the open journal page (`surface="paper"`).
   Accessible name "Sound", `aria-pressed` true while sound is on.
 - **Channel toggles** (Soundtrack, Ambience) live in the menu's sound group via
-  `<Masthead sound={…}>`, next to the music library. They don't close the menu.
-  The sound group, music library included, always sits after a small break at
+  `<Masthead sound={…}>`, next to Music. They don't close the menu.
+  The sound group, Music included, always sits after a small break at
   the end of the menu, even on pages without toggles.
+- **Music** has two places and no others. `NowPlaying` is one line of scene
+  type in the city's bottom-left (it gives way to save notices), naming the
+  song with a pause control; it settles to a whisper after a few seconds.
+  The listening room (`AlbumPlayer`) is a full-screen layer: the valley
+  painting with the song and transport on the scene side, the tracklist on
+  paper beside it (below it on phones). No floating player cards, volume
+  sliders or native dropdowns — device volume and the sound switches cover it.
 - **`SoundCue`** marks an action that will start audio (entering the valley).
   It appears only when sound will actually play, and the action's accessible
   name must also say "with sound" — use `willPlaySound()` for both.
@@ -100,7 +126,12 @@ Valley audio plays by default, so the controls follow a fixed pattern:
 | `--mast-height` | 64px (54px ≤760px) | Top bar; anything sharing that row centers within it |
 | `--edge-bottom` | ≥1rem, respects safe area | Bottom-anchored scene controls |
 | `--sheet-inset` | fluid | Inner padding of paper sheets |
+| `--measure-sheet` · `--measure-form` · `--measure-page` | 36 · 30 · 46rem | Column widths for sheets, the passphrase card, reading pages |
 | `--space-1…9` | 4px base | All other spacing |
+
+Within a column, align on shared edges: headings, meta and body text start at
+the same left edge, and lists with a date column align on the entry's first
+baseline (`align-items: baseline`), not with padding nudges.
 
 Right-aligned scene controls share one right edge: the gutter. The menu hangs
 from the menu button with the same right edge, one gap below it.
@@ -110,10 +141,18 @@ from the menu button with the same right edge, one gap below it.
 One family: `--font`, a serif (Iowan Old Style → Palatino → Georgia), for
 prose, headings, controls, captions and meta alike. Don't introduce a sans.
 
-Two scales share it: the reading scale (`--text-*`) for prose, and the
-interface scale for controls and meta — `--ui-xs` 13px, `--ui-sm` 14px,
-`--ui-md` 16px, `--ui-lg` 17px. The interface scale runs a step larger than a
-sans would need because the serif's x-height is smaller; 13px is the floor.
+Three scales share it, and every size in a component comes from one of them —
+never a raw `rem`:
+
+| Scale | Tokens | Use |
+|---|---|---|
+| Display | `--display-hero` › `--display-1` › `--display-2` › `--display-3` | Welcome title › page titles › sheet and form titles › section heads. Pair with `--lh-display`/`--lh-heading` and `--ls-hero`/`--ls-display`/`--ls-heading` |
+| Reading | `--text-sm` 16 › `--text-md` 18 › `--text-lg` ~20 › `--text-xl` ~24 | Supporting prose › sheet body › journal entries and memoir › a single thought held up to read |
+| Interface | `--ui-xs` 13 › `--ui-sm` 14 › `--ui-md` 16 › `--ui-lg` 17 | Meta and dates › captions and toggles › buttons and labels › inputs |
+
+The interface scale runs a step larger than a sans would need because the
+serif's x-height is smaller; 13px is the floor. Display type tightens as it
+grows (negative tracking); small interface type opens up slightly.
 
 The serif has regular and bold only. Use 400 by default and 600 (bold) for
 form labels and selected tabs; don't write 500, which silently renders as
@@ -129,6 +168,6 @@ motion globally for reduced-motion users.
 
 ## Stacking
 
-`--z-chrome` 2 (floating top bar) · `--z-loading` 5 · `--z-player` 12 ·
+`--z-chrome` 2 (floating top bar) · `--z-loading` 5 · `--z-room` 205 (listening room) ·
 full-screen overlays 200–225. The menu and dialogs use the top layer
 (`popover`, `<dialog>`), so they need no z-index.
