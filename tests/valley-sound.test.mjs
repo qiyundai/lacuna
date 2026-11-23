@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Group, PerspectiveCamera, Vector3 } from 'three';
-import { cameraListenerPose } from '../packages/frontend/src/lib/town/valley-sound.ts';
+import { airCutoff, cameraListenerPose, createValleySound } from '../packages/frontend/src/lib/town/valley-sound.ts';
 import { FerryCourse } from '../packages/frontend/src/lib/town/ferry-course.ts';
 import { inValley, valleyOrigin } from '../packages/frontend/src/lib/town/valley-river.ts';
 
@@ -43,4 +43,53 @@ test('ferry sound and hull share the city transform and come to rest at the bert
     const p = course.getPointAt(frame.progress);
     assert.ok(inValley(p).distanceTo(city.localToWorld(p.clone())) < 1e-8);
   }
+});
+
+test('distance rounds off a sound before it fades, and never past its range', () => {
+  assert.equal(airCutoff(0, 130), 16000);
+  assert.ok(Math.abs(airCutoff(130, 130) - 2200) < 1e-6);
+  assert.equal(airCutoff(400, 130), airCutoff(130, 130));
+  assert.ok(airCutoff(30, 130) > airCutoff(60, 130) && airCutoff(60, 130) > airCutoff(100, 130));
+});
+
+function stubAudio() {
+  const param = () => ({ value: 0, setTargetAtTime(v) { this.value = v; }, cancelScheduledValues() {} });
+  const node = extra => ({ connect(next) { return next; }, disconnect() {}, ...extra });
+  const playing = new Map();
+  const context = {
+    state: 'running', currentTime: 10, destination: node(), addEventListener() {},
+    listener: { setPosition() {}, setOrientation() {} },
+    createGain: () => node({ gain: param() }),
+    createPanner: () => node({ setPosition() {} }),
+    createBiquadFilter: () => node({ frequency: param(), Q: param() }),
+    createBufferSource() {
+      const source = node({ start() { playing.set(this.buffer.clip, this); }, stop() { playing.delete(this.buffer.clip); } });
+      return source;
+    },
+    async decodeAudioData(data) { return { duration: 12, clip: data.clip }; },
+  };
+  return { context, playing };
+}
+
+test('crickets and leaves belong to the ground, and fall away as the camera climbs', async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async url => ({ ok: true, arrayBuffer: async () => ({ clip: String(url).split('/').pop().replace('.mp3', '') }) });
+  try {
+    const listen = async height => {
+      const { context, playing } = stubAudio();
+      const sound = createValleySound(context, () => {});
+      const camera = new PerspectiveCamera();
+      camera.position.set(0, height, 0); camera.lookAt(0, 0, -20); camera.updateMatrixWorld(true);
+      sound.mix(true, false);
+      const frame = () => sound.update(camera, 0, true, [], [], [], () => 0, () => 1);
+      frame(); await new Promise(r => setTimeout(r, 0)); frame();
+      const heard = new Set(playing.keys());
+      sound.destroy();
+      return heard;
+    };
+    const ground = await listen(3), above = await listen(32), high = await listen(80);
+    assert.ok(ground.has('insects') && ground.has('leaves'));
+    assert.ok(!above.has('insects') && above.has('leaves'));
+    assert.ok(!high.has('insects') && !high.has('leaves'));
+  } finally { globalThis.fetch = realFetch; }
 });

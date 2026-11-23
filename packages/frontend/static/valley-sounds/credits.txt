@@ -7,9 +7,9 @@ The seven 12-second loops use eleven_text_to_sound_v2 with looping enabled.
 The six 2-second calls and creaks use eleven_text_to_sound_v3.
 Mastered in mono for positional playback. Loop tails overlap their starts by 200 ms.
 
-river.mp3 — Continuous gentle freshwater lapping against a shallow pebbled riverbank, small irregular ripples up close. A quiet sheltered valley, steady texture, isolated water only.
+river.mp3 — Distant gentle river stream murmuring over stones in a quiet valley, a smooth steady wash of flowing water with soft burbling, calm and continuous, natural field recording. (Regenerated 2026-11-23.)
 breeze.mp3 — A light open-air breeze over a broad grassy valley, soft airy swells with long quiet spaces, no whistling or rustling. Isolated natural wind.
-leaves.mp3 — Soft delicate leaves shifting on a broadleaf tree, small irregular flickers of dry foliage in light wind. Isolated close field recording.
+leaves.mp3 — A soft gentle breeze through the full green canopy of a tall leafy tree, heard from below. A smooth airy hush of leaves with slow rising and falling swells, continuous and calm, natural field recording. (Regenerated 2026-11-23; isolated peaks softened, gentle 9 kHz roll-off.)
 insects.mp3 — A quiet evening cricket chorus at the edge of a meadow, fine intermittent pulses with space between, restrained natural field recording.
 street.mp3 — A few distant people quietly going about their day in a small riverside market. Soft indistinct nonverbal crowd murmur and gentle shuffling, no discernible words, music or vehicles.
 engine.mp3 — A little passenger ferry's inboard diesel engine at steady low revolutions, mellow mechanical putter, soft low rumble. Engine only, consistent pitch, no horn, no water.
