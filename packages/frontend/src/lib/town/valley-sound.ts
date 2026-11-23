@@ -14,6 +14,11 @@ export function cameraListenerPose(camera: Camera, eye: Vector3, forward: Vector
   up.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
 }
 
+/** Distance takes the top off a sound before it takes the level: far calls arrive soft and rounded. */
+export function airCutoff(distance: number, range: number) {
+  return 16000 * (2200 / 16000) ** MathUtils.clamp(distance / range, 0, 1);
+}
+
 export function createValleySound(context: AudioContext, refresh: () => void) {
   const master = context.createGain();
   master.gain.value = 0;
@@ -42,18 +47,21 @@ export function createValleySound(context: AudioContext, refresh: () => void) {
   function start(source: Source, buffer: AudioBuffer, loop: boolean) {
     const node = context.createBufferSource(), gain = context.createGain();
     const pan = source.position ? context.createPanner() : undefined;
+    const air = source.position ? context.createBiquadFilter() : undefined;
     node.buffer = buffer; node.loop = loop;
-    if (pan) {
+    if (pan && air) {
       pan.panningModel = 'HRTF'; pan.distanceModel = 'linear';
       pan.refDistance = source.range * .12; pan.maxDistance = source.range;
       pan.setPosition(source.position!.x, source.position!.y, source.position!.z);
-      node.connect(pan).connect(gain);
+      air.type = 'lowpass'; air.Q.value = .5;
+      air.frequency.value = airCutoff(source.position!.distanceTo(eye), source.range);
+      node.connect(air).connect(pan).connect(gain);
     } else node.connect(gain);
     gain.gain.value = loop ? 0 : source.level;
     gain.connect(master);
-    const voice = { node, gain, pan, loop };
+    const voice = { node, gain, pan, air, loop };
     node.onended = () => {
-      node.disconnect(); pan?.disconnect(); gain.disconnect(); live.delete(voice);
+      node.disconnect(); air?.disconnect(); pan?.disconnect(); gain.disconnect(); live.delete(voice);
       if (voices.get(source.key) === voice) voices.delete(source.key);
       if (!abort.signal.aborted) refresh();
     };
@@ -80,6 +88,7 @@ export function createValleySound(context: AudioContext, refresh: () => void) {
     }
     const p = source.position;
     if (voice.pan && p) voice.pan.setPosition(p.x, p.y, p.z);
+    if (voice.air && p) voice.air.frequency.setTargetAtTime(airCutoff(p.distanceTo(eye), source.range), context.currentTime, .2);
     voice.gain.gain.setTargetAtTime(source.level, context.currentTime, loop ? .16 : .02);
   }
 
@@ -145,14 +154,18 @@ export function createValleySound(context: AudioContext, refresh: () => void) {
       else if (place.kind === 'dock') dock = place;
       else grove = place;
     }
+    // Insects and leaves live at ground level: they belong to a walker, not to a view from above.
+    const clearance = Math.max(0, eye.y - terrain(eye.x, eye.z));
+    const underfoot = 1 - MathUtils.smoothstep(clearance, 5, 24);
+    const canopy = 1 - MathUtils.smoothstep(clearance, 14, 60);
     if (grove) {
-      loop('leaves-' + grove.id, 'leaves', grove.position, .38, 87);
-      loop('insects-' + grove.id, 'insects', grove.position, .27 * (1 - daylight), 67);
-      if (due && daylight > .3) cue('songbird', grove.position, .64, 108);
+      loop('leaves-' + grove.id, 'leaves', grove.position, .34 * canopy, 70);
+      loop('insects-' + grove.id, 'insects', grove.position, .14 * (1 - daylight) * underfoot, 32);
+      if (due && daylight > .3) cue('songbird', grove.position, .5 * (.35 + .65 * canopy), 96);
     }
     if (street) loop('street-' + street.id, 'street', street.position, street.level * (.45 + .55 * daylight), 72);
     if (due && dock) cue('dock', dock.position, .57, 69);
-    if (due) for (const p of flocks) cue('gull', p, .72, 180);
+    if (due && Math.random() < .35) for (const p of flocks) cue('gull', p, .26, 130);
     if (!paused) ferries.forEach((boat,i) => {
       if (!boat.visible) return;
       loop('engine-' + i, 'engine', boat.position, .12 + .49 * boat.speed, 144);
@@ -163,6 +176,7 @@ export function createValleySound(context: AudioContext, refresh: () => void) {
       if (voice.loop ? !chosen.some(s => s.key === key) : paused) fade(key);
       else if (key === 'gull' && voice.pan && callingGull && flocks.includes(callingGull)) {
         voice.pan.setPosition(callingGull.x, callingGull.y, callingGull.z);
+        voice.air?.frequency.setTargetAtTime(airCutoff(callingGull.distanceTo(eye), 130), context.currentTime, .2);
       }
     }
     for (const item of chosen) apply(item, true);
@@ -181,7 +195,7 @@ export function createValleySound(context: AudioContext, refresh: () => void) {
     abort.abort();
     for (const voice of live) {
       voice.node.onended = null; voice.node.stop(); voice.node.disconnect();
-      voice.pan?.disconnect(); voice.gain.disconnect();
+      voice.air?.disconnect(); voice.pan?.disconnect(); voice.gain.disconnect();
     }
     live.clear(); voices.clear(); buffers.clear(); master.disconnect();
   }};
