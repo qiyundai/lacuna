@@ -4,7 +4,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { HTTPException } from 'hono/http-exception';
 import type { Env } from './types.js';
 import reflections from './routes/reflections.js';
-import browserSync from './routes/browser-sync.js';
+import browserSync, { syncOrigins } from './routes/browser-sync.js';
 import { syncLimit } from '../../shared/sync-packet.js';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -14,7 +14,7 @@ app.use('*', async (c, next) => bodyLimit({ maxSize: c.req.path === '/journal-sy
 app.use('*', async (c, next) => {
   const origin = c.env.FRONTEND_ORIGIN ?? 'http://localhost:5173';
   return cors({
-    origin,
+    origin: c.req.path === '/journal-sync' ? syncOrigins(c.env) : origin,
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'If-None-Match'],
     maxAge: 86400,
