@@ -21,6 +21,7 @@ import { footbridge } from './footbridge.js';
 import { canalTunnel } from './canal-tunnel.js';
 import { bridgeStation } from './river-passage.js';
 import { FerryCourse } from './ferry-course.js';
+import { createValleySound, type SoundPlace } from './valley-sound.js';
 import type { Coast, Site } from './painted-coast.js';
 import type { CityDetails } from './journal-details.js';
 import { furnishAddress, loadJournalFurniture } from './journal-furnishings.js';
@@ -173,6 +174,10 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     const boat=bake(vessel,valley.plant);boat.traverse(part=>{part.castShadow=false;});travel.add(boat);
     return {boat,wake,course:undefined as FerryCourse|undefined,route:'',phase:0};
   });
+  const soundFerries=fleet.map(()=>({position:new T.Vector3(),visible:false,speed:0}));
+  const soundPlaces:SoundPlace[]=[];
+  let sound:ReturnType<typeof createValleySound>|undefined;
+  let audioContext:AudioContext|undefined, soundEnabled=false, pageOpen=false;
   const beamGeometry=new T.CylinderGeometry(.028,.91,17,24,1,true);
   beamGeometry.rotateZ(Math.PI/2);beamGeometry.translate(8.5,0,0);
   const beamMaterial=new T.ShaderMaterial({uniforms:{strength:{value:0}},transparent:true,depthWrite:false,side:T.DoubleSide,blending:T.AdditiveBlending,
@@ -269,15 +274,19 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     beam.rotation.y=-Math.PI*.5+Math.sin(time*.18)*1.20;
     for(const [i,{boat,course,phase,wake}] of fleet.entries()){
       boat.visible=!!course;
+      const audible=soundFerries[i]!;
+      audible.visible=false;
       const hull=sea.hulls[i]!;
       if(!course){hull.set(0,0,0,0);continue;}
-      const {progress,direction,visible}=course.sample(time+phase);
+      const {progress,direction,visible,speed}=course.sample(time+phase);
       boat.visible=visible;
       course.getPointAt(progress,boat.position);
       boat.position.y+=.027*Math.sin(time*1.05);
       const tangent=course.getTangentAt(progress).multiplyScalar(direction);
       boat.rotation.y=-Math.atan2(tangent.z,tangent.x);
-      hull.set(valleyOrigin.x+boat.position.z,valleyOrigin.z-boat.position.x,visible?tangent.z:0,visible?-tangent.x:0);
+      inValley(boat.position,audible.position);
+      audible.visible=visible;audible.speed=speed;
+      hull.set(audible.position.x,audible.position.z,visible?tangent.z:0,visible?-tangent.x:0);
       wake.sample(boat.position,tangent,time,boat.visible);
       sea.wakeCounts[i]=wake.count.value;
     }
@@ -315,6 +324,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     shop.breezeTime.value=motionPreference.matches?0:time;
     city.worldToLocal(localEye.copy(camera.position));meadow?.view();
     valley.tick(time,camera.position,shop.breezeTime.value);sea.clock.value=time;atmosphere.render(time,rooms.sources,light,construction?hashPage(construction.site.id):undefined);
+    sound?.update(camera,light.daylight,paused,soundPlaces,soundFerries,valley.flocks,valley.ground,valley.coverAt);
     const selected=selectedPage?plan.addresses.get(selectedPage):undefined;
     if(onMarkers)pageTargets.update(selected??plan.latest,selected?selectedPage:undefined);
     if(!paused||framing||input.active())schedule();
@@ -418,6 +428,15 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       shop.box(cluster,'copper',p.x,p.y+h+.24,p.z,width+.28,.6,4.24).rotation.y=angle;
     }
     const lots=visible.map(site=>placeLot(site,shop.site(site),crossing));
+    soundPlaces.length=0;
+    for(const {site,model} of lots){
+      const position=inValley(model.position);
+      if(site.kind==='pines')soundPlaces.push({id:site.id,position,kind:'grove',level:1});
+      else if(!site.quiet){
+        const dock=site.kind==='wharf'||site.kind==='crane'||site.ferryTerminal;
+        soundPlaces.push({id:site.id,position,kind:dock?'dock':'street',level:site.kind==='market'?.36:.18});
+      }
+    }
     const clearance=railClearance(lots);
     const laneOf = (s:Site) => s.kind==='wharf'?3:s.lane;
     meadow?.clearPaths();
@@ -563,7 +582,19 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     renderer.setSize(w,h,false);sea.resize(w*renderer.getPixelRatio(),h*renderer.getPixelRatio());atmosphere.resize(w,h);glows.material.uniforms.screen!.value=h*renderer.getPixelRatio()*1.9;camera.aspect=w/h;camera.updateProjectionMatrix();checkedEye.x=Infinity;if(!inspected)fit();schedule();
   }
   function visibility(){
+    syncSound();
     if(document.hidden||skipped){input.reset();cancelAnimationFrame(frame);frame=0;last=0;}else {clockCheck=-Infinity;schedule();}
+  }
+  function syncSound(){
+    if(!audioContext||audioContext.state==='closed')return;
+    const audible=soundEnabled&&!document.hidden&&!skipped;
+    sound?.mix(audible,pageOpen);
+    if(audible && audioContext.state!=='running')void audioContext.resume().catch(()=>{});
+    if(!audible)void audioContext.suspend().catch(()=>{});
+  }
+  function setSound(context:AudioContext|undefined,enabled:boolean,reading:boolean){
+    if(context && !sound){audioContext=context;sound=createValleySound(context,schedule);}
+    soundEnabled=enabled;pageOpen=reading;syncSound();schedule();
   }
   canvas.addEventListener('contentvisibilityautostatechange',e=>{skipped=(e as ContentVisibilityAutoStateChangeEvent).skipped;visibility();},options);
   document.addEventListener('visibilitychange',visibility,options);
@@ -586,7 +617,8 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   },options);
   world.setPainted(!!shop.paint);
   const observer=new ResizeObserver(resize);observer.observe(canvas);resize();
-  return {update,visit,pause(value:boolean){paused=value;last=0;schedule();},destroy(){
+  return {update,visit,setSound,pause(value:boolean){paused=value;last=0;schedule();},destroy(){
+    sound?.destroy();
     construction?.arrival.finish();
     bridge?.dispose();meadow?.dispose();rooms.dispose();stopClock?.();
     dead=true;cancelAnimationFrame(frame);observer.disconnect();signals.abort();releaseInstances(structures);releaseInstances(scenery);releaseInstances(tunnel);bore.dispose();

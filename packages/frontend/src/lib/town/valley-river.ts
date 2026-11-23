@@ -47,6 +47,6 @@ export function buildingBelt(x:number,z:number){
   return z<260 && depth>-riverWidth(along)-42 && depth<59;
 }
 
-export function inValley(point:T.Vector3){
-  return new T.Vector3(valleyOrigin.x+point.z,point.y,valleyOrigin.z-point.x);
+export function inValley(point:T.Vector3,target=new T.Vector3()){
+  return target.set(valleyOrigin.x+point.z,point.y,valleyOrigin.z-point.x);
 }

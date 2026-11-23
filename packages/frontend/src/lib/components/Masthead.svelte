@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount, type Snippet } from 'svelte';
   import MusicButton from './MusicButton.svelte';
-  let { children, world, pageCount=0, floating=false, disabled=false }: {
-    children?:Snippet; world?:string; pageCount?:number; floating?:boolean; disabled?:boolean
+  let { children, quick, world, pageCount=0, floating=false, disabled=false }: {
+    children?:Snippet; quick?:Snippet; world?:string; pageCount?:number; floating?:boolean; disabled?:boolean
   } = $props();
   const menuId=$props.id();
   const calendar=new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric'});
@@ -32,13 +32,14 @@
 
 <header class="masthead" class:floating class:with-details={open && !!world}>
   <span class="signature">Lacuna</span>
-  <div class="launcher">
+  <div class="launcher" class:paired={!!quick}>
     {#if world && open}
       <div class="world">
         <div><strong>{world}</strong><span class="pages">{pageCount} {pageCount===1?'page':'pages'}</span></div>
         <time datetime={now.toISOString()}>{calendar.format(now)} <span aria-hidden="true">·</span> {clock.format(now)}</time>
       </div>
     {/if}
+    {@render quick?.()}
     <button type="button" class="trigger" bind:this={trigger} popovertarget={menuId} aria-label={open?'Close menu':'Menu'} aria-expanded={open} disabled={disabled||!supported}>
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
         <path class="top" d="M4 6h16"/><path class="middle" d="M4 12h16"/><path class="base" d="M4 18h16"/>
@@ -57,6 +58,7 @@
   .floating{position:absolute;inset:0 0 auto;z-index:2;pointer-events:none;background:linear-gradient(#142f2b80,transparent);color:#fff6df}
   .signature{font:500 1.85rem/1 var(--font-reading);letter-spacing:-.065em}.floating .signature{text-shadow:0 1px 6px #102820}
   .launcher{position:relative;display:flex;align-items:center}
+  .paired{gap:.35rem}.paired .trigger .hint{top:calc(100% + 3px);right:0}
   .trigger{width:46px;height:46px;position:relative;pointer-events:auto;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:#24463cd9;color:var(--scene-ink);cursor:pointer}
   .trigger:hover,.trigger:focus-visible{background:var(--river)}
   .trigger:focus-visible{outline:2px solid #e2bd7a;outline-offset:2px}

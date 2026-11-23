@@ -1,6 +1,8 @@
 <script lang="ts">
   import IconAction from './IconAction.svelte';
-  import { tick, type Snippet } from 'svelte';
+  import { onMount, tick, type Snippet } from 'svelte';
+  import { enterValley, readSoundPreferences, valleyPlayback } from '$lib/valley-playback.svelte.js';
+  import PlayerIcon from './PlayerIcon.svelte';
   import Masthead from './Masthead.svelte';
   import JournalCity from './JournalCity.svelte';
   import CorridorFlight from './CorridorFlight.svelte';
@@ -13,6 +15,8 @@
   }
   async function back(){opened=false;await tick();start?.focus();}
   async function leave(){walking=false;await tick();walkButton?.focus();}
+  onMount(()=>{readSoundPreferences();window.dispatchEvent(new Event('lacuna:prepare-music'));});
+  const audible=$derived(!valleyPlayback.muted&&(valleyPlayback.ambience||valleyPlayback.music));
 </script>
 <div class="welcome" class:menu={!walking}>
 
@@ -29,7 +33,7 @@
           <h1>The valley city</h1>
           <p>A private journal that grows a city, one page at a time.</p>
           <div class="links"><button class="begin" bind:this={start} onclick={open}>{action}</button>
-          <button class="visit" bind:this={walkButton} onclick={()=>walking=true}>Visit the example city <span aria-hidden="true">↗</span></button></div>
+          <button class="visit" bind:this={walkButton} aria-label={'Visit the example city'+(audible?' with sound':'')} onclick={()=>{enterValley();walking=true;}}>Visit the example city <span aria-hidden="true"><PlayerIcon name={audible?'volume':'muted'}/></span></button></div>
         </div>
       {/if}
       </section>

@@ -13,14 +13,15 @@
     leave: 'M10 4H4v16h6m-1-8h12m-5-5 5 5-5 5',
     back: 'M20 12H4m7-7-7 7 7 7',
     music: 'M9 17V6l11-2v11M9 9l11-2M9 17a3.2 2.5 0 1 1-6.4 0 3.2 2.5 0 1 1 6.4 0Zm11-2a3.2 2.5 0 1 1-6.4 0 3.2 2.5 0 1 1 6.4 0Z',
+    ambience: 'M2 9q3-4 6 0t6 0 6 0M2 15q3-4 6 0t6 0 6 0',
     write: 'm4 16 12-12a2.1 2.1 0 0 1 3 0l1 1a2.1 2.1 0 0 1 0 3L8 20l-5 1 1-5Zm10-10 4 4M4 16l4 4',
     retry: 'M20 10a8 8 0 1 0-1 7M20 4v6h-6'
   } as const;
 </script>
 <script lang="ts">
-  let {icon,label,href,onclick,disabled=false,current,controls,expanded,primary=false}:{
+  let {icon,label,href,onclick,disabled=false,current,controls,expanded,pressed,primary=false}:{
     icon:keyof typeof drawings; label:string; href?:string; onclick?:()=>void; disabled?:boolean;
-    current?:'page'; controls?:string; expanded?:boolean; primary?:boolean
+    current?:'page'; controls?:string; expanded?:boolean; pressed?:boolean; primary?:boolean
   }=$props();
 </script>
 
@@ -31,7 +32,7 @@
 {#if href}
   <a class="icon-action" {href} aria-label={label} aria-current={current}>{@render face()}</a>
 {:else}
-  <button type="button" class="icon-action" class:primary {onclick} {disabled} aria-label={label} aria-current={current} aria-controls={controls} aria-expanded={expanded}>{@render face()}</button>
+  <button type="button" class="icon-action" class:primary {onclick} {disabled} aria-label={label} aria-current={current} aria-controls={controls} aria-expanded={expanded} aria-pressed={pressed}>{@render face()}</button>
 {/if}
 
 <style>
@@ -43,6 +44,8 @@
   .icon-action:enabled:hover,a.icon-action:hover,.icon-action:focus-visible{background:#224638e8;color:var(--scene-ink)}
   .icon-action:focus-visible{outline:2px solid #f4d59d;outline-offset:2px}
   .icon-action:disabled{opacity:.5;cursor:default}
+  .icon-action[aria-pressed=false] svg{opacity:.55}
+  .icon-action[aria-pressed=false]::after{content:'';position:absolute;width:24px;height:2px;background:currentColor;transform:rotate(-45deg)}
   .caption{position:absolute;right:calc(100% + 8px);top:50%;width:max-content;padding:.4rem .25rem;color:var(--scene-ink);text-shadow:var(--scene-type-shadow);font:500 .83rem/1.25 var(--font-ui);white-space:nowrap;pointer-events:none;opacity:0;transform:translate(4px,-50%)}
   .icon-action:is(:hover,:focus-visible) .caption{opacity:1;transform:translate(0,-50%)}
   @media(hover:none){.caption{opacity:1;transform:translate(0,-50%);pointer-events:auto}}

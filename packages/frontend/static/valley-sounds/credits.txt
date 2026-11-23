@@ -1,0 +1,22 @@
+Lacuna valley sound effects
+
+Generated on 2026-11-22 with ElevenLabs Sound Effects under a paid commercial subscription.
+https://elevenlabs.io/sound-effects/commercial
+
+The seven 12-second loops use eleven_text_to_sound_v2 with looping enabled.
+The six 2-second calls and creaks use eleven_text_to_sound_v3.
+Mastered in mono for positional playback. Loop tails overlap their starts by 200 ms.
+
+river.mp3 — Continuous gentle freshwater lapping against a shallow pebbled riverbank, small irregular ripples up close. A quiet sheltered valley, steady texture, isolated water only.
+breeze.mp3 — A light open-air breeze over a broad grassy valley, soft airy swells with long quiet spaces, no whistling or rustling. Isolated natural wind.
+leaves.mp3 — Soft delicate leaves shifting on a broadleaf tree, small irregular flickers of dry foliage in light wind. Isolated close field recording.
+insects.mp3 — A quiet evening cricket chorus at the edge of a meadow, fine intermittent pulses with space between, restrained natural field recording.
+street.mp3 — A few distant people quietly going about their day in a small riverside market. Soft indistinct nonverbal crowd murmur and gentle shuffling, no discernible words, music or vehicles.
+engine.mp3 — A little passenger ferry's inboard diesel engine at steady low revolutions, mellow mechanical putter, soft low rumble. Engine only, consistent pitch, no horn, no water.
+wash.mp3 — Close gentle bubbling wake alongside a small slow ferry, soft continuous foamy swish with tiny splashes, water only.
+songbird-a.mp3 — A single small songbird on a quiet branch gives a short delicate three-note rising chirrup. Isolated dry bird call, silence at both ends.
+songbird-b.mp3 — A small woodland bird makes a soft clear two-part descending whistle. Isolated dry call, silence at both ends.
+gull-a.mp3 — A single gull gives a brief mellow mewing call in flight. Isolated gull only, dry recording, silence at both ends.
+gull-b.mp3 — One short slightly raspy falling call from a gliding gull. Isolated dry recording, silence at both ends.
+dock-a.mp3 — One subdued low wooden creak as a floating timber dock shifts under load. Dry close recording with silence at both ends.
+dock-b.mp3 — A mooring rope draws slowly against a wooden bollard, one soft fibrous squeak and release, silence at both ends.

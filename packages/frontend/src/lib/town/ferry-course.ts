@@ -32,19 +32,21 @@ export class FerryCourse extends Curve<Vector3> {
     const leg=this.duration+38,elapsed=MathUtils.euclideanModulo(time,leg*2);
     const reverse=elapsed>=leg,phase=elapsed%leg;
     const t=reverse?this.duration-phase:phase;
-    let distance=t*this.cruise;
+    let distance=t*this.cruise, speed=1;
     if(this.berth){
       const brakeStart=this.before/this.cruise-3;
       const leave=brakeStart+6+this.dwell;
       if(t>=brakeStart&&t<leave){
         const remaining=1-MathUtils.clamp((t-brakeStart)/6,0,1);
+        speed=remaining;
         distance=this.before-3*this.cruise*remaining*remaining;
       }else if(t>=leave){
         const seconds=t-leave;
+        speed=Math.min(1,seconds/6);
         distance=this.before+this.cruise*(seconds<6?seconds*seconds/12:seconds-3);
       }
     }
-    return {progress:MathUtils.clamp(distance/this.distance,0,1),direction:reverse?-1:1,visible:phase<this.duration};
+    return {progress:MathUtils.clamp(distance/this.distance,0,1),direction:reverse?-1:1,visible:phase<this.duration,speed};
   }
 
   clockAt(station:number,reverse:boolean){

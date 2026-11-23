@@ -4,6 +4,7 @@
   import { deviceAlbum, deviceTracks, importMusic, loadAlbums, readAudio, removeMusic, type Track } from '$lib/music-library.js';
   import { musicWindow } from '$lib/music-window.svelte.js';
   import { readLocal, writeLocal } from '$lib/storage.js';
+  import { readSoundPreferences, valleyPlayback } from '$lib/valley-playback.svelte.js';
 
   let audio: HTMLAudioElement;
   let picker: HTMLInputElement;
@@ -35,7 +36,7 @@
   let shuffled = $state(false);
   let repeat = $state<'off' | 'all' | 'one'>('all');
   let volume = $state(0.45);
-  let muted = $state(false);
+  let muted = $derived(!valleyPlayback.music);
   let playing = $state(false);
   let position = $state(0);
   let duration = $state(0);
@@ -49,6 +50,31 @@
   let sourceId = '';
   let objectURL = '';
   let request = 0;
+  let valleyStarted = false, startHandled = false, attempting = false;
+
+  function prepareMusic() {
+    if (started) return;
+    started = true;
+    void load().then(startValleyMusic);
+  }
+
+  function startValleyMusic() {
+    if (!valleyPlayback.active || valleyPlayback.muted || muted || document.hidden || startHandled || attempting) return;
+    if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
+    prepareMusic();
+    if (!audio.paused) { startHandled = true; return; }
+    if (!current) return;
+    valleyStarted = true;
+    attempting = true;
+    void play(current, false, true).then(result => {
+      if (valleyPlayback.active && result) startHandled = true;
+    }).finally(() => { attempting = false; });
+  }
+
+  function endValleyMusic() {
+    if (valleyStarted) { ++request; audio.pause(); }
+    valleyStarted = false; startHandled = false;
+  }
 
   function time(seconds: number) {
     const value = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
@@ -76,10 +102,7 @@
   }
 
   $effect(() => {
-    if (musicWindow.mode !== 'closed' && !started) {
-      started = true;
-      void load();
-    }
+    if (musicWindow.mode !== 'closed') prepareMusic();
   });
 
   onMount(() => {
@@ -87,19 +110,28 @@
     let prefs;
     try { prefs = JSON.parse(readLocal('lacuna_music_player') ?? '{}'); } catch { prefs = {}; }
     if (typeof prefs?.volume === 'number') volume = Math.min(1, Math.max(0, prefs.volume));
-    muted = prefs?.muted === true;
+    readSoundPreferences();
     shuffled = prefs?.shuffled === true;
     if (['off', 'one', 'all'].includes(prefs?.repeat)) repeat = prefs.repeat;
     if (typeof prefs?.selected === 'string') selected = prefs.selected;
     if (Array.isArray(prefs?.queue)) queue = prefs.queue.filter((id: unknown) => typeof id === 'string');
     prefsReady = true;
-    return () => { ++request; audio?.pause(); if (objectURL) URL.revokeObjectURL(objectURL); };
+    window.addEventListener('lacuna:valley-audio', startValleyMusic);
+    window.addEventListener('lacuna:prepare-music', prepareMusic);
+    window.addEventListener('lacuna:valley-exit', endValleyMusic);
+    if (valleyPlayback.active) startValleyMusic();
+    return () => {
+      window.removeEventListener('lacuna:valley-audio', startValleyMusic);
+      window.removeEventListener('lacuna:prepare-music', prepareMusic);
+      window.removeEventListener('lacuna:valley-exit', endValleyMusic);
+      ++request; audio?.pause(); if (objectURL) URL.revokeObjectURL(objectURL);
+    };
   });
 
   $effect(() => {
     if (!prefsReady) return;
     audio.volume = volume;
-    audio.muted = muted;
+    audio.muted = muted || (valleyPlayback.active && valleyPlayback.muted);
     writeLocal('lacuna_music_player', JSON.stringify({ volume, muted, shuffled, repeat, selected, queue }));
   });
 
@@ -114,7 +146,7 @@
     position = 0;
   }
 
-  async function play(track: Track, remember = true) {
+  async function play(track: Track, remember = true, automatic = false) {
     const token = ++request;
     error = '';
     notice = '';
@@ -137,13 +169,15 @@
         audio.src = url;
       }
       await audio.play();
+      return true;
     } catch (cause) {
-      if (token === request && !(cause instanceof DOMException && cause.name === 'AbortError'))
+      if (token === request && !(cause instanceof DOMException && (cause.name === 'AbortError' || (automatic && cause.name === 'NotAllowedError'))))
         error = 'Could not play this track. Try again or choose another.';
     }
   }
 
   function toggle() {
+    if (valleyPlayback.active) startHandled = true;
     if (!audio.paused) { ++request; audio.pause(); }
     else if (current) void play(current);
   }
@@ -281,9 +315,9 @@
       <div class="deck-controls">
         {@render transport(false)}
         <div class="volume">
-          <button title={muted ? 'Unmute' : 'Mute'} aria-label={muted ? 'Unmute' : 'Mute'} onclick={() => muted = !muted}><PlayerIcon name={muted || volume === 0 ? 'muted' : 'volume'}/></button>
+          <button title={muted ? 'Unmute' : 'Mute'} aria-label={muted ? 'Unmute' : 'Mute'} onclick={() => valleyPlayback.music = muted}><PlayerIcon name={muted || volume === 0 ? 'muted' : 'volume'}/></button>
           <input id="music-volume" type="range" aria-label="Volume" min="0" max="1" step=".01" value={muted ? 0 : volume}
-            oninput={event => { volume = +event.currentTarget.value; muted = false; }}/>
+            oninput={event => { volume = +event.currentTarget.value; valleyPlayback.music = true; }}/>
           <label class="level" for="music-volume">{muted ? 0 : Math.round(volume * 100)}%</label>
         </div>
       </div>

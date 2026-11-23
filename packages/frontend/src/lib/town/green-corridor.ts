@@ -281,7 +281,7 @@ export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighti
   }
   const gulls=corridorFlocks(ground,driftTime,bounds);root.add(gulls.group);
   const mist=createLowCloud(lighting,ground,(side,z,y)=>wallEdge(side,z/west.scale.z,y),afterglow);
-  return {root,mist,bounds,ground,plant,followRiver,gradeTown(grade:(x:number,z:number,y:number)=>number){surface.gradeTown(grade);},get far(){return extent+2300;},tick(t:number,camera:T.Vector3,windTime=t){
+  return {root,mist,bounds,ground,coverAt,flocks:gulls.positions,plant,followRiver,gradeTown(grade:(x:number,z:number,y:number)=>number){surface.gradeTown(grade);},get far(){return extent+2300;},tick(t:number,camera:T.Vector3,windTime=t){
     driftTime.value=windTime;eye.copy(camera);understory.view(eye.z);grass.view(eye);forest.view(eye);distant.view(eye);gulls.tick(t,camera.z);mist.tick(t,camera.z);
   },dispose(){
     understory.dispose();grass.dispose();forest.clear();distant.dispose();gulls.dispose();mist.dispose();

@@ -82,9 +82,11 @@ export function corridorFlocks(ground:(x:number,z:number)=>number,clock:T.IUnifo
     mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);
     mesh.boundingSphere=new T.Sphere(new T.Vector3((walls.west+walls.east)/2,105,0),Math.hypot((walls.east-walls.west)/2+54,175,115));
     group.add(mesh);
-    return {mesh,row:Infinity,path:flightPath(0,walls)};
+    return {mesh,row:Infinity,path:flightPath(0,walls),lead:new T.Vector3()};
   });
+  const positions:T.Vector3[]=[];
   function tick(time:number,eyeZ:number){
+    positions.length=0;
     const center=Math.round(eyeZ/spacing);
     for(let row=center-reach;row<=center+reach;row++){
       const slot=slots[T.MathUtils.euclideanModulo(row,slots.length)]!;
@@ -113,6 +115,7 @@ export function corridorFlocks(ground:(x:number,z:number)=>number,clock:T.IUnifo
         const z=path.turn*(-path.along*Math.cos(a)+leg*leg*.00036)-offset*Math.sin(yaw);
         const floor=Math.max(0,ground(x,mesh.position.z+z));
         frame.position.set(x,floor+path.height+bird.rise+4*Math.sin(a+.6)+.7*Math.sin(drift*.83),z);
+        if(i===0 && tripTime<path.duration)positions.push(slot.lead.copy(frame.position).add(mesh.position));
         const bank=direction*path.turn*.24*Math.min(1,arc/9,(path.loopLength-arc)/9);
         frame.rotation.set(-.055*Math.cos(a),yaw,bank+.046*Math.sin(drift),'YXZ');
         frame.scale.setScalar(bird.span);frame.updateMatrix();
@@ -122,5 +125,5 @@ export function corridorFlocks(ground:(x:number,z:number)=>number,clock:T.IUnifo
     }
   }
   tick(0,0);
-  return {group,tick,dispose(){for(const {mesh} of slots)mesh.dispose();geometry.dispose();material.dispose();}};
+  return {group,tick,positions,dispose(){for(const {mesh} of slots)mesh.dispose();geometry.dispose();material.dispose();}};
 }

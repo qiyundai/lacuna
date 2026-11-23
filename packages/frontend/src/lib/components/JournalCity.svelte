@@ -1,5 +1,7 @@
 <script lang="ts">
   import IconAction from './IconAction.svelte';
+  import PlayerIcon from './PlayerIcon.svelte';
+  import { activateValleyAudio, enterValley, leaveValley, toggleValleySound, valleyAudioContext, valleyPlayback } from '$lib/valley-playback.svelte.js';
   import { onMount, tick, type Snippet } from 'svelte';
   import Masthead from './Masthead.svelte';
   import ValleyLoading from './ValleyLoading.svelte';
@@ -41,6 +43,10 @@
       created_at:1609459200+i*49171,solidified_at:1609459200+i*49171,kept_at:null}));
   }
   let canvas:HTMLCanvasElement,dialog:HTMLDialogElement;
+  let pageOpen=$state(false);
+  function syncSound(){
+    scene?.setSound(valleyAudioContext(),valleyPlayback.ambience&&!valleyPlayback.muted,pageOpen);
+  }
   let entries=$state.raw<EntryData[]>([]),scene=$state.raw<Awaited<ReturnType<typeof createHarbor>>|null>(null);
   let forgotten=$state.raw<ForgottenAddress[]>([]);
   let ready=$state(false),paused=$state(false),graphicsError=$state(false),error=$state(''),notice=$state('');
@@ -90,11 +96,20 @@
   }
   onMount(()=>{
     alive=true;const preference=matchMedia('(prefers-reduced-motion: reduce)');
+    enterValley();
+    const events=new AbortController();
+    window.addEventListener('lacuna:valley-audio',syncSound,{signal:events.signal});
+    const retrySound=(event:Event)=>{
+      if(event.isTrusted && !(event instanceof KeyboardEvent && ['Control','Alt','Meta','Shift','Escape'].includes(event.key)))activateValleyAudio();
+    };
+    window.addEventListener('click',retrySound,{signal:events.signal});
+    window.addEventListener('keydown',retrySound,{signal:events.signal});
     const sync=()=>{paused=preference.matches;};sync();preference.addEventListener('change',sync);
     void read();void graphics();
     if(!guest)window.addEventListener('lacuna:journal-changed',refreshCity);
-    return ()=>{alive=false;preference.removeEventListener('change',sync);window.removeEventListener('lacuna:journal-changed',refreshCity);scene?.destroy();};
+    return ()=>{alive=false;events.abort();preference.removeEventListener('change',sync);window.removeEventListener('lacuna:journal-changed',refreshCity);scene?.destroy();leaveValley();};
   });
+  $effect(syncSound);
   $effect(()=>{
     if(!notice)return;
     const timer=setTimeout(()=>notice='',5500);
@@ -107,6 +122,7 @@
     panel=which;error='';if(which==='write')writingDate=new Date();
     await tick();if(!alive)return;
     if(!dialog.open)dialog.showModal();
+    pageOpen=true;
     dialog.scrollTop=0;
     dialog.querySelector<HTMLElement>(which==='write'?'textarea':which==='forget'?'[data-keep-page]':'#journal-heading')?.focus({preventScroll:true});
   }
@@ -145,6 +161,11 @@
   }
 </script>
 
+{#snippet muteAll()}
+  <button type="button" class="mute-all" aria-label="Mute all" aria-pressed={valleyPlayback.muted} title={valleyPlayback.muted?'Unmute all':'Mute all'} onclick={()=>toggleValleySound('muted')}>
+    <PlayerIcon name={valleyPlayback.muted?'muted':'volume'}/>
+  </button>
+{/snippet}
 <main class="coast" aria-label="Journal city">
   <canvas bind:this={canvas} inert={opening} tabindex="0" aria-label="A city growing along the valley river. Drag or use arrow keys to orbit, right-drag to pan, and scroll or pinch to zoom. Home returns to the city. Select a building to read its page."></canvas>
   {#if ready && scene}
@@ -159,10 +180,10 @@
       {/if}
     {/each}
   {/if}
-  {#if opening}<ValleyLoading label={ready?'Opening the valley…':'Opening your journal…'} onExit={guest?onExit:undefined}/>{/if}
+  {#if opening}<ValleyLoading label={ready?'Opening the valley…':'Opening your journal…'} onExit={guest?onExit:undefined}/><div class="loading-mute">{@render muteAll()}</div>{/if}
   <h1 class="sr-only" tabindex="-1">{guest?'Example city':'Your city'}</h1>
   {#if !opening}
-    <Masthead floating disabled={busy} world={guest?'Example city':'The valley city'} pageCount={entries.length}>
+    <Masthead floating quick={muteAll} disabled={busy} world={guest?'Example city':'The valley city'} pageCount={entries.length}>
       <IconAction icon="pages" label="Pages" onclick={()=>open('pages')} disabled={!ready}/>
       {#if scene}
         {#each valleyViews as view}
@@ -170,6 +191,8 @@
         {/each}
         <IconAction icon={paused?'play':'pause'} label={paused?'Resume ambient motion':'Pause ambient motion'} onclick={()=>paused=!paused}/>
       {/if}
+      <IconAction icon="music" label="Soundtrack playback" pressed={valleyPlayback.music} onclick={()=>toggleValleySound('music')}/>
+      {#if scene}<IconAction icon="ambience" label="Ambience" pressed={valleyPlayback.ambience} onclick={()=>toggleValleySound('ambience')}/>{/if}
       {@render navigation?.()}
       {#if guest}
         <IconAction icon="privacy" label="Privacy" href="/privacy"/>
@@ -186,7 +209,7 @@
     </div>
   {/if}
   <dialog bind:this={dialog} aria-labelledby="journal-heading" oncancel={e=>{if(busy)e.preventDefault();}}
-    onclose={()=>{if(document.activeElement===document.body)canvas.focus({preventScroll:true});}}>
+    onclose={()=>{pageOpen=dialog.open;if(document.activeElement===document.body)canvas.focus({preventScroll:true});}}>
     <div class="folio" class:reading={panel==='read'||panel==='forget'}>
       <aside class="cover" aria-label={site && (panel==='read'||panel==='forget')?'Page location':'Journal cover'}>
         {#if (panel==='read'||panel==='forget') && site}
@@ -199,6 +222,7 @@
       <div class="leaf">
         <header class="leaf-head">
           <span>{panel==='write'?'Page '+(folios.size+1):panel==='pages'?'Journal index':'Page '+(folios.get(readId)??'')}</span>
+          {@render muteAll()}
           <button class="close" aria-label="Close" disabled={busy} onclick={()=>dialog.close()}>×</button>
         </header>
         {#if panel==='write'}
@@ -260,6 +284,10 @@
   .bottom{position:absolute;inset:auto var(--gutter) max(1rem,env(safe-area-inset-bottom));display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;pointer-events:none}
   .actions{margin-left:auto;display:grid;justify-items:end;gap:.4rem;pointer-events:none}
   button{min-height:44px;cursor:pointer;font:500 .92rem/1.2 var(--font-ui)}
+  .mute-all{width:44px;height:44px;display:grid;place-items:center;border:0;border-radius:50%;background:#24463cd9;color:#fff6df;pointer-events:auto}
+  .mute-all:focus-visible{outline:2px solid #e2bd7a;outline-offset:2px}.mute-all:hover{background:var(--river)}
+  .loading-mute{position:absolute;z-index:5;right:calc(var(--gutter) + 7rem);top:1rem}
+  .leaf-head .mute-all{margin-left:auto;color:var(--ink);background:transparent}
   .status{margin:0;padding-block:.6rem;color:var(--scene-ink);text-shadow:var(--scene-type-shadow);font:.9rem/1.4 var(--font-ui)}.status:empty{display:none}
   .page-marker{position:absolute;transform:translate(-50%,-100%);height:49px;min-width:44px;padding:0 3px 13px;display:grid;place-items:center;background:transparent;border:0;color:#fff8df}
   .page-marker::after{content:'';position:absolute;bottom:0;height:13px;width:1px;background:#fff5cf;box-shadow:0 1px 2px #203a32}
