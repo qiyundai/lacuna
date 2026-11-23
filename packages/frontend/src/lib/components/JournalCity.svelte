@@ -3,8 +3,9 @@
   import Icon from './Icon.svelte';
   import SoundToggle from './SoundToggle.svelte';
   import NowPlaying from './NowPlaying.svelte';
+  import { musicWindow } from '$lib/music-window.svelte.js';
   import { activateValleyAudio, enterValley, leaveValley, toggleValleySound, valleyAudioContext, valleyPlayback } from '$lib/valley-playback.svelte.js';
-  import { onMount, tick, type Snippet } from 'svelte';
+  import { onMount, tick, untrack, type Snippet } from 'svelte';
   import Masthead from './Masthead.svelte';
   import ValleyLoading from './ValleyLoading.svelte';
   import { api, type EntryData } from '$lib/api.js';
@@ -119,6 +120,11 @@
     return ()=>clearTimeout(timer);
   });
   $effect(()=>{scene?.pause(paused);});
+  $effect(()=>{
+    if(!scene||graphicsError)return;
+    untrack(()=>musicWindow.scenes++);
+    return ()=>untrack(()=>{musicWindow.scenes--;});
+  });
   $effect(()=>{const current=scene;if(current){current.update(plan,reveal);reveal=false;}});
   async function open(which:typeof panel){
     if(busy)return;
@@ -168,7 +174,8 @@
   <IconAction icon="music" label="Soundtrack" pressed={valleyPlayback.music} onclick={()=>toggleValleySound('music')}/>
   {#if scene}<IconAction icon="ambience" label="Ambience" pressed={valleyPlayback.ambience} onclick={()=>toggleValleySound('ambience')}/>{/if}
 {/snippet}
-<main class="coast" aria-label="Journal city">
+<!-- While the listening room is open the city is its backdrop: everything laid over the canvas steps aside -->
+<main class="coast" class:listening={musicWindow.mode==='room'} aria-label="Journal city">
   <canvas bind:this={canvas} inert={opening} tabindex="0" aria-label="A city growing along the valley river. Drag or use arrow keys to orbit, right-drag to pan, and scroll or pinch to zoom. Home returns to the city. Select a building to read its page."></canvas>
   {#if ready && scene}
     {#each markers as marker,i (marker.id)}
@@ -285,6 +292,8 @@
   /* Sky gradient is a pre-render placeholder painted to match the scene, not UI color */
   .coast{position:relative;height:100%;min-height:0;overflow:hidden;color:var(--scene-ink);background:linear-gradient(#8c8395,#3d5466)}
   canvas{content-visibility:auto;contain-intrinsic-size:auto 700px;width:100%;height:100%;display:block;touch-action:none;cursor:grab}canvas:active{cursor:grabbing}
+  .coast > :global(:not(canvas,dialog)){transition:opacity var(--dur-slow) var(--ease-soft),visibility 0s}
+  .listening > :global(:not(canvas,dialog)){opacity:0;visibility:hidden;transition:opacity var(--dur-base) var(--ease-soft),visibility 0s var(--dur-base)}
   .bottom{position:absolute;inset:auto var(--gutter) var(--edge-bottom);display:flex;align-items:flex-end;justify-content:space-between;gap:var(--space-3);pointer-events:none}
   .actions{margin-left:auto;display:grid;justify-items:end;gap:var(--control-gap);pointer-events:none}
   button{min-height:var(--control);cursor:pointer}

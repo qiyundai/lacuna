@@ -1,11 +1,12 @@
 <script lang="ts">
   import IconAction from './IconAction.svelte';
-  import { onMount, tick, type Snippet } from 'svelte';
+  import { onMount, tick, untrack, type Snippet } from 'svelte';
   import { enterValley, readSoundPreferences, willPlaySound } from '$lib/valley-playback.svelte.js';
   import SoundCue from './SoundCue.svelte';
   import Masthead from './Masthead.svelte';
   import JournalCity from './JournalCity.svelte';
   import CorridorFlight from './CorridorFlight.svelte';
+  import { musicWindow } from '$lib/music-window.svelte.js';
   let {action,children}:{action:string;children:Snippet}=$props();
   let opened=$state(false),walking=$state(false);
   let controls=$state<HTMLElement>(),start=$state<HTMLButtonElement>(),walkButton=$state<HTMLButtonElement>();
@@ -17,8 +18,15 @@
   async function leave(){walking=false;await tick();walkButton?.focus();}
   onMount(()=>{readSoundPreferences();window.dispatchEvent(new Event('lacuna:prepare-music'));});
   const audible=$derived(willPlaySound());
+  // The flight is a live scene the listening room can look onto; the guest city sets this itself
+  $effect(()=>{
+    if(walking)return;
+    untrack(()=>musicWindow.scenes++);
+    return ()=>untrack(()=>{musicWindow.scenes--;});
+  });
 </script>
-<div class="welcome" class:menu={!walking}>
+<!-- While the listening room is open the flight is its backdrop: everything laid over the video steps aside -->
+<div class="welcome" class:menu={!walking} class:listening={!walking&&musicWindow.mode==='room'}>
 
   {#if walking}<JournalCity guest onExit={leave}/>
   {:else}
@@ -59,6 +67,8 @@
   .links button:focus-visible{outline-color:var(--scene-focus)}
   .leaf{align-self:safe center;width:min(100%,var(--measure-form));display:grid;gap:var(--space-3);padding:var(--sheet-inset);border-radius:var(--radius-s);background:var(--paper);color:var(--ink);box-shadow:var(--shadow-sheet)}
   .back{margin-left:0}
+  .welcome > :global(.masthead),.river-view > :global(.flight-control),.intro,.leaf,.river-view:before{transition:opacity var(--dur-slow) var(--ease-soft),visibility 0s}
+  .listening > :global(.masthead),.listening .river-view > :global(.flight-control),.listening .intro,.listening .leaf,.listening .river-view:before{opacity:0;visibility:hidden;transition:opacity var(--dur-base) var(--ease-soft),visibility 0s var(--dur-base)}
   @media(prefers-reduced-motion:no-preference){
     .intro > *{animation:arrive var(--dur-slow) var(--ease-out) backwards}
     .intro p{animation-delay:80ms}.links{animation-delay:160ms}

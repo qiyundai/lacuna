@@ -1,41 +1,47 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { modal } from '$lib/modal.js';
   import Icon from './Icon.svelte';
-  import { deviceAlbum, deviceTracks, importMusic, loadAlbums, readAudio, removeMusic, type Track } from '$lib/music-library.js';
+  import { forgetDeviceMusic, loadAlbums, type Track } from '$lib/music-library.js';
   import { musicWindow } from '$lib/music-window.svelte.js';
   import { readLocal, writeLocal } from '$lib/storage.js';
   import { readSoundPreferences, valleyPlayback } from '$lib/valley-playback.svelte.js';
 
+  type Album = { name: string; tracks: Track[]; seconds: number };
+
   let audio: HTMLAudioElement;
-  let picker: HTMLInputElement;
-  let folderPicker: HTMLInputElement;
-  let importOptions = $state(false);
-  let bundled = $state.raw<Track[]>([]);
-  let imported = $state.raw<Track[]>([]);
-  let tracks = $derived([...bundled, ...imported]);
+  let leaf = $state<HTMLElement>();
+  let headHeight = $state(0);
+  let tracks = $state.raw<Track[]>([]);
   let byId = $derived(new Map(tracks.map(track => [track.id, track])));
-  let albums = $derived([...new Set(tracks.map(track => track.album))]);
+  // Albums keep the order of library.json; each track's number is its place on its album
+  let albums = $derived.by(() => {
+    const grouped = new Map<string, Track[]>();
+    for (const track of tracks) grouped.set(track.album, [...(grouped.get(track.album) ?? []), track]);
+    return [...grouped].map(([name, list]): Album => ({ name, tracks: list, seconds: list.reduce((sum, track) => sum + (track.seconds ?? 0), 0) }));
+  });
+  let numbers = $derived(new Map(albums.flatMap(entry => entry.tracks.map((track, i) => [track.id, i + 1] as const))));
   let selected = $state('');
   let current = $derived(byId.get(selected) ?? tracks[0]);
   let filter = $state('');
-  let album = $state('');
-  let view = $state<'library' | 'queue'>('library');
+  // albums: the shelf, or one album when `opened` names it · songs: every song under its album · queue: up next
+  let view = $state<'albums' | 'songs' | 'queue'>('albums');
+  let opened = $state('');
+  let openAlbum = $derived(albums.find(entry => entry.name === opened));
   let searching = $state(false);
   let queue = $state<string[]>([]);
   let history: string[] = [];
   let heard = new Set<string>();
   let needle = $derived(filter.trim().toLocaleLowerCase());
-  let matches = $derived(tracks.filter(track => (!album || track.album === album) &&
-    (!needle || (track.title + ' ' + track.album).toLocaleLowerCase().includes(needle))));
+  let groups = $derived(albums.map(entry => ({ ...entry, tracks: needle
+    ? entry.tracks.filter(track => (track.title + ' ' + track.album).toLocaleLowerCase().includes(needle))
+    : entry.tracks })).filter(entry => entry.tracks.length));
   let queued = $derived(queue.flatMap((id, position) => {
     const track = byId.get(id);
     return track ? [{ track, position }] : [];
   }));
-  let rows = $derived(view === 'queue' ? queued.map(entry => entry.track) : matches);
-  let limit = $state(50);
   let shuffled = $state(false);
   let repeat = $state<'off' | 'all' | 'one'>('all');
   let volume = $state(0.45);
@@ -43,7 +49,6 @@
   let playing = $state(false);
   let position = $state(0);
   let duration = $state(0);
-  let importing = $state(false);
   let loading = $state(true);
   let notice = $state('');
   let error = $state('');
@@ -51,7 +56,6 @@
   let prefsReady = $state(false);
   let started = false;
   let sourceId = '';
-  let objectURL = '';
   let request = 0;
   let valleyStarted = false, startHandled = false, attempting = false;
 
@@ -83,19 +87,47 @@
     const value = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
     return Math.floor(value / 60) + ':' + String(value % 60).padStart(2, '0');
   }
+  const minutes = (seconds: number) => seconds ? ' · ' + Math.max(1, Math.round(seconds / 60)) + ' min' : '';
+  const songs = (count: number) => count + (count === 1 ? ' song' : ' songs');
 
   async function load() {
     loading = true;
     libraryError = '';
-    const [albumsResult, localResult] = await Promise.allSettled([loadAlbums(), deviceTracks()]);
-    if (albumsResult.status === 'fulfilled') {
-      bundled = albumsResult.value.tracks;
-      if (albumsResult.value.missing.length) libraryError = 'Some album playlists could not load.';
-    } else libraryError = 'The soundtrack library could not load.';
-    if (localResult.status === 'fulfilled') imported = localResult.value;
-    else libraryError += ' Device music storage is unavailable.';
-    if (!libraryError) queue = queue.filter(id => byId.has(id));
+    try {
+      const library = await loadAlbums();
+      tracks = library.tracks;
+      if (library.missing.length) libraryError = 'Some albums could not load.';
+      else queue = queue.filter(id => byId.has(id));
+    } catch { libraryError = 'The soundtrack library could not load.'; }
     loading = false;
+  }
+
+  // Each change of view starts at the top of the list, with focus on its first heading or control
+  async function show(next: typeof view, album = '') {
+    const leaving = opened;
+    view = next; opened = album;
+    if (next !== 'songs') { searching = false; filter = ''; }
+    await tick();
+    if (leaf) leaf.scrollTop = 0;
+    const target = album ? leaf?.querySelector<HTMLElement>('.album-head h3')
+      : leaving && next === 'albums' ? leaf?.querySelector<HTMLElement>(`[data-album="${CSS.escape(leaving)}"]`) : null;
+    target?.focus({ preventScroll: true });
+  }
+
+  async function findSong() {
+    if (searching) { searching = false; filter = ''; return; }
+    await show('songs');
+    searching = true;
+    await tick();
+    leaf?.querySelector<HTMLInputElement>('.search')?.focus();
+  }
+
+  function playAlbum(entry: Album) {
+    heard.clear();
+    const first = shuffled ? entry.tracks[Math.floor(Math.random() * entry.tracks.length)] : entry.tracks[0];
+    if (!first) return;
+    if (sourceId === first.id) audio.currentTime = 0;
+    void play(first);
   }
 
   function dequeue(index: number) {
@@ -116,6 +148,7 @@
     try { prefs = JSON.parse(readLocal('lacuna_music_player') ?? '{}'); } catch { prefs = {}; }
     if (typeof prefs?.volume === 'number') volume = Math.min(1, Math.max(0, prefs.volume));
     readSoundPreferences();
+    forgetDeviceMusic();
     shuffled = prefs?.shuffled === true;
     if (['off', 'one', 'all'].includes(prefs?.repeat)) repeat = prefs.repeat;
     if (typeof prefs?.selected === 'string') selected = prefs.selected;
@@ -129,7 +162,7 @@
       window.removeEventListener('lacuna:valley-audio', startValleyMusic);
       window.removeEventListener('lacuna:prepare-music', prepareMusic);
       window.removeEventListener('lacuna:valley-exit', endValleyMusic);
-      ++request; audio?.pause(); if (objectURL) URL.revokeObjectURL(objectURL);
+      ++request; audio?.pause();
     };
   });
 
@@ -144,8 +177,6 @@
     audio.pause();
     audio.removeAttribute('src');
     audio.load();
-    if (objectURL) URL.revokeObjectURL(objectURL);
-    objectURL = '';
     sourceId = '';
     duration = 0;
     position = 0;
@@ -162,16 +193,8 @@
     try {
       if (sourceId !== track.id || audio.error) {
         release();
-        let url = track.url;
-        if (!url) {
-          const blob = await readAudio(track.id);
-          if (token !== request) return;
-          if (!blob) throw new Error();
-          objectURL = URL.createObjectURL(blob);
-          url = objectURL;
-        }
         sourceId = track.id;
-        audio.src = url;
+        audio.src = track.url;
       }
       await audio.play();
       return true;
@@ -225,38 +248,6 @@
     void play((last && byId.get(last)) || sequence[(index - 1 + sequence.length) % sequence.length], false);
   }
 
-  async function addFiles(event: Event & { currentTarget: HTMLInputElement }) {
-    const selection = Array.from(event.currentTarget.files ?? []);
-    event.currentTarget.value = '';
-    if (!selection.length) return;
-    const files = selection.filter(file => file.type.startsWith('audio/') || /\.(mp3|m4a|aac|wav|flac|ogg|oga|opus|weba|aif|aiff)$/i.test(file.name));
-    if (!files.length) { notice = 'Choose audio files to import.'; return; }
-    importing = true;
-    try {
-      const before = new Set(imported.map(track => track.id));
-      await importMusic(files);
-      imported = await deviceTracks();
-      const count = imported.filter(track => !before.has(track.id)).length;
-      const folders = new Set(files.map(file => file.webkitRelativePath?.split('/').at(-2) || deviceAlbum));
-      album = folders.size === 1 ? [...folders][0] : ''; filter = ''; view = 'library'; limit = 50;
-      notice = count ? 'Added ' + count + (count === 1 ? ' track' : ' tracks') + ' on this device.' : 'These tracks are already in your library.';
-      if (files.length < selection.length) notice += ' Skipped non-audio files.';
-    } catch { notice = 'Import failed. Check the available storage on this device and try again.'; }
-    finally { importing = false; }
-  }
-
-  async function remove(track: Track) {
-    try {
-      await removeMusic(track.id);
-      if (current?.id === track.id) { ++request; release(); selected = ''; }
-      imported = imported.filter(item => item.id !== track.id);
-      queue = queue.filter(id => id !== track.id);
-      history = history.filter(id => id !== track.id);
-      if (!tracks.some(item => item.album === album)) album = '';
-      notice = 'Removed ' + track.title + ' from this library.';
-    } catch { notice = 'Could not remove this track. Try again.'; }
-  }
-
   function close() {
     musicWindow.mode = 'closed';
     if (musicWindow.opener?.isConnected) musicWindow.opener.focus({ preventScroll: true });
@@ -269,24 +260,43 @@
   const repeatLabel = $derived(repeat === 'one' ? 'repeat one' : 'repeat');
 </script>
 
-<input hidden type="file" multiple accept="audio/*,.flac,.opus,.m4a" bind:this={picker} onchange={addFiles}/>
-<input hidden type="file" multiple webkitdirectory bind:this={folderPicker} onchange={addFiles}/>
 <audio bind:this={audio} preload="none" onplay={() => playing = true} onpause={() => playing = false}
   ontimeupdate={() => position = audio.currentTime} ondurationchange={() => duration = Number.isFinite(audio.duration) ? audio.duration : 0}
   onerror={() => { if (sourceId) error = 'Could not play this track. Try again or choose another.'; }}
   onended={() => { playing = false; next(true); }}></audio>
 
+{#snippet row(track: Track, queueIndex?: number)}
+  {@const now = current?.id === track.id}
+  <li class:active={now}>
+    <button type="button" class="song" aria-label={'Play ' + track.title + (queueIndex === undefined ? '' : ', from ' + track.album)} aria-current={now ? 'true' : undefined}
+      onclick={() => { if (queueIndex !== undefined) dequeue(queueIndex); void play(track); }}>
+      <span class="number">{#if now}<span class="bars" class:still={!playing} aria-hidden="true"><i></i><i></i><i></i></span>{:else}{String(queueIndex === undefined ? numbers.get(track.id) ?? '' : queueIndex + 1).padStart(2, '0')}{/if}</span>
+      <span class="song-name">
+        <span class="song-title">{track.title}</span>
+        {#if queueIndex !== undefined}<span class="from">{track.album}</span>{/if}
+      </span>
+      <span class="length">{track.seconds ? time(track.seconds) : ''}</span>
+    </button>
+    {#if queueIndex !== undefined}
+      <button type="button" class="row-action" aria-label={'Remove ' + track.title + ' from up next'} title="Remove from up next" onclick={() => dequeue(queueIndex)}><Icon name="remove"/></button>
+    {:else}
+      <button type="button" class="row-action" aria-label={'Play ' + track.title + ' next'} title="Play next" onclick={() => { queue.push(track.id); notice = track.title + ' plays next.'; }}><Icon name="queue"/></button>
+    {/if}
+  </li>
+{/snippet}
+
 {#if musicWindow.mode === 'room'}
   <!--
     The listening room: a full-screen layer in two halves.
     The stage (scene surface) holds what is playing; the leaf (paper) holds the tracks.
-    The painting is the backdrop — touching it, like any overlay backdrop, closes the room.
+    Over the city the stage is a window onto the live scene; over paper pages it shows the valley painting.
+    Touching the stage, like any overlay backdrop, closes the room.
   -->
-  <div id="soundtrack" class="room" role="dialog" aria-modal="true" aria-label="Music" tabindex="-1"
+  <div id="soundtrack" class="room" class:live={musicWindow.scenes > 0} role="dialog" aria-modal="true" aria-label="Music" tabindex="-1"
     use:modal={{ dismiss: close }} transition:fade={{ duration: 400, easing: cubicOut }}>
     <!-- Touching the painting is a pointer shortcut; keyboard users have Escape and the close button -->
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-    <section class="stage" class:local={current && !current.url} class:still={!playing} aria-label="Now playing"
+    <section class="stage" class:still={!playing} aria-label="Now playing"
       onclick={event => { if (event.target === event.currentTarget) close(); }}>
       <div class="now">
         <p class="album">{current?.album ?? 'Music'}</p>
@@ -314,67 +324,80 @@
     <!-- Where the menu button was, so the way out is where the way in began -->
     <button type="button" class="scene-control solid close" aria-label="Close music" onclick={close}><Icon name="close"/></button>
 
-    <section class="leaf" aria-label={view === 'queue' ? 'Up next' : 'Tracks'}>
-      <header class="leaf-head">
+    <section class="leaf" aria-label="Music library" bind:this={leaf} style:--head-height={headHeight + 'px'}>
+      <header class="leaf-head" bind:offsetHeight={headHeight}>
         <div class="quiet-toggles" role="group" aria-label="Music views">
-          <button type="button" class="quiet-toggle" aria-pressed={view === 'library'} onclick={() => { view = 'library'; limit = 50; }}>tracks</button>
-          <button type="button" class="quiet-toggle" aria-pressed={view === 'queue'} onclick={() => { view = 'queue'; limit = 50; }}>up next{#if queued.length}<span class="count">{queued.length}</span>{/if}</button>
+          <button type="button" class="quiet-toggle" aria-pressed={view === 'albums'} onclick={() => show('albums')}>albums</button>
+          <button type="button" class="quiet-toggle" aria-pressed={view === 'songs'} onclick={() => show('songs')}>all songs</button>
+          <button type="button" class="quiet-toggle" aria-pressed={view === 'queue'} onclick={() => show('queue')}>up next{#if queued.length}<span class="count">{queued.length}</span>{/if}</button>
         </div>
-        {#if view === 'library'}
-          <button type="button" class="quiet-toggle" aria-expanded={searching} onclick={() => { searching = !searching; if (!searching) filter = ''; }}>find a song</button>
+        {#if view !== 'queue'}
+          <button type="button" class="quiet-toggle" aria-expanded={searching}
+            onclick={findSong}>find a song</button>
         {/if}
       </header>
-      {#if view === 'library'}
-        {#if albums.length > 1}
-          <div class="quiet-toggles albums" role="group" aria-label="Albums">
-            <button type="button" class="quiet-toggle" aria-pressed={!album} onclick={() => { album = ''; limit = 50; }}>all albums</button>
-            {#each albums as name}
-              <button type="button" class="quiet-toggle" aria-pressed={album === name} onclick={() => { album = name; limit = 50; }}>{name}</button>
-            {/each}
-          </div>
-        {/if}
-        {#if searching}
-          <input class="search" type="search" aria-label="Search music" placeholder="a title, an album…" bind:value={filter}
-            oninput={() => limit = 50} transition:fade={{ duration: 200 }}/>
-        {/if}
-      {/if}
 
-      <ol class="tracks">
-        {#each rows.slice(0, limit) as track, i (view + track.id + i)}
-          <li class:active={current?.id === track.id}>
-            <button type="button" class="song" aria-label={'Play ' + track.title} aria-current={current?.id === track.id ? 'true' : undefined}
-              onclick={() => { if (view === 'queue') dequeue(i); void play(track); }}>
-              <span class="number">{#if current?.id === track.id}<span class="bars" class:still={!playing} aria-hidden="true"><i></i><i></i><i></i></span>{:else}{String(i + 1).padStart(2, '0')}{/if}</span>
-              <span class="song-title">{track.title}</span>
-              <span class="length">{track.seconds ? time(track.seconds) : ''}</span>
-            </button>
-            {#if view === 'queue'}
-              <button type="button" class="row-action" aria-label={'Remove ' + track.title + ' from up next'} title="Remove from up next" onclick={() => dequeue(i)}><Icon name="remove"/></button>
-            {:else}
-              <button type="button" class="row-action" aria-label={'Play ' + track.title + ' next'} title="Play next" onclick={() => { queue.push(track.id); notice = track.title + ' plays next.'; }}><Icon name="queue"/></button>
-              {#if !track.url}<button type="button" class="row-action" aria-label={'Remove ' + track.title + ' from this device'} title="Remove from this device" onclick={() => remove(track)}><Icon name="remove"/></button>{/if}
-            {/if}
-          </li>
-        {:else}
-          <li class="empty">{loading ? 'Gathering the music…' : view === 'queue' ? 'Choose “play next” beside a track to line it up here.' : 'No songs match.'}</li>
-        {/each}
-      </ol>
-      {#if rows.length > limit}<button type="button" class="quiet-toggle more" onclick={() => limit += 50}>more songs</button>{/if}
-
-      <footer class="leaf-foot">
-        {#if libraryError}<p class="note" role="status">{libraryError} <button type="button" class="quiet-toggle" onclick={load}>try again</button></p>{/if}
-        {#if notice}<p class="note" role="status">{notice}</p>{/if}
-        <button type="button" class="quiet-toggle" disabled={importing || loading} aria-expanded={importOptions} onclick={() => importOptions = !importOptions}>{importing ? 'adding…' : 'add your own music'}</button>
-        {#if importOptions}
-          <div class="import" transition:fade={{ duration: 200 }}>
-            <p class="note">Music you add stays in this browser.</p>
-            <div class="atlas-links">
-              <button type="button" class="atlas-link" onclick={() => { importOptions = false; picker.click(); }}>Choose files</button>
-              <button type="button" class="atlas-link" onclick={() => { importOptions = false; folderPicker.click(); }}>Choose an album folder</button>
+      {#key view + '/' + opened}
+        <div class="view" in:fade={{ duration: 260, easing: cubicOut }}>
+          {#if view === 'albums' && openAlbum}
+            <div class="album-head">
+              <button type="button" class="atlas-link subtle back" onclick={() => show('albums')}><Icon name="chevron-left"/>all albums</button>
+              <h3 tabindex="-1">{openAlbum.name}</h3>
+              <p class="meta">{songs(openAlbum.tracks.length)}{minutes(openAlbum.seconds)}</p>
+              <button type="button" class="atlas-link" onclick={() => openAlbum && playAlbum(openAlbum)}><Icon name="play"/>{shuffled ? 'shuffle the album' : 'play the album'}</button>
             </div>
-          </div>
-        {/if}
-      </footer>
+            <ol class="tracks">
+              {#each openAlbum.tracks as track (track.id)}{@render row(track)}{/each}
+            </ol>
+          {:else if view === 'albums'}
+            <ul class="shelf">
+              {#each albums as entry (entry.name)}
+                {@const here = current?.album === entry.name}
+                <li class:active={here}>
+                  <button type="button" class="shelf-album" data-album={entry.name} aria-label={entry.name + ', ' + songs(entry.tracks.length) + (here ? ', playing from this album' : '')}
+                    onclick={() => show('albums', entry.name)}>
+                    <span class="shelf-title">{entry.name}</span>
+                    <span class="meta">{#if here}<span class="bars" class:still={!playing} aria-hidden="true"><i></i><i></i><i></i></span>{/if}{songs(entry.tracks.length)}{minutes(entry.seconds)}</span>
+                  </button>
+                  <button type="button" class="row-action" aria-label={'Play ' + entry.name} title="Play the album" onclick={() => playAlbum(entry)}><Icon name="play"/></button>
+                </li>
+              {:else}
+                <li class="empty">{loading ? 'Gathering the music…' : 'No albums yet.'}</li>
+              {/each}
+            </ul>
+          {:else if view === 'songs'}
+            {#if searching}
+              <input class="search" type="search" aria-label="Search music" placeholder="a title, an album…" bind:value={filter}
+                onkeydown={event => { if (event.key === 'Escape' && filter) { event.stopPropagation(); filter = ''; } }}/>
+            {/if}
+            {#each groups as group (group.name)}
+              <section class="group" aria-label={group.name}>
+                <h3 class="group-head">{group.name}<span class="count">{group.tracks.length}</span></h3>
+                <ol class="tracks">
+                  {#each group.tracks as track (track.id)}{@render row(track)}{/each}
+                </ol>
+              </section>
+            {:else}
+              <p class="empty">{loading ? 'Gathering the music…' : 'No songs match.'}</p>
+            {/each}
+          {:else}
+            <ol class="tracks">
+              {#each queued as entry, i (entry.position + entry.track.id)}
+                {@render row(entry.track, i)}
+              {:else}
+                <li class="empty">Choose “play next” beside a song to line it up here.</li>
+              {/each}
+            </ol>
+          {/if}
+        </div>
+      {/key}
+
+      {#if libraryError || notice}
+        <footer class="leaf-foot">
+          {#if libraryError}<p class="note" role="status">{libraryError} <button type="button" class="quiet-toggle" onclick={load}>try again</button></p>{/if}
+          {#if notice}<p class="note" role="status">{notice}</p>{/if}
+        </footer>
+      {/if}
     </section>
   </div>
 {/if}
@@ -390,6 +413,7 @@
     color-scheme: light;
   }
   .room:focus-visible { outline: 0; }
+  .room.live { background: transparent; }
 
   /* ── Stage: the painting, the title, the transport ─────────── */
   .stage {
@@ -406,13 +430,19 @@
   .stage::before, .stage::after { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; }
   /* Art, not interface: the valley painting, slowly breathing while music plays */
   .stage::before { background: url('/city/valley-print.webp') center 55% / cover; transform: scale(1.04); }
-  .stage.local::before { background-image: url('/city/valley-flight.webp'); }
+  .live .stage::before { content: none; }
   .stage::after {
     background:
       linear-gradient(0deg, color-mix(in srgb, var(--scene-shade) 94%, transparent), color-mix(in srgb, var(--scene-shade) 35%, transparent) 62%, color-mix(in srgb, var(--scene-shade) 55%, transparent)),
       linear-gradient(90deg, color-mix(in srgb, var(--scene-shade) 40%, transparent), transparent 70%);
   }
-  .close { position: absolute; z-index: 1; top: calc((var(--mast-height) - var(--control)) / 2); right: var(--gutter); }
+  /* The live city stays in view: shade only where the type sits */
+  .live .stage::after {
+    background:
+      linear-gradient(0deg, color-mix(in srgb, var(--scene-shade) 82%, transparent), color-mix(in srgb, var(--scene-shade) 30%, transparent) 45%, transparent 70%),
+      linear-gradient(90deg, color-mix(in srgb, var(--scene-shade) 30%, transparent), transparent 60%);
+  }
+  .close { position: absolute; z-index: 3; top: calc((var(--mast-height) - var(--control)) / 2); right: var(--gutter); }
   .now { max-width: 34rem; display: grid; justify-items: start; cursor: default; text-shadow: var(--scene-type-shadow); }
   .album { font: 400 var(--ui-xs)/1.4 var(--font); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--scene-ink-muted); }
   h2 { margin-top: var(--space-2); font: 400 var(--display-1)/var(--lh-display) var(--font); letter-spacing: var(--ls-display); text-wrap: balance; overflow-wrap: anywhere; }
@@ -456,33 +486,69 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
+    scrollbar-gutter: stable;
     scrollbar-color: var(--line) transparent;
-    padding: calc(var(--mast-height) + var(--space-4)) var(--sheet-inset) var(--space-7);
+    --leaf-top: calc(var(--mast-height) + var(--space-4));
+    padding: 0 var(--sheet-inset) var(--space-7);
     background: var(--paper);
     color: var(--ink);
     box-shadow: inset 6px 0 12px -10px var(--scene-shade);
   }
-  .leaf-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: var(--space-5); padding-bottom: var(--space-1); border-bottom: 1px solid var(--rule); }
-  .albums { margin-top: var(--space-2); }
+  /* The view switch stays put at the top of the leaf; album names dock just beneath it */
+  .leaf-head { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: var(--space-5); padding: var(--leaf-top) 0 var(--space-1); border-bottom: 1px solid var(--rule); background: var(--paper); }
   .search { width: 100%; min-height: 48px; margin-top: var(--space-2); padding: var(--space-2) 0; border: 0; border-bottom: 1px solid var(--line-strong); border-radius: 0; background: none; color: var(--ink); font: 400 var(--text-md)/1.4 var(--font); }
   .search:focus-visible { outline: 0; border-bottom-color: var(--ink); }
   .search::placeholder { color: var(--ink-subtle); font-style: italic; }
+  .meta { display: inline-flex; align-items: center; gap: var(--space-2); font: 400 var(--ui-xs)/1.5 var(--font); letter-spacing: var(--ls-ui); font-variant-numeric: tabular-nums; color: var(--ink-subtle); }
 
-  .tracks { list-style: none; margin-top: var(--space-3); }
-  .tracks li { display: flex; align-items: center; border-bottom: 1px solid var(--rule); }
+  /* The shelf: one ruled line per album, as many as there are */
+  .shelf, .tracks { list-style: none; }
+  .shelf { margin-top: var(--space-2); }
+  .shelf li, .tracks li { display: flex; align-items: center; border-bottom: 1px solid var(--rule); }
+  .shelf-album { flex: 1; min-width: 0; display: grid; justify-items: start; gap: var(--space-1); padding: var(--space-4) 0; border: 0; background: none; color: var(--ink-muted); text-align: left; cursor: pointer; transition: color var(--dur-micro) var(--ease-soft); }
+  .shelf-album:hover, .active .shelf-album { color: var(--ink); }
+  .shelf-title { font: 400 var(--text-lg)/var(--lh-tight) var(--font); letter-spacing: var(--ls-heading); overflow-wrap: anywhere; }
+
+  /* One album, opened */
+  .album-head { display: grid; justify-items: start; padding: var(--space-2) 0 var(--space-3); border-bottom: 1px solid var(--rule); }
+  .back { margin-left: -3px; --icon-size: var(--icon-sm); }
+  .album-head h3 { margin-top: var(--space-1); font: 400 var(--display-3)/var(--lh-display) var(--font); letter-spacing: var(--ls-display); text-wrap: balance; }
+  .album-head h3:focus-visible { outline: 0; text-decoration: underline; text-decoration-color: var(--line-strong); text-decoration-thickness: 1px; text-underline-offset: .15em; }
+  .album-head .meta { margin-top: var(--space-1); }
+  .album-head .atlas-link { margin-top: var(--space-2); --icon-size: var(--icon-sm); }
+
+  /* All songs: each album's songs under its name, the name staying in view while its songs scroll past */
+  .group { margin-top: var(--space-4); }
+  .group-head {
+    position: sticky;
+    top: calc(var(--head-height) - 1px);
+    z-index: 1;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    padding: var(--space-3) 0 var(--space-2);
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper);
+    font: 400 var(--ui-xs)/1.5 var(--font);
+    letter-spacing: var(--ls-label);
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+  .group-head .count { color: var(--moss); letter-spacing: var(--ls-ui); font-variant-numeric: tabular-nums; }
+
   .song { flex: 1; min-width: 0; display: grid; grid-template-columns: 2.25rem minmax(0, 1fr) auto; align-items: baseline; column-gap: var(--space-3); min-height: 52px; padding: var(--space-3) 0; border: 0; background: none; color: var(--ink-muted); font: inherit; text-align: left; cursor: pointer; transition: color var(--dur-micro) var(--ease-soft); }
   .song:hover, .active .song { color: var(--ink); }
   .number, .length { font: 400 var(--ui-xs)/1 var(--font); letter-spacing: var(--ls-ui); font-variant-numeric: tabular-nums; color: var(--ink-subtle); }
+  .song-name { min-width: 0; display: grid; gap: 2px; }
   .song-title { font: 400 var(--text-md)/var(--lh-tight) var(--font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .from { font: 400 var(--ui-xs)/1.4 var(--font); letter-spacing: var(--ls-ui); color: var(--ink-subtle); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row-action { flex: none; display: grid; place-items: center; inline-size: var(--control); block-size: var(--control); margin-right: calc((var(--icon-sm) - var(--control)) / 2); padding: 0; border: 0; border-radius: 50%; background: none; color: var(--ink-subtle); --icon-size: var(--icon-sm); cursor: pointer; opacity: .55; transition: opacity var(--dur-micro) var(--ease-soft), color var(--dur-micro) var(--ease-soft); }
   li:hover .row-action, .row-action:focus-visible { opacity: 1; }
   .row-action:hover { color: var(--accent); }
   @media (hover: none) { .row-action { opacity: 1; } }
   .empty { padding: var(--space-5) 0; font: 400 var(--text-sm)/var(--lh-prose) var(--font); color: var(--ink-subtle); }
-  .more { margin-top: var(--space-3); }
   .leaf-foot { display: grid; justify-items: start; gap: var(--space-1); margin-top: var(--space-5); }
   .note { font: 400 var(--ui-sm)/var(--lh-ui) var(--font); color: var(--ink-subtle); }
-  .import { display: grid; gap: var(--space-1); }
 
   /* Three small bars that sway while a song sounds and rest when it stops */
   .bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 11px; color: var(--accent); }
@@ -508,7 +574,7 @@
     .scrub { margin-top: var(--space-4); }
     .transport { margin-top: var(--space-2); }
     .modes { margin-top: 0; }
-    .leaf { padding: var(--space-4) var(--gutter) max(var(--space-6), env(safe-area-inset-bottom)); box-shadow: none; }
+    .leaf { --leaf-top: var(--space-2); padding: 0 var(--gutter) max(var(--space-6), env(safe-area-inset-bottom)); box-shadow: none; }
   }
   @media (max-height: 560px) and (min-width: 761px) { h2 { font-size: var(--display-2); } }
 </style>

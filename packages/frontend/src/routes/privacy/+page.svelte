@@ -18,7 +18,7 @@
       <h2>Your journal on this device</h2>
       <p>Your passphrase encrypts everything you write, along with your city and any saved reflections, before it is stored in this browser. Lacuna never receives your passphrase and cannot reset it. Keep it, and an encrypted backup, somewhere safe.</p>
       <p>The city’s buildings and details are drawn from your entries on this device. Ordinary writing, reading and searching never leave it. The journal locks when you reload the page or after 15 minutes without activity.</p>
-      <p>Sound, music and interface preferences are stored on this device outside the encrypted journal. So is any music you import. None of it is included in backups or sync. The example city is a sample journal, and changes you make there are discarded when you leave.</p>
+      <p>Sound, music and interface preferences are stored on this device outside the encrypted journal. None of it is included in backups or sync. The example city is a sample journal, and changes you make there are discarded when you leave.</p>
     </section>
     <section>
       <h2>What reaches our servers</h2>

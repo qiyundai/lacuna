@@ -3,10 +3,8 @@ export type Track = {
   title: string;
   album: string;
   seconds?: number;
-  url?: string;
+  url: string;
 };
-
-export const deviceAlbum = 'On this device';
 
 async function readAlbum(path: string): Promise<Track[]> {
   const address = new URL(path, new URL('/music/', location.href));
@@ -54,64 +52,8 @@ export async function loadAlbums() {
   };
 }
 
-async function openLibrary(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open('lacuna-device-music', 1);
-    request.onupgradeneeded = () => {
-      request.result.createObjectStore('tracks', { keyPath: 'id' });
-      request.result.createObjectStore('audio');
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function readMusic<T>(store: string, key?: string): Promise<T> {
-  const db = await openLibrary();
-  try {
-    return await new Promise<T>((resolve, reject) => {
-      const records = db.transaction(store).objectStore(store);
-      const request = key === undefined ? records.getAll() : records.get(key);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  } finally { db.close(); }
-}
-
-export async function deviceTracks() {
-  const tracks = await readMusic<Track[]>('tracks');
-  const order = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-  return tracks.sort((a, b) => order.compare(a.album, b.album) || order.compare(a.title, b.title));
-}
-export const readAudio = (id: string) => readMusic<Blob | undefined>('audio', id);
-
-async function changeMusic(change: (tx: IDBTransaction) => void) {
-  const db = await openLibrary();
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(['tracks', 'audio'], 'readwrite');
-      tx.oncomplete = () => resolve();
-      tx.onabort = () => reject(tx.error);
-      try { change(tx); } catch (error) { tx.abort(); reject(error); }
-    });
-  } finally { db.close(); }
-}
-
-export async function importMusic(files: File[]) {
-  await changeMusic(tx => {
-    for (const file of files) {
-      const id = JSON.stringify([file.webkitRelativePath || file.name, file.size, file.lastModified]);
-      const folder = file.webkitRelativePath?.split('/').at(-2);
-      const track: Track = { id, title: file.name.replace(/\.[^.]+$/, ''), album: folder || deviceAlbum };
-      tx.objectStore('tracks').put(track);
-      tx.objectStore('audio').put(file, id);
-    }
-  });
-}
-
-export function removeMusic(id: string) {
-  return changeMusic(tx => {
-    tx.objectStore('tracks').delete(id);
-    tx.objectStore('audio').delete(id);
-  });
+// Earlier releases let people import their own audio into this IndexedDB database. That feature is
+// gone (any music player on the device does it better), so clear what it may have left behind.
+export function forgetDeviceMusic() {
+  try { indexedDB.deleteDatabase('lacuna-device-music'); } catch { /* storage unavailable: nothing to clear */ }
 }
