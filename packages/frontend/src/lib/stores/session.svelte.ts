@@ -19,7 +19,7 @@ export function resetJournalData() {
 export function resetData() {
   resetJournalData();
   clearDraft(); overlayStore.open = false;
-  aiStore.provider = 'chatgpt'; aiStore.entryCount = 0; aiStore.pending = false; aiStore.companion = null;
+  aiStore.provider = 'chatgpt'; aiStore.entryCount = 0; aiStore.pending = false;
 }
 
 export type AuthStatus = 'loading' | 'authed' | 'unauthed';

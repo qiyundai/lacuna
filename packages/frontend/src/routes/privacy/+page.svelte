@@ -11,46 +11,47 @@
   <article>
     <header>
       <h1>Privacy at Lacuna</h1>
-      <p class="opening">Your browser journal starts on this device. You choose whether to keep an encrypted copy online and which devices can open it.</p>
-      <p>Updated <time datetime="2026-11-22">November 22, 2026</time></p>
+      <p class="opening">Lacuna is a journal that lives in your browser. You don’t need an account, email address or installation, and your pages stay encrypted on your device unless you choose to sync them.</p>
+      <p>Updated <time datetime="2026-11-23">November 23, 2026</time></p>
     </header>
     <section>
       <h2>Your journal on this device</h2>
-      <p>You can write without an account. Your browser encrypts your pages, city addresses and any saved reflections using your journal passphrase. It also uses your entries on this device to give buildings details. Lacuna cannot reset your passphrase.</p>
-      <p>Cloudflare serves the app, images and music and receives ordinary web requests, including your IP address, when you load them. Imported music and playback preferences are stored separately on this device. Journal sync excludes them.</p>
+      <p>Your passphrase encrypts everything you write, along with your city and any saved reflections, before it is stored in this browser. Lacuna never receives your passphrase and cannot reset it. Keep it, and an encrypted backup, somewhere safe.</p>
+      <p>The city’s buildings and details are drawn from your entries on this device. Ordinary writing, reading and searching never leave it. The journal locks when you reload the page or after 15 minutes without activity.</p>
+      <p>Sound, music and interface preferences are stored on this device outside the encrypted journal. So is any music you import. None of it is included in backups or sync. The example city is a sample journal, and changes you make there are discarded when you leave.</p>
+    </section>
+    <section>
+      <h2>What reaches our servers</h2>
+      <p>Cloudflare hosts Lacuna. When you open the app, Cloudflare receives ordinary web requests for the app, images, models and music, including your IP address. Lacuna has no advertising, analytics or tracking, and it never requests your location.</p>
+      <p>Your journal reaches our servers only if you turn on sync, and only in encrypted form. The app is configured to connect only to its own site and to the sync service.</p>
     </section>
     <section>
       <h2>Optional encrypted sync</h2>
-      <p>Sync starts off. Enabling it creates a random pairing code on your device. Your browser uses that code to encrypt the passphrase-protected vault a second time before uploading it. Your passphrase, pairing code and decryption keys stay on your devices. You can sync without an email address.</p>
-      <p>In Journal settings → Privacy &amp; storage, choose <strong>Enable encrypted sync</strong>. On another device, choose <strong>Link a synced journal</strong> from the passphrase screen. Keep the code private. Anyone with it can delete the online copy. Opening that copy also requires your original passphrase.</p>
-      <p>Lacuna stores the encrypted copy and its version in Cloudflare’s database under a pseudonymous identifier. The service sees transfer size and timing. It uses an identifier derived from your IP address that changes daily to limit requests. Even someone with access to the database cannot read your pages from it. An unlocked device or a malicious app update could still expose them.</p>
-      <p><strong>Pause sync</strong> stops transfers on this device. The online copy and other paired devices remain active. <strong>Delete online copy</strong> removes the encrypted contents and leaves a version marker so an offline device cannot upload them again under the old code. Each device keeps its local journal.</p>
-      <p>Deleted data can remain in Cloudflare’s database recovery history for 7 days on its Free plan or 30 days on its Paid plan. <a href="https://developers.cloudflare.com/d1/reference/time-travel/" rel="noreferrer">Cloudflare’s backup documentation</a></p>
+      <p>Sync is off until you turn it on. Turning it on creates a random pairing code on your device. Your browser uses that code to encrypt the already passphrase-protected journal a second time before uploading it. Your passphrase, pairing code and decryption keys stay on your devices.</p>
+      <p>In Journal settings → Privacy &amp; storage, choose <strong>Enable encrypted sync</strong>. On another device, choose <strong>Link a synced journal</strong> on the passphrase screen. Keep the code private, because anyone who has it can delete the online copy. To read the copy, they would also need your passphrase.</p>
+      <p>Lacuna stores the encrypted copy and its version number in Cloudflare’s database, filed under a one-way hash of the pairing code. It stores no name, email address or account details with it. The service can see how large each transfer is and when it happens. To limit abuse, it counts requests using a pseudonym derived from your IP address, which changes daily. The counts expire within a day. Even with access to the database, nobody can read your pages. A device that is unlocked, or a malicious app update, could still expose them.</p>
+      <p><strong>Pause sync</strong> stops transfers on this device. The online copy and your other paired devices are not affected. <strong>Delete online copy</strong> removes the encrypted contents and keeps only a version marker, so an offline device can’t upload the journal again with the old code. Each device keeps its own local journal.</p>
+      <p>Deleted data can remain in Cloudflare’s database recovery history for up to 30 days. <a href="https://developers.cloudflare.com/d1/reference/time-travel/" rel="noreferrer">Cloudflare’s backup documentation</a></p>
     </section>
     <section>
       <h2>AI reflections · Coming soon</h2>
-      <p>The Soul Map and Living Memoir are coming soon. This release sends no journal pages for AI analysis. Enabling sync gives permission to store encrypted data only.</p>
+      <p>The Soul Map and Living Memoir are not available yet, and Lacuna sends no pages for AI analysis. Turning on sync only lets Lacuna store your encrypted journal. If reflections launch, they will need your separate consent, and we will update this policy first to explain what is shared and with whom.</p>
     </section>
     <section>
       <h2>Backups and readable exports</h2>
-      <p><strong>Download an encrypted backup</strong> saves a file you can restore in another browser with your original passphrase. A file restore keeps a recovery copy of any journal it replaces. Pair the restored journal separately if you want to sync again.</p>
-      <p><strong>Export journal</strong> creates a readable Markdown or JSON file. Anyone who can open it can read your words. Later changes to your journal cannot change a file you already downloaded.</p>
+      <p><strong>Download an encrypted backup</strong> saves a file you can restore in any browser with your original passphrase. Before restoring over an existing journal, Lacuna keeps an encrypted copy of it. A restored journal starts with sync off, so pair it again if you want to sync.</p>
+      <p><strong>Export journal</strong> creates a readable Markdown or JSON file. Anyone who has the file can read your words, and later changes to your journal won’t change it.</p>
     </section>
     <section>
-      <h2>Forgetting a page</h2>
-      <p>Forgetting removes the original words, observations, and passages that drew on them from the active journal and its earlier tellings. Its address stays in the city. Independent passages remain readable. Earlier downloads, backups, and requests already sent to a provider can still contain the words.</p>
-      <p>A paired device receives the change when it next syncs successfully. An offline or paused device can still hold the earlier words. Resolving a sync conflict preserves forgotten addresses.</p>
-      <p>Deleting a browser journal clears its local vault, saved pairing code and local recovery copies. To remove the online copy too, delete it in Privacy &amp; storage before clearing the last paired device. Remove downloaded files and other devices’ copies separately.</p>
-    </section>
-    <section>
-      <h2>If you use the desktop companion</h2>
-      <p>The separate companion signs you in with ChatGPT. Lacuna verifies your identity token. The companion encrypts your journal on your computer and offers an optional encrypted cloud copy tied to that identity. Restoring a companion backup requires the same identity and the original passphrase. Browser pairing codes work only with browser journals.</p>
-      <p>Some earlier releases stored readable journal records on the server. If you have one of those journals, Privacy &amp; storage in the companion offers migration. It verifies the encrypted local copy before removing the active legacy records. Provider backup history can retain the earlier readable records until it expires.</p>
+      <h2>Forgetting and deleting</h2>
+      <p>Forgetting a page removes its words from the journal, along with anything drawn from them. Its place in the city remains. Downloads and backups you made earlier can still contain the words.</p>
+      <p>Paired devices apply the change the next time they sync. An offline or paused device keeps the earlier words until then. When sync resolves a conflict, forgotten pages stay forgotten.</p>
+      <p>Deleting a browser journal clears its encrypted journal, saved pairing code and the copies kept before restores. To remove the online copy as well, delete it in Privacy &amp; storage before you clear your last paired device. Downloaded files and journals on other devices have to be removed separately.</p>
     </section>
     <footer>
       <h2>About these protections</h2>
-      <p>We test encryption, recovery and sync using disposable journals. Lacuna has not had an independent security audit.</p>
-      <p>Inspect the <a href="https://github.com/qiyundai/lacuna" target="_blank" rel="noreferrer">source and release history</a>, published under the GNU Affero General Public License, version 3. Please keep journal text and credentials out of public bug reports.</p>
+      <p>We test encryption, recovery and sync using disposable journals. Lacuna has not had an independent security audit. If we change how your data is handled, we will update this page and its date.</p>
+      <p>You can inspect the <a href="https://github.com/qiyundai/lacuna" target="_blank" rel="noreferrer">source and release history</a>, published under the GNU Affero General Public License, version 3. Questions and reports are welcome there. Please keep journal text, passphrases and pairing codes out of public reports.</p>
       <a class="return" href="/">Return to your space <span aria-hidden="true">←</span></a>
       <p><a href="/city/harbor/credits.txt">Waterfront model credits</a></p>
     </footer>

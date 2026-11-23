@@ -66,46 +66,6 @@ Background analysis and subscriptions are disabled in the public release (`aiAva
 - Spending limits: `REFLECTION_ACCOUNT_MICROS` and `REFLECTION_GLOBAL_MICROS` are monthly caps in millionths of a US dollar. `MODEL_INPUT_MICROS_PER_TOKEN` and `MODEL_OUTPUT_MICROS_PER_TOKEN` are the model's uncached rates in the same units. The Worker reserves a conservative budget before sending excerpts and reconciles it against reported usage. Generation is disabled when any limit or credential is missing.
 - `node scripts/evaluate-memoir.mjs` lists the synthetic review journals. With a model key, token rates, and an explicit `EVAL_BUDGET_USD`, `--live` generates blinded comparisons and cost measurements under `.test-output`. Score the outputs before opening the answer key.
 
-## Desktop companion (legacy)
-
-A separate loopback companion predates the browser journal. It signs in with ChatGPT and runs reflections against a local vault using your ChatGPT plan. Existing desktop vaults stay in place. The hosted app cannot open a companion vault, and it never redirects phones to localhost.
-
-```bash
-pnpm install --frozen-lockfile
-pnpm companion          # builds the app and serves it on http://127.0.0.1:1455
-```
-
-1. Open `http://127.0.0.1:1455`, using exactly that host.
-2. Acknowledge data and privacy, then **Continue with ChatGPT**. Complete OpenAI sign-in and authorize eligible plan use.
-3. Create or unlock the vault passphrase. **There is no recovery.**
-4. **Privacy & storage** migrates an older cloud journal, downloads an encrypted backup, and toggles the optional encrypted cloud copy. Signing in does not enable sync.
-
-In development builds with reflections enabled, **Test ChatGPT connection** sends a small request without journal content. With journal sharing allowed, **refresh reflections** sends context directly to OpenAI, up to ten thoughts per run; automatic reflections need a second opt-in. Requests use plan allowance or credits. OpenAI determines eligibility, models, and limits; **Manage usage** opens [ChatGPT settings](https://chatgpt.com/settings/usage). Sign-in follows [OpenAI's open-source registration flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in). There is no fallback provider or API key.
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `LACUNA_API_URL` | Production Worker | Backend; HTTPS required except on loopback |
-| `LACUNA_PORT` | `1455` | UI and `/auth/callback` port |
-| `LACUNA_DATA_DIR` | `~/.lacuna` | Private credential directory |
-
-### Companion storage
-
-Vaults live in `~/.lacuna/vaults/<account-id>.vault`. AES-256-GCM uses a fresh 96-bit IV per write, a 128-bit tag, and additional authenticated data bound to the format and account. The 256-bit key comes from scrypt (`N=131072, r=8, p=1`) with a random 128-bit salt, and exists only in companion memory while unlocked. Writes are serialized, synced, and atomically replaced; plaintext never reaches a journal file. Plaintext is limited to 16 MiB. Locking cancels inference and clears UI state; idle polling does not extend the 15-minute lock.
-
-**Download an encrypted backup** creates a `.lacuna-vault` file. Restore it from the lock screen with its original passphrase and the same ChatGPT identity. A current vault is preserved as an encrypted conflict backup first. Restores turn off AI sharing and cloud sync.
-
-The optional cloud copy sends only a supported encrypted envelope. Version comparisons reject conflicts, and D1 stores bounded ciphertext chunks in the same transaction as the guarded version update. Cloud copies hold up to 6 MiB of base64 ciphertext (about 4.5 MiB of plaintext); larger vaults still save locally. Turning sync off keeps the remote copy; explicit deletion removes it and leaves a version tombstone. There is no automatic merge across devices.
-
-**Older journals:** migration downloads an account-scoped snapshot, encrypts and saves it, reads it back to verify, then removes the plaintext server records in a version-guarded transaction. A conflict or failed save keeps the server records. Until then, the backend can read that data, and backups may retain it for a while: [D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/) keeps 7 days on Free or 30 days on Paid. Retired email accounts and different ChatGPT registrations are never merged automatically.
-
-### Companion identity and credentials
-
-The companion uses PKCE, state, and a nonce. The Worker independently verifies the ID token's signature, issuer, issued client ID, expiry, and a single-use server challenge, then issues a revocable 12-hour session kept only in the companion's protected credential store. A port-specific HttpOnly, SameSite cookie binds the browser; no bearer token or identity is stored in browser storage. Accounts are keyed by issuer, client, and subject, never by email, and the backend keeps a pseudonymous mapping instead of the display email. Email sign-in and old links are retired.
-
-Access and refresh tokens stay in `~/.lacuna/chatgpt.credentials`, protected with Windows DPAPI or Unix mode 0600 in a mode-0700 directory. The ID token reaches the Worker only for verification and is never stored or returned to the browser. Process locking and serialized refresh prevent token-rotation races. Disconnecting clears local tokens and attempts remote revocation, but keeps the public client registration so that signing in again returns to the same account. Keep the credential directory: a new registration on another computer can create a separate identity, and account linking is not implemented.
-
-The companion binds to loopback and validates Host and Origin. Context and generated text never pass through Lacuna's hosted AI endpoints; OpenAI necessarily receives readable context, and `store: false` does not promise zero retention. Sign-in requires the identity service and expires after 12 hours. After a crash, confirm no companion is running before removing `companion.lock`.
-
 ## Development
 
 Requires Node.js 22.16+ and pnpm 9+.
@@ -120,13 +80,12 @@ For the Worker, set the D1 database ID in `packages/worker/wrangler.toml`, run `
 
 ```bash
 pnpm check              # Svelte diagnostics and Worker type check
-pnpm test               # regression suite: disposable SQLite, simulated OpenAI, no real AI requests
+pnpm test               # regression suite: disposable SQLite, no real AI requests
 pnpm build:frontend
-pnpm build:companion
-pnpm preview:story      # disposable sample story on http://127.0.0.1:1456
+pnpm preview:web        # production build with a disposable encrypted sample on http://127.0.0.1:1457
 ```
 
-`preview:story` builds into `.test-output/preview-app`, migrates synthetic entries from an in-memory D1 fixture into a temporary encrypted vault, and never touches production data or OAuth credentials. Its sample-only passphrase is `sample story vault passphrase`. It uses ports 1456 and 8788, so the companion on 1455 can stay open.
+`preview:web` serves the production build locally. Open `/fixture-setup` first: it runs real IndexedDB conflict and recovery checks in disposable storage, then creates a sample journal with the passphrase `sample phone journal passphrase`. It never touches production data.
 
 ### Layout
 
@@ -134,9 +93,8 @@ pnpm preview:story      # disposable sample story on http://127.0.0.1:1456
 |---|---|
 | `packages/frontend` | SvelteKit single-page app: the city (`src/lib/town`), journal views, browser vault, sync, music player |
 | `packages/frontend/src/lib/styles` | Design tokens, base styles, and shared primitives; see [DESIGN.md](./DESIGN.md) |
-| `packages/worker` | Cloudflare Worker (Hono) on D1: sync, privacy, reflections, legacy companion APIs |
-| `packages/companion` | Legacy loopback companion |
-| `packages/shared` | Code shared by the app, Worker, and companion |
+| `packages/worker` | Cloudflare Worker (Hono) on D1: encrypted browser sync and the reserved reflections service |
+| `packages/shared` | Code shared by the app and the Worker |
 | `tests`, `scripts` | Regression suite, previews, build and evaluation scripts |
 
 The `/studio` routes are development views for individual buildings.

@@ -8,9 +8,9 @@ Items here were intentionally deferred from the initial implementation. P0s have
 
 Activation scans all retained entries. Range summaries do not replace or delete original entries, so missing access to compressed historical text is not a current defect. If retention changes later, reassess activation with explicit provenance rather than treating generated graph labels as equivalent evidence.
 
-The range-summary threshold is now 35 (15 summarized entries plus a 20-entry recent window). The graph query type now matches its selected fields. Concurrency, deletion consistency, checkpoint recovery and companion work are documented in the root `AUDIT.md`.
+The range-summary threshold is now 35 (15 summarized entries plus a 20-entry recent window). The graph query type now matches its selected fields. Concurrency, deletion consistency and checkpoint recovery are documented in the root `AUDIT.md`.
 
-Companion lifetime and loading all history remain scalability constraints. Introduce resumable jobs and bounded historical reads before claiming reliable processing for large accounts; benchmark those changes against representative histories.
+Loading all history remains a scalability constraint. Introduce resumable jobs and bounded historical reads before claiming reliable processing for large accounts; benchmark those changes against representative histories.
 
 ---
 

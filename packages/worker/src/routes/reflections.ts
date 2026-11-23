@@ -3,8 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import { SignJWT, jwtVerify } from 'jose';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import type { Env } from '../types.js';
-import { checkRateLimit, privateRateKey } from '../ratelimit.js';
-import { hashToken } from './auth.js';
+import { checkRateLimit, privateRateKey, hashToken } from '../ratelimit.js';
 import { reflectionInstructions, validEvidenceRequest } from '../ai/book-prompts.js';
 
 type Account = {id:string; email:string; customer:string|null; paid_until:number; consent:number; billing_revision:number};

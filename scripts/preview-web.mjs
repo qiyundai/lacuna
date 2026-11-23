@@ -3,7 +3,7 @@ import { build } from 'esbuild';
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
-import { mediaTypes, serveMedia } from '../packages/companion/src/serve-media.mjs';
+import { mediaTypes, serveMedia } from './serve-media.mjs';
 await build({ entryPoints: ['tests/web-fixture.ts'], outfile: '.test-output/web-fixture.js', bundle: true, platform: 'browser', target: 'es2022', format: 'esm' });
 const directory = resolve('packages/frontend/build');
 const server = createServer(async (req, res) => {

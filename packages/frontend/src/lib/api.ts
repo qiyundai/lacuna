@@ -4,37 +4,15 @@ import type { Book } from '../../../shared/living-book.js';
 import { sessionVersion } from './session-version.js';
 import { defaultApiOrigin } from '../../../shared/sync-packet.js';
 import type { RiverClock, Settlement } from '../../../shared/river.js';
-export const isCompanion = typeof document !== 'undefined' && document.querySelector('meta[name="lacuna-companion"]') !== null;
-export const isBrowserApp = typeof document !== 'undefined' && !isCompanion;
-export const apiBase = isCompanion ? '/api' : import.meta.env.VITE_API_URL ?? (
+export const apiBase = import.meta.env.VITE_API_URL ?? (
   import.meta.env.DEV ? 'http://localhost:8787' : defaultApiOrigin
 );
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-  auth = true
-): Promise<T> {
+// Journal operations run entirely in this browser against the encrypted vault.
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const version = sessionVersion.value;
-  if (isBrowserApp) {
-    try { const { webRequest } = await import('./web-api.js'); return await webRequest(path, options.method ?? 'GET', typeof options.body === 'string' ? JSON.parse(options.body) : undefined) as T; }
-    catch (error) { if (version === sessionVersion.value && (error as { code?: string }).code === 'VAULT_LOCKED') window.dispatchEvent(new Event('lacuna:locked')); throw error; }
-  }
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
-  };
-  const res = await fetch(`${apiBase}${path}`, { ...options, credentials: 'same-origin', headers, signal: options.signal ?? AbortSignal.timeout(30000) });
-  if (!res.ok) {
-    if (version === sessionVersion.value && auth && res.status === 401) window.dispatchEvent(new Event('lacuna:unauthorized'));
-    if (version === sessionVersion.value && res.status === 423) window.dispatchEvent(new Event('lacuna:locked'));
-    const body = await res.json().catch(() => ({}));
-    throw Object.assign(new Error((body as { error?: { message?: string } }).error?.message ?? 'Request failed'), {
-      status: res.status,
-      code: (body as { error?: { code?: string } }).error?.code,
-    });
-  }
-  return res.json() as Promise<T>;
+  try { const { webRequest } = await import('./web-api.js'); return await webRequest(path, options.method ?? 'GET', typeof options.body === 'string' ? JSON.parse(options.body) : undefined) as T; }
+  catch (error) { if (version === sessionVersion.value && (error as { code?: string }).code === 'VAULT_LOCKED') window.dispatchEvent(new Event('lacuna:locked')); throw error; }
 }
 
 export const api = {
@@ -48,7 +26,6 @@ export const api = {
     nextDay: (day: number) => request<{ entries: EntryData[]; clock: RiverClock }>('/town/day', { method: 'POST', body: JSON.stringify({ day }) })
   },
   auth: {
-    logout: () => request<{ ok: boolean; revoked: boolean; openaiRevoked: boolean }>('/auth/logout', { method: 'POST' }),
     deleteAccount: () =>
       request<{ ok: boolean }>('/auth/account', { method: 'DELETE' }),
   },
@@ -88,7 +65,6 @@ export const api = {
   },
   ai: {
     status: () => request<{ provider: 'chatgpt'; pending: number; entryCount: number }>('/ai/status'),
-    refresh: () => request('/ai/refresh', { method: 'POST' }),
   },
 };
 

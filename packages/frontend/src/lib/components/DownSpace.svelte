@@ -5,11 +5,9 @@
   import { loadPatterns } from '$lib/stores/patterns.svelte.js';
   import { loadMemoir } from '$lib/stores/memoir.svelte.js';
   import Timeline from './Timeline.svelte';
-  import SoulMap from './SoulMap.svelte';
-  import LivingMemoir from './LivingMemoir.svelte';
   import BookReader from './BookReader.svelte';
   import { overlayStore } from '$lib/stores/overlay.svelte.js';
-  import { api, isCompanion } from '$lib/api.js';
+  import { api } from '$lib/api.js';
   import { loadAI } from '$lib/stores/ai.svelte.js';
   import { loadStory } from '$lib/stores/story.svelte.js';
 
@@ -70,13 +68,8 @@
 >
   <div class="views" style="transform: translateX(-{currentView * 100}vw)">
     <div class="view" inert={currentView !== 0}><Timeline /></div>
-    {#if isCompanion}
-      <div class="view" inert={currentView !== 1}><SoulMap /></div>
-      <div class="view" inert={currentView !== 2}><LivingMemoir active={active && currentView === 2} /></div>
-    {:else}
-      <div class="view" inert={currentView !== 1}>{#if currentView===1}<BookReader map/>{/if}</div>
-      <div class="view" inert={currentView !== 2}>{#if currentView===2}<BookReader/>{/if}</div>
-    {/if}
+    <div class="view" inert={currentView !== 1}>{#if currentView===1}<BookReader map/>{/if}</div>
+    <div class="view" inert={currentView !== 2}>{#if currentView===2}<BookReader/>{/if}</div>
   </div>
 
   <!-- Dot indicators -->

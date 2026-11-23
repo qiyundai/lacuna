@@ -1,8 +1,7 @@
 import { Hono } from 'hono';
 import { validPacket } from '../../../shared/sync-packet.js';
-import { checkRateLimit, privateRateKey } from '../ratelimit.js';
+import { checkRateLimit, privateRateKey, hashToken } from '../ratelimit.js';
 import type { Env } from '../types.js';
-import { hashToken } from './auth.js';
 
 const route = new Hono<{Bindings:Env; Variables:{slot:string; peer:string}}>();
 route.use('*', async (c,next) => {

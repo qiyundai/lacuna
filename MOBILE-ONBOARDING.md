@@ -1,6 +1,6 @@
 # Mobile onboarding direction
 
-The public URL must support a phone away from its owner's computer. The loopback companion remains an optional desktop integration, never a required phone onboarding step.
+The public URL must support a phone away from its owner's computer. Writing never depends on a desktop app or a local server.
 
 ## Experience
 
@@ -18,10 +18,10 @@ Restore from backup · Link a synced journal · Privacy
 
 Returning users see one unlock field. Choosing a passphrase stays with the user. A visible “save thought” button appears while writing, so no gesture needs to be learned. No preflight consent overlay is needed for local-only writing; AI sharing needs its own explicit permission if/when available. Explain that clearing site data can erase the only copy. Offer an encrypted backup and explicit restore. A paired browser can restore its online copy with the pairing code and original passphrase. Lacuna cannot reset a lost passphrase.
 
-Review: this follows Lacuna's established aesthetic instead of introducing another landing-page visual system. The one meaningful change is making the first screen a useful action on the current phone. Avoid a dead-end ChatGPT button or a link to localhost on the hosted site.
+Review: this follows Lacuna's established aesthetic instead of introducing another landing-page visual system. The one meaningful change is making the first screen a useful action on the current phone. Avoid a dead-end sign-in button or a link to localhost on the hosted site.
 
 ## Technical boundary
 
-Browser-native AES-256-GCM and PBKDF2-HMAC-SHA256 (600,000 iterations, random salt) protect a versioned ciphertext envelope in IndexedDB. The passphrase/key are not persisted. IndexedDB updates compare the previous envelope's token in one read/write transaction; conflicting tabs cannot overwrite silently. Failures leave the previous ciphertext intact. The existing companion vault format and data must remain unchanged.
+Browser-native AES-256-GCM and PBKDF2-HMAC-SHA256 (600,000 iterations, random salt) protect a versioned ciphertext envelope in IndexedDB. The passphrase/key are not persisted. IndexedDB updates compare the previous envelope's token in one read/write transaction; conflicting tabs cannot overwrite silently. Failures leave the previous ciphertext intact.
 
 Browser sync is optional and account-free. Enable it in Journal settings → Privacy & storage, then use Link a synced journal on another device. AI reflections and subscriptions are coming soon.
