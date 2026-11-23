@@ -149,7 +149,7 @@ The `/studio` routes are development views for individual buildings.
 
 To ship an album, put its audio and a UTF-8 M3U playlist under `packages/frontend/static/music/` and add the playlist path to `library.json`. The player reads the album name from `#PLAYLIST:`, titles and durations from `#EXTINF:`, and audio paths relative to the playlist. See [A River Remembers](packages/frontend/static/music/a-river-remembers.m3u8).
 
-Valley ambience lives in `packages/frontend/static/valley-sounds/`, with its source and licence in [credits.txt](packages/frontend/static/valley-sounds/credits.txt).
+Valley ambience lives in `packages/frontend/static/valley-sounds/`, with its source in [credits.txt](packages/frontend/static/valley-sounds/credits.txt). [ASSETS.md](./ASSETS.md) lists which artwork and sound are reserved and which third-party assets keep their own licences.
 
 ### Deployment
 
@@ -161,6 +161,7 @@ Pushing to `main` runs checks and tests, applies D1 migrations, deploys the Work
 - [DESIGN.md](./DESIGN.md): design system
 - [PRIVACY-ARCHITECTURE.md](./PRIVACY-ARCHITECTURE.md): privacy model and data flows
 - [MOBILE-ONBOARDING.md](./MOBILE-ONBOARDING.md): phone onboarding direction
+- [ASSETS.md](./ASSETS.md): artwork, music, and sound rights
 - [AUDIT.md](./AUDIT.md): security audit and verification scope
 - [CLAUDE.md](./CLAUDE.md): contributor guidance
 
@@ -171,5 +172,7 @@ Copyright (C) 2026 Qiyun Dai
 Lacuna is free software: you can redistribute it and modify it under the terms of version 3 of the [GNU Affero General Public License](./LICENSE) as published by the Free Software Foundation (`AGPL-3.0-only`). It is distributed in the hope that it will be useful, but without any warranty; without even the implied warranty of merchantability or fitness for a particular purpose. See the licence for details.
 
 In short: you may read, run, modify, and share the code. If you run a modified version as a service that others use over a network, you must offer those users the corresponding source code under the same licence.
+
+The licence covers the code only. Lacuna's own artwork, music, and sound are all rights reserved, and third-party models and textures keep their original licences; see [ASSETS.md](./ASSETS.md).
 
 Versions published before this change remain available under the MIT licence they were released with.
