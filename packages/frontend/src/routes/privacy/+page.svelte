@@ -50,7 +50,7 @@
     <footer>
       <h2>About these protections</h2>
       <p>We test encryption, recovery and sync using disposable journals. Lacuna has not had an independent security audit.</p>
-      <p>Inspect the <a href="https://github.com/qiyundai/lacuna" target="_blank" rel="noreferrer">source and release history</a>. Please keep journal text and credentials out of public bug reports.</p>
+      <p>Inspect the <a href="https://github.com/qiyundai/lacuna" target="_blank" rel="noreferrer">source and release history</a>, published under the GNU Affero General Public License, version 3. Please keep journal text and credentials out of public bug reports.</p>
       <a class="return" href="/">Return to your space <span aria-hidden="true">←</span></a>
       <p><a href="/city/harbor/credits.txt">Waterfront model credits</a></p>
     </footer>

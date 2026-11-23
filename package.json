@@ -1,6 +1,7 @@
 {
   "name": "lacuna",
   "private": true,
+  "license": "AGPL-3.0-only",
   "scripts": {
     "dev:frontend": "pnpm -F frontend dev",
     "dev:worker": "pnpm -F worker dev",
