@@ -103,7 +103,7 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
     if(String(url).includes('/checkout/sessions?'))return Response.json({data:[]});
     if(String(url).includes('/subscriptions?'))return Response.json({data:paid?[{status:'active',current_period_end:2000000000,items:{data:[{price:{id:'price_1'}}]}}]:[]});
     assert.equal(String(url),'https://api.openai.com/v1/responses');
-    const payload=JSON.parse(options.body);assert.equal(payload.store,false);modelCalls++;
+    const payload=JSON.parse(options.body);assert.equal(payload.store,false);assert.match(payload.input,/\bJSON\b/i);modelCalls++;
     return Response.json({status:'completed',output:[{content:[{type:'output_text',text:'{"notes":[]}'}]}],usage:{input_tokens:300,output_tokens:15}});
   });
   env.REFLECTIONS_ENABLED='true';

@@ -28,12 +28,14 @@ if(!process.argv.includes('--live')){
   await mkdir('.test-output',{recursive:true});
   const dir=await mkdtemp(resolve('.test-output','memoir-review-')),costs=[],key={};let spent=0;
   async function ask(system,user,max,json){
+    if(json)user='Return JSON.\n'+user;
     const reserve=(Buffer.byteLength(system+user)+256)*inputRate+max*outputRate;
     if(spent+reserve>cap*1e6)throw new Error('Evaluation budget reached.');
     const res=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model,store:false,instructions:system,input:user,max_output_tokens:max,...(json?{text:{format:{type:'json_object'}}}:{})})});
     if(!res.ok)throw new Error('Provider returned '+res.status);
     const data=await res.json();
     spent+=data.usage.input_tokens*inputRate+data.usage.output_tokens*outputRate;
+    await writeFile(resolve(dir,'usage.json'),JSON.stringify({model,estimatedUSD:spent/1e6}));
     if(data.status!=='completed')throw new Error('Incomplete evaluation response');
     return data.output.flatMap(o=>o.content??[]).find(c=>c.type==='output_text').text;
   }
@@ -42,7 +44,12 @@ if(!process.argv.includes('--live')){
     while((task=nextBookTask(book,entries))){
       const user=JSON.stringify({primary:task.primary,pages:task.evidence});
       const response=await ask(reflectionInstructions(task.kind),user,task.kind==='observe'?500:1400,true);
-      acceptBookResult(book,entries,task,JSON.parse(response));
+      try {
+        acceptBookResult(book,entries,task,JSON.parse(response));
+      } catch (error) {
+        await writeFile(resolve(dir,'rejected.json'),JSON.stringify({name,task,response,reason:error.message},null,2));
+        throw new Error(name+' '+task.kind+': '+error.message);
+      }
     }
     const newCost=spent-start;
     let snapshot={entries,version:0,weights:{},graph:{nodes:[],processed_count:0},extracted:0,summaries:[],memoir:null,memoirCount:0};

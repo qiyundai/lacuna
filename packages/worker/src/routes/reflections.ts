@@ -155,7 +155,7 @@ route.post('/generate',async c=>{
   if (typeof input.unit!=='string' || !/^[a-f0-9]{64}$/.test(input.unit) || !validEvidenceRequest(input)) return c.json({error:'Invalid source material.'},400);
   const model=c.env.OPENAI_MODEL;
   const {accountCap,globalCap,inputRate,outputRate}=modelBudget(c.env);
-  const instructions=reflectionInstructions(input.kind), content=JSON.stringify({primary:input.primary,pages:input.evidence});
+  const instructions=reflectionInstructions(input.kind), content='Return JSON.\n'+JSON.stringify({primary:input.primary,pages:input.evidence});
   const maxOutput=input.kind==='observe'?500:1400;
   const reserve=Math.ceil((encoder.encode(content+instructions).length+256)*inputRate+maxOutput*outputRate);
   const month=new Date().toISOString().slice(0,7),id=crypto.randomUUID();
