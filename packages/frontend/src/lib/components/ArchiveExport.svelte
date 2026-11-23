@@ -36,11 +36,11 @@
   </div>
 {/if}
 <style>
-  .export-screen { position: fixed; inset: 0; z-index: 220; display: flex; align-items: safe center; justify-content: center; overflow-y: auto; background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(22px); padding: 3rem 1.5rem; }
+  .export-screen { position: fixed; inset: 0; z-index: 220; display: flex; align-items: safe center; justify-content: center; overflow-y: auto; background: color-mix(in srgb, var(--paper) 94%, transparent); backdrop-filter: blur(22px); padding: 3rem 1.5rem; }
   .export-content { max-width: 35ch; text-align: center; display: flex; flex-direction: column; gap: 1.5rem; line-height: 1.9; }
-  h2 { font: 400 2rem/1.4 var(--font-reading); }
-  p { color: var(--void-text-dim); }
-  button { border: none; background: none; color: var(--void-text); font: inherit; line-height: 1.8; padding: .5rem 0; cursor: pointer; transition: color .3s ease; }
+  h2 { font: 400 2rem/1.4 var(--font); }
+  p { color: var(--ink-muted); }
+  button { border: none; background: none; color: var(--ink); font: inherit; line-height: 1.8; padding: .5rem 0; cursor: pointer; transition: color .3s ease; }
   button:hover { color: var(--moss); }
-  .return { color: var(--void-text-hint); font-size: .85rem; margin-top: 1rem; }
+  .return { color: var(--ink-subtle); font-size: var(--ui-sm); margin-top: 1rem; }
 </style>

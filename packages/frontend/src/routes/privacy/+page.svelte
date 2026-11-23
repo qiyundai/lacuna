@@ -57,13 +57,13 @@
   </article>
 </main>
 <style>
-  .declaration { height:calc(100% - var(--mast-height)); overflow-y: auto; background: var(--bg); padding: 3rem 1.5rem 6rem; }
-  article { max-width: 64ch; margin: 0 auto; color: var(--void-text-dim); font-family: var(--font-reading); line-height: 1.95; letter-spacing: .015em; }
-  a { color: var(--void-text); text-decoration-thickness: 1px; text-underline-offset: .3em; transition: color .3s ease; } a:hover { color: var(--moss); }
+  .declaration { height:calc(100% - var(--mast-height)); overflow-y: auto; background: var(--paper); padding: 3rem 1.5rem 6rem; }
+  article { max-width: 64ch; margin: 0 auto; color: var(--ink-muted); font-family: var(--font); line-height: 1.95; letter-spacing: .015em; }
+  a { color: var(--ink); text-decoration-thickness: 1px; text-underline-offset: .3em; transition: color .3s ease; } a:hover { color: var(--moss); }
   header { margin: 1rem 0 4rem; }
-  h1 { color: var(--void-text); font-weight: 400; font-size: clamp(2.4rem, 5vw, 3.8rem); line-height: 1.3; margin: 1.8rem 0 2rem; letter-spacing: -.025em; }
+  h1 { color: var(--ink); font-weight: 400; font-size: clamp(2.4rem, 5vw, 3.8rem); line-height: 1.3; margin: 1.8rem 0 2rem; letter-spacing: -.025em; }
   .opening { font-size: 1.25rem; line-height: 1.85; margin-bottom: 2rem; } section { position: relative; margin: 0 0 5rem; }
-  h2 { color: var(--void-text); font-size: 1.65rem; font-weight: 400; line-height: 1.5; margin: 0 0 1.5rem; } p + p { margin-top: 1.4rem; }
+  h2 { color: var(--ink); font-size: 1.65rem; font-weight: 400; line-height: 1.5; margin: 0 0 1.5rem; } p + p { margin-top: 1.4rem; }
   footer { padding-top: 1rem; } .return { display: inline-block; text-decoration: none; margin-top: 3rem; font-size: .95rem; }
   @media (max-width: 600px) { header { margin: .5rem 0 3rem; } article { font-size: .97rem; } section { margin-bottom: 4rem; } }
 </style>

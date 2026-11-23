@@ -81,13 +81,13 @@
   {/if}
 </section>
 <style>
-  .book{max-width:43rem;margin:0 auto;padding:clamp(2rem,7vw,6rem) clamp(1.2rem,4vw,3rem) 8rem;color:var(--void-text);font-family:var(--font-reading)}
-  header{border-bottom:1px solid var(--void-text-hint);padding-bottom:1.4rem}
-  h1{font:400 clamp(2.6rem,6vw,4.2rem)/1.05 var(--font-reading);margin:0}
-  h2{font:400 clamp(1.6rem,4vw,2.3rem)/1.2 var(--font-reading);margin:.6rem 0 1.5rem}
+  .book{max-width:43rem;margin:0 auto;padding:clamp(2rem,7vw,6rem) clamp(1.2rem,4vw,3rem) 8rem;color:var(--ink);font-family:var(--font)}
+  header{border-bottom:1px solid var(--ink-subtle);padding-bottom:1.4rem}
+  h1{font:400 clamp(2.6rem,6vw,4.2rem)/1.05 var(--font);margin:0}
+  h2{font:400 clamp(1.6rem,4vw,2.3rem)/1.2 var(--font);margin:.6rem 0 1.5rem}
   article{padding-top:2.4rem} .passage{margin-bottom:1.6rem} .passage>p,.empty{font-size:1.19rem;line-height:1.8;white-space:pre-line;overflow-wrap:anywhere}
-  time,summary,label,button{font:normal .9rem/1.5 var(--font-reading);color:var(--void-text-dim)}
+  time,summary,label,button{font:normal .9rem/1.5 var(--font);color:var(--ink-muted)}
   summary,button,select{cursor:pointer} summary{width:fit-content;padding:.7rem 0}
-  label{display:block;margin:1rem 0 0} select,button{background:var(--bg);color:inherit;border:1px solid var(--void-text-hint);border-radius:.25rem;padding:.5rem}
-  .source{border-left:1px solid var(--void-text-hint);padding:0 1rem;margin:1rem 0} .source p{white-space:pre-line;overflow-wrap:anywhere}
+  label{display:block;margin:1rem 0 0} select,button{background:var(--paper);color:inherit;border:1px solid var(--ink-subtle);border-radius:.25rem;padding:.5rem}
+  .source{border-left:1px solid var(--ink-subtle);padding:0 1rem;margin:1rem 0} .source p{white-space:pre-line;overflow-wrap:anywhere}
 </style>

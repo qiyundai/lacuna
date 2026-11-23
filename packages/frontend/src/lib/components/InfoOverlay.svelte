@@ -79,8 +79,7 @@
   }
 
   .info-overlay {
-    background: rgba(19, 16, 16, 0.82);
-    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    background: color-mix(in srgb, var(--paper) 82%, transparent);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
     cursor: pointer;
@@ -108,15 +107,15 @@
   }
 
   .info-content p {
-    color: var(--void-text);
-    font-family: var(--font-serif);
+    color: var(--ink);
+    font-family: var(--font);
     font-size: var(--text-md);
     line-height: var(--lh-prose);
     letter-spacing: var(--ls-prose);
     margin: 0;
   }
 
-  .info-content h2 {font:400 2.5rem/1.1 var(--font-reading);letter-spacing:-.045em}
+  .info-content h2 {font:400 2.5rem/1.1 var(--font);letter-spacing:-.045em}
   .lenses-section {
     display: flex;
     flex-direction: column;
@@ -125,8 +124,8 @@
   }
 
   .lenses-intro {
-    color: var(--void-text-hint) !important;
-    font-family: var(--font-serif);
+    color: var(--ink-subtle) !important;
+    font-family: var(--font);
     font-size: var(--text-sm) !important;
     line-height: var(--lh-prose);
     letter-spacing: var(--ls-prose);
@@ -149,24 +148,24 @@
   }
 
   .lens-label {
-    color: var(--void-text);
-    font-family: var(--font-serif);
+    color: var(--ink);
+    font-family: var(--font);
     font-size: var(--text-sm);
     line-height: 1.5;
     letter-spacing: var(--ls-prose);
   }
 
   .lens-desc {
-    color: var(--void-text-hint);
-    font-family: var(--font-serif);
+    color: var(--ink-subtle);
+    font-family: var(--font);
     font-size: var(--text-xs);
     line-height: var(--lh-prose);
     letter-spacing: var(--ls-prose);
   }
 
   .lenses-close {
-    color: var(--void-text-hint) !important;
-    font-family: var(--font-serif);
+    color: var(--ink-subtle) !important;
+    font-family: var(--font);
     font-size: var(--text-sm) !important;
     line-height: var(--lh-prose);
     letter-spacing: var(--ls-prose);

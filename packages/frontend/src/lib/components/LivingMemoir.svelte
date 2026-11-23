@@ -101,23 +101,23 @@
 <style>
   .memoir { max-width: 47rem; }
   .edition-meta { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 3.5rem 0 2.5rem; }
-  .quiet-button, .edition-history button { font: inherit; color: var(--void-text-hint); border: 0; background: none; cursor: pointer; line-height: 1.9; transition: color .35s ease; }
-  .quiet-button { font-size: .85rem; padding: .4rem 0; }
-  button:hover, button.chosen { color: var(--void-text); }
+  .quiet-button, .edition-history button { font: inherit; color: var(--ink-subtle); border: 0; background: none; cursor: pointer; line-height: 1.9; transition: color .35s ease; }
+  .quiet-button { font-size: var(--ui-sm); padding: .4rem 0; }
+  button:hover, button.chosen { color: var(--ink); }
   .prose { max-width: 60ch; margin: auto; }
-  .prose p { font: 1.25rem/2 var(--font-reading); color: var(--void-text-dim); margin-bottom: 1.6em; overflow-wrap: anywhere; transition: font-size .4s ease; white-space: pre-line; }
-  .prose p:first-child::first-letter { font-size: 3.5em; float: left; line-height: .85; padding: .16em .13em 0 0; color: var(--void-text); }
+  .prose p { font: 1.25rem/2 var(--font); color: var(--ink-muted); margin-bottom: 1.6em; overflow-wrap: anywhere; transition: font-size .4s ease; white-space: pre-line; }
+  .prose p:first-child::first-letter { font-size: 3.5em; float: left; line-height: .85; padding: .16em .13em 0 0; color: var(--ink); }
   .reading .prose p { font-size: 1.55rem; }
   .end-mark { text-align: center; font-size: 1.5rem; color: var(--moss); margin: 3rem 0; }
   .reader-note { text-align: center; font-style: italic; max-width: 34ch; margin: auto; }
   .edition-actions { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-top: 3rem; }
   .edition-history { display: flex; flex-direction: column; gap: 1.5rem; margin-top: 2.5rem; }
   .edition-history button { text-align: left; padding: .5rem 0; }
-  .edition-history time { display: block; font-size: .85rem; color: var(--void-text-faint); margin-bottom: .5rem; }
-  .edition-history span { font-family: var(--font-reading); font-size: 1.1rem; }
+  .edition-history time { display: block; font-size: var(--ui-sm); color: var(--ink-subtle); margin-bottom: .5rem; }
+  .edition-history span { font-family: var(--font); font-size: 1.1rem; }
   .memoir-seed { max-width: 34ch; min-height: 30rem; }
   .gathering { width: 8rem; height: 8rem; position: relative; margin-bottom: 2rem; }
-  .gathering span { position: absolute; left: 50%; top: 50%; height: 3px; width: 3px; border-radius: 50%; background: var(--hairline); transform: rotate(calc(var(--i) * 18deg)) translateY(-3.7rem); }
+  .gathering span { position: absolute; left: 50%; top: 50%; height: 3px; width: 3px; border-radius: 50%; background: var(--line); transform: rotate(calc(var(--i) * 18deg)) translateY(-3.7rem); }
   .gathering span.held { background: var(--moss); box-shadow: 0 0 9px color-mix(in srgb, var(--moss) 35%, transparent); }
   @media(max-width: 600px) { .prose p { font-size: 1.15rem; } .reading .prose p { font-size: 1.35rem; } .edition-meta { margin-top: 2.5rem; } }
 </style>

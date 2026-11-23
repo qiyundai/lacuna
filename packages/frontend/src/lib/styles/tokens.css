@@ -1,0 +1,127 @@
+/*
+ * Lacuna design tokens — the only place raw colors, sizes and timings live.
+ * Components reference these; they never introduce new hex values or
+ * magic numbers for anything a token already covers. See DESIGN.md.
+ *
+ * Two surfaces:
+ *   paper — light sheets, forms, the journal and reading views
+ *   scene — controls and type laid over the city, films and imagery
+ */
+:root {
+  color-scheme: light;
+
+  /* ── Paper surface ─────────────────────────────────────────── */
+  --paper: #f8f7ee;          /* page and sheet background */
+  --field: #eff1e6;          /* recessed areas, settings screen */
+  --valley: #e5eadd;         /* deeper tint, loading/empty states */
+  --ink: #203d35;            /* primary text and filled buttons — 11:1 on paper */
+  --ink-muted: #496154;      /* secondary text — 6.3:1 */
+  --ink-subtle: #59695c;     /* hints, meta, placeholders — 5.4:1, the floor */
+  --accent: #366553;         /* links, hover, focus, active indicators */
+  --danger: #913e31;
+  --line: #bec8b8;           /* decorative borders and hairlines */
+  --line-strong: #7e9183;    /* input underlines — 3:1 non-text contrast */
+  --rule: #526b5c38;         /* dividers between list items */
+  --selection: #d3e3cb;
+
+  /* Story tones: data accents for the soul map and kept marks only */
+  --lavender: #44675f;
+  --moss: #45603b;
+  --rose: #925445;
+
+  /* ── Scene surface ─────────────────────────────────────────── */
+  --scene-ink: #fff6df;                 /* type and icons over imagery */
+  --scene-ink-muted: #eee2c4;           /* secondary scene type */
+  --scene-shade: #112c27;               /* icon drop shadows */
+  --scene-control: #24463cd9;           /* solid round controls */
+  --scene-control-hover: var(--accent);
+  --scene-raised: #f3e7cd;              /* primary / active / open controls */
+  --scene-on-raised: var(--ink);
+  --scene-focus: #f4d59d;
+  --scene-type-shadow: 0 1px 2px #0c201c, 0 0 5px #0c201c, 0 1px 12px #0c201c;
+  --scene-wash: radial-gradient(ellipse closest-side, #102b26b3 12%, #102b266b 62%, transparent);
+  --scene-scrim: linear-gradient(#142f2b80, transparent);
+  --scene-backdrop: #132d3280;
+
+  /* ── Focus ─────────────────────────────────────────────────── */
+  --focus-width: 2px;
+  --focus-offset: 2px;
+  --focus: var(--accent);               /* on paper; scene uses --scene-focus */
+
+  /* ── Controls and icons ────────────────────────────────────── */
+  --control: 44px;            /* every round control and minimum hit target */
+  --control-gap: var(--space-2);
+  --icon: 20px;               /* navigation and scene icons */
+  --icon-sm: 18px;            /* dense controls (music player rows) */
+  --icon-stroke: 1.6;
+
+  /* ── Shape and elevation ───────────────────────────────────── */
+  --radius-s: 4px;            /* sheets, dialogs, small panels */
+  --radius-m: 10px;           /* floating panels (music player) */
+  --radius-pill: 999px;       /* buttons, markers */
+  --shadow-sheet: 0 20px 85px #0a1c21a6, 2px 3px 0 #d1c8ad;
+  --shadow-float: 0 12px 48px #0c231e45;
+
+  /* ── Layout ────────────────────────────────────────────────── */
+  --gutter: clamp(18px, 4.5vw, 80px);
+  --mast-height: 64px;
+  --sheet-inset: clamp(1.4rem, 4vw, 3.25rem);
+  --edge-bottom: max(1rem, env(safe-area-inset-bottom));
+
+  /* Stacking: chrome 2 · loading 5 · player 12 · overlays 200–225 */
+  --z-chrome: 2;
+  --z-loading: 5;
+  --z-player: 12;
+
+  /* ── Type ──────────────────────────────────────────────────── */
+  /* One family: serif for prose and interface alike */
+  --font: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  --font-mono: 'Courier New', Courier, monospace;
+
+  /* Reading scale (serif prose) */
+  --text-xs: 0.875rem;
+  --text-sm: 1rem;
+  --text-md: 1.125rem;
+  --text-lg: 1.375rem;
+  --text-xl: 1.75rem;
+  --text-void: clamp(1.125rem, 2.6vw, 1.5rem);
+
+  /* Interface scale (controls, captions, meta) — a step larger than a sans
+     would need, since the serif's x-height is smaller */
+  --ui-xs: 0.8125rem;         /* 13px meta, counts, timestamps */
+  --ui-sm: 0.875rem;          /* 14px captions, helper text */
+  --ui-md: 1rem;              /* 16px buttons and labels */
+  --ui-lg: 1.0625rem;         /* 17px inputs */
+
+  --lh-tight: 1.4;
+  --lh-ui: 1.6;
+  --lh-prose: 1.8;
+
+  --ls-prose: 0.02em;
+  --ls-ui: 0.04em;
+  --ls-label: 0.08em;
+  --ls-display: 0.16em;
+
+  /* ── Spacing — 4px base ────────────────────────────────────── */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --space-9: 6rem;
+
+  /* ── Motion ────────────────────────────────────────────────── */
+  --ease-soft: cubic-bezier(0.25, 0.8, 0.4, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-micro: 140ms;         /* hover, press, caption reveal */
+  --dur-fast: 200ms;
+  --dur-base: 350ms;
+  --dur-slow: 600ms;
+}
+
+@media (max-width: 760px) {
+  :root { --mast-height: 54px; }
+}

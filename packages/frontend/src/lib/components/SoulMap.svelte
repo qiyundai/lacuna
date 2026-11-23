@@ -67,26 +67,26 @@
 <style>
   .map-page { max-width: 68rem; }
   .centered { text-align: center; }
-  button { border: 0; background: none; color: var(--void-text-hint); font: inherit; cursor: pointer; transition: color .35s ease, opacity .35s ease; }
-  button:hover, button.chosen { color: var(--void-text); }
+  button { border: 0; background: none; color: var(--ink-subtle); font: inherit; cursor: pointer; transition: color .35s ease, opacity .35s ease; }
+  button:hover, button.chosen { color: var(--ink); }
   .map-modes, .kinds { display: flex; justify-content: center; gap: 2.4rem; }
   .map-modes { margin: 2.8rem 0 1.5rem; }
-  .kinds { gap: 1.8rem; font-size: .85rem; }
+  .kinds { gap: 1.8rem; font-size: var(--ui-sm); }
   .map-modes button, .kinds button { padding: .5rem 0; }
   .constellation { height: clamp(26rem, 48vw, 35rem); position: relative; --star-color: var(--lavender); margin: .5rem -1rem 0; }
   .constellation.feelings { --star-color: var(--rose); }
   .constellation.places { --star-color: var(--moss); }
   .sky { position: absolute; width: 100%; height: 100%; pointer-events: none; }
-  .sky ellipse { stroke: var(--hairline); stroke-width: .6; fill: none; opacity: .45; }
-  .sky circle { fill: var(--void-text-faint); opacity: .35; }
+  .sky ellipse { stroke: var(--line); stroke-width: .6; fill: none; opacity: .45; }
+  .sky circle { fill: var(--ink-subtle); opacity: .35; }
   .star { position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: .75rem; width: 8rem; min-height: 44px; padding: .4rem; }
   .point { width: var(--size); height: var(--size); border-radius: 50%; background: var(--star-color); box-shadow: 0 0 18px color-mix(in srgb, var(--star-color) 24%, transparent); transition: box-shadow .5s ease, transform .5s ease; }
   .concept { font-size: clamp(.8rem, 1.5vw, 1.05rem); line-height: 1.5; overflow-wrap: anywhere; max-width: 100%; display: -webkit-box; line-clamp: 2; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .star.selected { color: var(--void-text); }
+  .star.selected { color: var(--ink); }
   .star.selected .point, .star:hover .point { transform: scale(1.3); box-shadow: 0 0 30px color-mix(in srgb, var(--star-color) 50%, transparent); }
   .constellation-note { text-align: center; min-height: 7rem; }
-  .selected-name { font: 1.6rem/1.8 var(--font-reading); overflow-wrap: anywhere; }
-  .map-footnote { margin-top: 1.8rem; color: var(--void-text-faint); font-size: .8rem; }
+  .selected-name { font: 1.6rem/1.8 var(--font); overflow-wrap: anywhere; }
+  .map-footnote { margin-top: 1.8rem; color: var(--ink-subtle); font-size: var(--ui-xs); }
   .unformed { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; text-align: center; padding: 2rem; }
   .unformed > span { color: var(--lavender); font-size: 2rem; margin-bottom: 1rem; }
   .unformed > p { max-width: 30ch; }

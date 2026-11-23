@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import IconAction from './IconAction.svelte';
   import { lightAt,localHour,type ArrivalPhase } from '$lib/town/city-clock.js';
 
   let video:HTMLVideoElement;
@@ -48,16 +49,18 @@
   }}
   muted loop playsinline preload={requested?'metadata':'none'} aria-hidden="true" onerror={()=>{unavailable=true;}}></video>
 {#if !unavailable}
-  <button class="flight-control" aria-label={moving?'Pause corridor flight':'Play corridor flight'}
-    title={moving?'Pause corridor flight':'Play corridor flight'} onclick={()=>moving=!moving}>
-    <span class:playing={moving} aria-hidden="true"></span>
-  </button>
+  <div class="flight-control">
+    <IconAction tone="solid" labelled={false} icon={moving?'pause':'play'} label={moving?'Pause corridor flight':'Play corridor flight'} onclick={()=>moving=!moving}/>
+  </div>
 {/if}
 
 <style>
-  video{position:absolute;inset:0;width:100%;height:100%;z-index:-2;object-fit:cover;object-position:60% center;background:#202335}
-  .flight-control{position:absolute;right:var(--gutter);bottom:clamp(18px,4vh,42px);width:44px;height:44px;display:grid;place-items:center;border:1px solid #e5e8db91;border-radius:50%;background:#152925bf;color:#fff3d9;cursor:pointer}
-  .flight-control:hover{background:#152925}.flight-control span{width:0;height:0;border-left:10px solid currentColor;border-block:6px solid transparent;margin-left:3px}
-  .flight-control .playing{width:10px;height:12px;border:0;border-inline:3px solid currentColor;margin:0}
-  @media(max-width:600px){video{object-position:64% center}.flight-control{inset:calc(var(--mast-height) + 10px) auto auto var(--gutter)}}
+  video{position:absolute;inset:0;width:100%;height:100%;z-index:-2;object-fit:cover;object-position:60% center;background:var(--scene-shade)}
+  .flight-control{position:absolute;right:var(--gutter);bottom:var(--edge-bottom)}
+  @media(max-width:600px){
+    video{object-position:64% center}
+    .flight-control{inset:calc(var(--mast-height) + var(--space-2)) auto auto var(--gutter)}
+    /* At the left edge, the caption opens rightward so it stays on screen */
+    .flight-control :global(.scene-caption){left:calc(100% + var(--space-2));right:auto}
+  }
 </style>

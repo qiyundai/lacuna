@@ -583,14 +583,14 @@
       aria-hidden="true"
     >
       <svg class="hold-hint-ring" viewBox="0 0 100 100" width="80" height="80" aria-hidden="true">
-        <circle cx="50" cy="50" r="40" fill="none" stroke="var(--void-text)" stroke-width="1.5" opacity="0.15" />
+        <circle cx="50" cy="50" r="40" fill="none" stroke="var(--ink)" stroke-width="1.5" opacity="0.15" />
         <circle
           class="hold-hint-arc"
           cx="50"
           cy="50"
           r="40"
           fill="none"
-          stroke="var(--void-text)"
+          stroke="var(--ink)"
           stroke-width="1.5"
           stroke-dasharray="251"
           stroke-dashoffset="251"
@@ -641,16 +641,16 @@
 </div>
 
 <style>
-  .writing-heading{position:absolute;top:18%;left:var(--gutter);right:var(--gutter);pointer-events:none}.writing-heading h1{font:400 clamp(2.4rem,5vw,4.6rem)/1 var(--font-reading);letter-spacing:-.06em}.writing-heading p{font:1rem var(--font-ui);color:var(--muted);margin-block-start:.7rem}
-  .save-thought { position: absolute; bottom: 7rem; left: 50%; transform: translateX(-50%); z-index: 4; min-height: 44px; padding: .65rem 1.2rem; background: var(--bg); border: 1px solid var(--void-text-hint); border-radius: 2rem; color: var(--void-text); font: inherit; cursor: pointer; }
+  .writing-heading{position:absolute;top:18%;left:var(--gutter);right:var(--gutter);pointer-events:none}.writing-heading h1{font:400 clamp(2.4rem,5vw,4.6rem)/1 var(--font);letter-spacing:-.06em}.writing-heading p{font:1rem var(--font);color:var(--ink-muted);margin-block-start:.7rem}
+  .save-thought { position: absolute; bottom: 7rem; left: 50%; transform: translateX(-50%); z-index: 4; min-height: 44px; padding: .65rem 1.2rem; background: var(--paper); border: 1px solid var(--ink-subtle); border-radius: 2rem; color: var(--ink); font: inherit; cursor: pointer; }
   .save-thought:disabled { opacity: .6; cursor: default; }
-  .plan-indicator { position: absolute; top: 1.5rem; width: 100%; text-align: center; font-size: var(--text-xs); color: var(--void-text-hint); }
-  .save-error { position: absolute; bottom: 5rem; left: 10%; width: 80%; text-align: center; color: var(--void-danger); font-size: var(--text-xs); line-height: 1.8; }
+  .plan-indicator { position: absolute; top: 1.5rem; width: 100%; text-align: center; font-size: var(--text-xs); color: var(--ink-subtle); }
+  .save-error { position: absolute; bottom: 5rem; left: 10%; width: 80%; text-align: center; color: var(--danger); font-size: var(--text-xs); line-height: 1.8; }
   .void {
     position: relative;
     width: 100%;
     height: 100%;
-    background: var(--bg);
+    background: var(--paper);
     overflow: hidden;
     touch-action: none;
     user-select: none;
@@ -713,8 +713,8 @@
     max-width: 38ch;
     width: 80%;
     text-align: center;
-    color: var(--void-text);
-    font-family: var(--font-serif);
+    color: var(--ink);
+    font-family: var(--font);
     font-size: var(--text-void);
     line-height: var(--lh-prose);
     letter-spacing: var(--ls-prose);
@@ -874,7 +874,7 @@
     transform: translateX(-50%);
     background: none;
     border: none;
-    color: var(--void-text-faint);
+    color: var(--ink-subtle);
     font-size: var(--text-md);
     cursor: pointer;
     user-select: none;
@@ -891,7 +891,7 @@
     display: inline-block;
     width: 1.5px;
     height: 1.1em;
-    background: var(--void-text);
+    background: var(--ink);
     opacity: 0.5;
     margin-left: 1px;
     vertical-align: middle;
@@ -950,8 +950,8 @@
 
   .hold-hint-label {
     display: block;
-    color: var(--void-text-hint);
-    font-family: var(--font-serif);
+    color: var(--ink-subtle);
+    font-family: var(--font);
     font-size: var(--text-xs);
     letter-spacing: var(--ls-label);
     text-align: center;
@@ -964,7 +964,7 @@
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     letter-spacing: var(--ls-label);
-    color: var(--void-text-hint);
+    color: var(--ink-subtle);
     pointer-events: none;
     user-select: none;
     z-index: 3;

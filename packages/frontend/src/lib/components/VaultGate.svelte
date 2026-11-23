@@ -6,8 +6,8 @@
   import { signOut, setAuthed } from '$lib/stores/session.svelte.js';
   import { linkDevice } from '$lib/browser-sync.js';
   import { browserVault } from '$lib/web-vault.js';
-  import { prepareValleyAudio, leaveValley, valleyPlayback } from '$lib/valley-playback.svelte.js';
-  import PlayerIcon from './PlayerIcon.svelte';
+  import { prepareValleyAudio, leaveValley, willPlaySound } from '$lib/valley-playback.svelte.js';
+  import SoundCue from './SoundCue.svelte';
   let linking=$state(false),code=$state('');
   let passphrase = $state(''), confirmation = $state(''), error = $state(''), busy = $state(false), restoring = $state(false);
   let backup = $state<File | null>(null);
@@ -16,7 +16,7 @@
   const existing = $derived(vaultStore.status?.exists === true);
   const action = $derived(existing ? 'Unlock journal' : 'Create journal');
   const submitLabel=$derived(busy?'Opening…':linking?'Link this device':restoring?'Restore journal':action);
-  const audible=$derived(!valleyPlayback.muted&&(valleyPlayback.ambience||valleyPlayback.music));
+  const audible=$derived(willPlaySound());
   async function unlock() {
     if (busy) return;
     if (!restoring && !linking && !vaultStore.status?.exists && passphrase !== confirmation) { mismatch = true; error = 'Enter the same passphrase in both fields.'; repeatField?.focus(); return; }
@@ -55,7 +55,7 @@
     {/if}
     <p class="field-note" id="key-help">{restoring || existing || linking ? 'Use the passphrase you originally chose.' : 'Use at least 12 characters. Keep your passphrase and an encrypted backup somewhere safe. A lost passphrase cannot be reset.'}</p>
     {#if error}<p class="form-error" role="alert" id="key-error">{error}</p>{/if}
-    <button class="atlas-primary" type="submit" disabled={busy} aria-label={submitLabel+(audible&&!busy?' and enter the valley with sound':'')}>{submitLabel} <span aria-hidden="true"><PlayerIcon name={audible?'volume':'muted'}/></span></button>
+    <button class="atlas-primary" type="submit" disabled={busy} aria-label={submitLabel+(audible&&!busy?' and enter the valley with sound':'')}>{submitLabel}{#if !busy}<SoundCue/>{/if}</button>
     {#if !isCompanion && !restoring}<button class="atlas-link" type="button" disabled={busy} onclick={()=>{linking=!linking;code='';passphrase='';confirmation='';error='';mismatch=false;}}>{linking?'Return to this device':'Link a synced journal'}</button>{/if}
     {#if !linking}
     <button class="atlas-link" type="button" disabled={busy} onclick={() => { restoring = !restoring; error = ''; mismatch=false; passphrase = ''; confirmation = ''; backup = null; }}>{restoring ? 'Return to this device' : 'Restore from backup'}</button>

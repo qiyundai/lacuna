@@ -1,0 +1,181 @@
+/*
+ * Shared primitives. A pattern lives here once two or more components use
+ * it; one-off styling stays in the component's scoped <style>. See DESIGN.md.
+ */
+
+/* ── Scene controls ─────────────────────────────────────────────
+ * Round 44px buttons laid over the city or films.
+ *   .scene-control           soft wash, for items inside the menu
+ *   .scene-control.solid     filled, for controls that are always on screen
+ *   .scene-control.raised    cream, for the primary action and open states
+ * Add .labelled when the caption must stay visible on touch screens.
+ */
+.scene-control {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: var(--control);
+  block-size: var(--control);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--scene-wash);
+  color: var(--scene-ink);
+  font: inherit;
+  text-decoration: none;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.scene-control > svg { filter: drop-shadow(0 1px 2px var(--scene-shade)); }
+.scene-control.solid { background: var(--scene-control); }
+.scene-control.raised { background: var(--scene-raised); color: var(--scene-on-raised); }
+.scene-control:is(.solid, .raised) > svg { filter: none; }
+.scene-control:not(.raised):is(:enabled, a):hover,
+.scene-control:not(.raised):focus-visible { background: var(--scene-control-hover); color: var(--scene-ink); }
+.scene-control.raised:is(:enabled, a):hover,
+.scene-control.raised:focus-visible { background: var(--scene-ink); }
+.scene-control:focus-visible { outline: var(--focus-width) solid var(--scene-focus); outline-offset: var(--focus-offset); }
+.scene-control:disabled { opacity: .5; cursor: default; }
+
+.scene-caption {
+  position: absolute;
+  right: calc(100% + var(--space-2));
+  top: 50%;
+  width: max-content;
+  padding: var(--space-1);
+  color: var(--scene-ink);
+  text-shadow: var(--scene-type-shadow);
+  font: 400 var(--ui-sm)/1.25 var(--font);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(4px, -50%);
+}
+.scene-caption .state { margin-inline-start: .45em; color: var(--scene-ink-muted); font-weight: 400; }
+.scene-control:focus-visible > .scene-caption { opacity: 1; transform: translate(0, -50%); }
+@media (hover: hover) { .scene-control:hover > .scene-caption { opacity: 1; transform: translate(0, -50%); } }
+@media (hover: none) { .scene-control.labelled > .scene-caption { opacity: 1; transform: translate(0, -50%); pointer-events: auto; } }
+
+/* Rows of controls along the top edge: captions drop below instead of covering neighbours */
+.captions-below .scene-caption { top: calc(100% + 2px); right: 0; transform: translateY(-4px); }
+.captions-below .scene-control:focus-visible > .scene-caption { transform: none; }
+@media (hover: hover) { .captions-below .scene-control:hover > .scene-caption { transform: none; } }
+
+@media (prefers-reduced-motion: no-preference) {
+  .scene-control { transition: background-color var(--dur-micro) var(--ease-soft), color var(--dur-micro) var(--ease-soft); }
+  .scene-caption { transition: opacity var(--dur-micro) var(--ease-soft), transform var(--dur-micro) var(--ease-soft); }
+  .scene-control:active > svg { transform: scale(.91); }
+}
+
+/* ── Paper controls ─────────────────────────────────────────────
+ * Round 44px icon buttons on paper (journal page head, page turns).
+ */
+.paper-control {
+  flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: var(--control);
+  block-size: var(--control);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.paper-control:enabled:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.paper-control:disabled { opacity: .3; cursor: default; }
+.paper-control[aria-pressed=false] > .icon { opacity: .7; }
+@media (prefers-reduced-motion: no-preference) {
+  .paper-control { transition: background-color var(--dur-micro) var(--ease-soft), color var(--dur-micro) var(--ease-soft); }
+}
+
+/* ── Paper buttons and links ────────────────────────────────── */
+.atlas-primary,
+.atlas-link { font: 400 var(--ui-md)/1.25 var(--font); cursor: pointer; min-height: 48px; }
+.atlas-primary {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: .7rem 1.35rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  color: var(--paper);
+  transition: background var(--dur-fast) var(--ease-soft), transform var(--dur-fast) var(--ease-soft);
+}
+.atlas-primary:hover { background: var(--accent); }
+.atlas-primary:active { transform: translateY(1px); }
+.atlas-link {
+  border: none;
+  color: var(--accent);
+  background: transparent;
+  text-align: start;
+  text-decoration: underline;
+  text-underline-offset: .2em;
+}
+
+/* ── Forms ──────────────────────────────────────────────────── */
+.atlas-form { display: grid; gap: var(--space-5); font-family: var(--font); color: var(--ink); }
+.atlas-form h1 { font: 400 clamp(2rem, 3.5vw, 3.4rem)/1.03 var(--font); letter-spacing: -.055em; }
+.atlas-form > p { font-size: .98rem; line-height: 1.55; color: var(--ink-muted); }
+.atlas-form .field-note { font-size: var(--ui-sm); line-height: 1.5; }
+.atlas-form .form-error { color: var(--danger); }
+.field { display: grid; gap: .32rem; }
+.field label { font-size: .9rem; font-weight: 600; }
+.field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: .66rem .1rem;
+  border: 0;
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--ui-lg);
+}
+.field input[aria-invalid=true] { border-color: var(--danger); }
+
+/* ── Reading pages ──────────────────────────────────────────── */
+.story-page { max-width: 57rem; margin: 0 auto; padding: clamp(6rem, 12vh, 9rem) 2.5rem 8rem; min-height: 100%; }
+.story-heading h1 { font: 400 clamp(2rem, 4.5vw, 3.3rem)/1.25 var(--font); letter-spacing: -.025em; margin: .7rem 0 1.2rem; text-wrap: balance; }
+.whisper { font-size: var(--ui-sm); color: var(--ink-subtle); letter-spacing: .045em; line-height: 1.8; }
+.quiet { color: var(--ink-subtle); font-size: .95rem; line-height: 1.9; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.empty-story { min-height: 20rem; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 1.2rem; max-width: 35ch; margin: auto; }
+.empty-story > p:not(.quiet) { font: 1.45rem/1.6 var(--font); }
+.seed { color: var(--lavender); font-size: 2.2rem; margin-bottom: 1rem; }
+@media (max-width: 640px) { .story-page { padding: 6rem 1.5rem 7rem; } }
+
+/* ── Journal sheets (settings dialogs on paper) ─────────────── */
+[role="dialog"] > .journal-sheet {
+  width: min(100%, 38rem);
+  max-width: 38rem;
+  height: fit-content;
+  max-height: none;
+  margin: auto;
+  padding: var(--sheet-inset);
+  display: grid;
+  gap: var(--space-5);
+  text-align: start;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font: 1rem/1.6 var(--font);
+  letter-spacing: normal;
+}
+.journal-sheet.journal-sheet h2 {
+  margin: 0 0 .5rem;
+  font: 400 clamp(2rem, 4vw, 3.1rem)/1.1 var(--font);
+  letter-spacing: -.045em;
+}
+.journal-sheet.journal-sheet p { color: var(--ink-muted); font: inherit; letter-spacing: normal; }
+.journal-sheet.journal-sheet :is(button, a) { min-height: var(--control); display: inline-flex; align-items: center; font: 400 .95rem/1.4 var(--font); text-align: start; }
+.journal-sheet.journal-sheet button:not(.atlas-primary) { border-radius: 0; border: 0; background: transparent; color: var(--accent); cursor: pointer; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: .32em; }
+[role="dialog"]:has(> .journal-sheet) { align-items: safe center; padding: clamp(12px, 4vw, 56px); background: var(--paper); overflow-y: auto; }

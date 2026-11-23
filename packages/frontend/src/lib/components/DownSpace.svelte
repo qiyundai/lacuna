@@ -94,24 +94,25 @@
 </div>
 
 <style>
+  /* Views scroll in the first row; the switcher owns the second, so it never covers content */
   .down-space {
     position: relative;
     width: 100%;
     height: 100%;
-    background: var(--bg);
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    background: var(--paper);
     overflow: hidden;
     transition: filter var(--dur-slow) var(--ease-soft);
   }
 
-  .down-space.menu-open {
-    filter: blur(12px);
-  }
+  .down-space.menu-open { filter: blur(12px); }
 
   .views {
     display: flex;
     width: 300%;
-    height: 100%;
-    transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    min-height: 0;
+    transition: transform var(--dur-base) var(--ease-soft);
     will-change: transform;
   }
 
@@ -123,32 +124,26 @@
   }
 
   .dots {
-    position: absolute;
-    bottom: var(--space-5);
-    left: 50%;
-    transform: translateX(-50%);
+    justify-self: center;
     display: flex;
-    gap: 2rem;
-    z-index: 10;
-    padding: .6rem 1.5rem;
+    gap: var(--space-6);
+    padding: var(--space-2) var(--space-5) var(--edge-bottom);
     white-space: nowrap;
-    background: color-mix(in srgb, var(--bg) 92%, transparent);
   }
 
   .dot {
-    min-width: 44px;
-    height: 44px;
+    min-width: var(--control);
+    min-height: var(--control);
     display: grid;
     place-items: center;
-    background: none;
-    border: none;
-    cursor: pointer;
     padding: 0;
-    color: var(--void-text-hint);
-    font: .8rem/1.8 var(--font-serif);
-    transition: background var(--dur-base) var(--ease-soft);
+    border: none;
+    background: none;
+    color: var(--ink-subtle);
+    font: var(--ui-sm)/1.5 var(--font);
+    cursor: pointer;
+    transition: color var(--dur-base) var(--ease-soft);
   }
 
-  .dot.active { color: var(--void-text); }
-  .dot:hover { color: var(--void-text); }
+  .dot.active, .dot:hover { color: var(--ink); }
 </style>
