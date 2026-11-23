@@ -58,7 +58,7 @@
   {#if prose}
     <div class="edition-meta">
       <time class="whisper">{generated ? dateLabel(generated) : ''}{selected ? ' · an earlier telling' : ''}</time>
-      <button class="quiet-button" aria-pressed={reading} onclick={() => reading = !reading}>{reading ? 'smaller type' : 'settle in'}</button>
+      <button class="quiet-toggle" aria-pressed={reading} onclick={() => reading = !reading}>{reading ? 'smaller type' : 'settle in'}</button>
     </div>
     <article class="prose" aria-label="Memoir prose">
       {#each prose.split(/\n\s*\n/).filter(Boolean) as paragraph}<p>{paragraph}</p>{/each}
@@ -66,58 +66,58 @@
     <div class="end-mark" aria-hidden="true">✧</div>
     <p class="reader-note quiet">A reflection shaped with ChatGPT. The meaning is yours to keep or question.</p>
     <div class="edition-actions">
-      <button class="quiet-button" onclick={saveEdition}>take this edition with you</button>
-      <button class="quiet-button" aria-expanded={historyOpen} onclick={() => historyOpen = !historyOpen}>{historyOpen ? 'close earlier tellings' : 'earlier tellings'}</button>
+      <button class="quiet-toggle" onclick={saveEdition}>take this edition with you</button>
+      <button class="quiet-toggle" aria-expanded={historyOpen} onclick={() => historyOpen = !historyOpen}>{historyOpen ? 'close earlier tellings' : 'earlier tellings'}</button>
     </div>
     {#if historyOpen}
       <div class="edition-history" transition:fade={{ duration: 350 }}>
         <p class="quiet">The story changes as you do. Earlier editions stay here.</p>
-        <button class:chosen={!selected} onclick={() => chooseEdition(null)}>the current telling</button>
+        <button class="edition" aria-pressed={!selected} onclick={() => chooseEdition(null)}><span>the current telling</span></button>
         {#each editions as edition, i (edition.id)}
           {#if i > 0}
-            <button class:chosen={selected?.id === edition.id} onclick={() => chooseEdition(edition)}>
+            <button class="edition" aria-pressed={selected?.id === edition.id} onclick={() => chooseEdition(edition)}>
               <time>{dateLabel(edition.generated_at, { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</time>
               <span>{edition.prose.slice(0, 85)}{edition.prose.length > 85 ? '…' : ''}</span>
             </button>
           {/if}
         {/each}
         {#if editions.length <= 1 && !nextCursor}<p class="quiet">This is the first telling. The next will gather as you write.</p>{/if}
-        {#if nextCursor}<button disabled={loading} onclick={() => history(nextCursor ?? undefined)}>earlier still</button>{/if}
+        {#if nextCursor}<button class="quiet-toggle" disabled={loading} onclick={() => history(nextCursor ?? undefined)}>earlier still</button>{/if}
       </div>
     {/if}
   {:else if memoirStore.status === 'error'}
-    <div class="empty-story"><p>Your memoir couldn’t be reached.</p><button class="quiet-button" onclick={loadMemoir}>try again</button></div>
+    <div class="empty-story"><p>Your memoir couldn’t be reached.</p><button class="quiet-toggle" onclick={loadMemoir}>try again</button></div>
   {:else}
     <div class="empty-story memoir-seed">
       <div class="gathering" aria-hidden="true">{#each Array.from({ length: 20 }) as _, i}<span class:held={i < count} style={`--i:${i}`}></span>{/each}</div>
       <p>There’s room for the unfinished.</p>
       <p class="quiet">{!aiAvailable ? 'Living Memoir · Coming soon' : count < 20 ? `Your first memoir begins with 20 thoughts. You’ve held ${count}. For now, let the fragments be fragments.` : 'Your words are ready to gather into a first telling. Let ChatGPT reflect when you’re ready.'}</p>
-      {#if aiAvailable && count >= 20 && isCompanion}<button class="quiet-button" disabled={refreshing} onclick={reflect}>{refreshing ? 'beginning…' : 'gather a first telling'}</button>{/if}
+      {#if aiAvailable && count >= 20 && isCompanion}<button class="quiet-toggle" disabled={refreshing} onclick={reflect}>{refreshing ? 'beginning…' : 'gather a first telling'}</button>{/if}
     </div>
   {/if}
-  {#if error}<p role="alert" class="quiet">{error} <button class="quiet-button" onclick={() => history()}>try again</button></p>{/if}
+  {#if error}<p role="alert" class="quiet">{error} <button class="quiet-toggle" onclick={() => history()}>try again</button></p>{/if}
 </section>
 
 <style>
-  .memoir { max-width: 47rem; }
-  .edition-meta { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 3.5rem 0 2.5rem; }
-  .quiet-button, .edition-history button { font: inherit; color: var(--ink-subtle); border: 0; background: none; cursor: pointer; line-height: 1.9; transition: color .35s ease; }
-  .quiet-button { font-size: var(--ui-sm); padding: .4rem 0; }
-  button:hover, button.chosen { color: var(--ink); }
-  .prose { max-width: 60ch; margin: auto; }
-  .prose p { font: 1.25rem/2 var(--font); color: var(--ink-muted); margin-bottom: 1.6em; overflow-wrap: anywhere; transition: font-size .4s ease; white-space: pre-line; }
-  .prose p:first-child::first-letter { font-size: 3.5em; float: left; line-height: .85; padding: .16em .13em 0 0; color: var(--ink); }
-  .reading .prose p { font-size: 1.55rem; }
-  .end-mark { text-align: center; font-size: 1.5rem; color: var(--moss); margin: 3rem 0; }
-  .reader-note { text-align: center; font-style: italic; max-width: 34ch; margin: auto; }
-  .edition-actions { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-top: 3rem; }
-  .edition-history { display: flex; flex-direction: column; gap: 1.5rem; margin-top: 2.5rem; }
-  .edition-history button { text-align: left; padding: .5rem 0; }
-  .edition-history time { display: block; font-size: var(--ui-sm); color: var(--ink-subtle); margin-bottom: .5rem; }
-  .edition-history span { font-family: var(--font); font-size: 1.1rem; }
+  .memoir { max-width: 42rem; }
+  .edition-meta { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-5); padding-bottom: var(--space-2); border-bottom: 1px solid var(--rule); }
+  .prose p { margin-bottom: 1.5em; font: 400 var(--text-lg)/1.9 var(--font); letter-spacing: var(--ls-prose); color: var(--ink-muted); overflow-wrap: anywhere; white-space: pre-line; text-wrap: pretty; transition: font-size var(--dur-base) var(--ease-soft); }
+  .prose p:first-child::first-letter { float: left; margin: .08em .1em 0 0; font-size: 3.6em; line-height: .8; color: var(--ink); }
+  @supports (initial-letter: 2) {
+    .prose p:first-child::first-letter { float: none; margin: 0 .12em 0 0; font-size: inherit; line-height: inherit; initial-letter: 2; }
+  }
+  .reading .prose p { font-size: var(--text-xl); line-height: 1.8; }
+  .end-mark { margin: var(--space-7) 0 var(--space-5); text-align: center; font-size: var(--text-md); color: var(--moss); }
+  .reader-note { max-width: 34ch; margin: 0 auto; text-align: center; font-style: italic; }
+  .edition-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-4); margin-top: var(--space-7); padding-top: var(--space-2); border-top: 1px solid var(--rule); }
+  .edition-history { display: grid; margin-top: var(--space-4); }
+  .edition-history > .quiet { margin-bottom: var(--space-3); }
+  .edition { display: grid; gap: var(--space-1); padding: var(--space-4) 0; border: 0; border-top: 1px solid var(--rule); background: none; color: var(--ink-muted); font: inherit; text-align: left; cursor: pointer; transition: color var(--dur-fast) var(--ease-soft); }
+  .edition:hover, .edition[aria-pressed=true] { color: var(--ink); }
+  .edition time { font: 400 var(--ui-sm)/var(--lh-ui) var(--font); letter-spacing: var(--ls-ui); color: var(--ink-subtle); }
+  .edition span { font: 400 var(--text-md)/var(--lh-ui) var(--font); }
   .memoir-seed { max-width: 34ch; min-height: 30rem; }
-  .gathering { width: 8rem; height: 8rem; position: relative; margin-bottom: 2rem; }
+  .gathering { width: 8rem; height: 8rem; position: relative; margin-bottom: var(--space-5); }
   .gathering span { position: absolute; left: 50%; top: 50%; height: 3px; width: 3px; border-radius: 50%; background: var(--line); transform: rotate(calc(var(--i) * 18deg)) translateY(-3.7rem); }
   .gathering span.held { background: var(--moss); box-shadow: 0 0 9px color-mix(in srgb, var(--moss) 35%, transparent); }
-  @media(max-width: 600px) { .prose p { font-size: 1.15rem; } .reading .prose p { font-size: 1.35rem; } .edition-meta { margin-top: 2.5rem; } }
 </style>

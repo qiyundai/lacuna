@@ -2,6 +2,7 @@
   import IconAction from './IconAction.svelte';
   import Icon from './Icon.svelte';
   import SoundToggle from './SoundToggle.svelte';
+  import NowPlaying from './NowPlaying.svelte';
   import { activateValleyAudio, enterValley, leaveValley, toggleValleySound, valleyAudioContext, valleyPlayback } from '$lib/valley-playback.svelte.js';
   import { onMount, tick, type Snippet } from 'svelte';
   import Masthead from './Masthead.svelte';
@@ -69,6 +70,7 @@
   const fullDate=new Intl.DateTimeFormat(undefined,{month:'long',day:'numeric',year:'numeric'});
   const weekday=new Intl.DateTimeFormat(undefined,{weekday:'long'});
   const opening=$derived((!ready||!scene)&&!error&&!graphicsError);
+  const statusLine=$derived(error||(graphicsError?'City view unavailable. Your journal is open.':notice||(!entries.length&&ready?(forgotten.length?'No pages left to read.':'Your first page begins the city.'):'')));
   const date=new Intl.DateTimeFormat(undefined,{year:'numeric',month:'short',day:'numeric'});
   let readRequest=0;
   async function read(){
@@ -198,7 +200,8 @@
       {/if}
     </Masthead>
     <div class="bottom">
-      <p class="status" role="status">{error||(graphicsError?'City view unavailable. Your journal is open.':notice||(!entries.length&&ready?(forgotten.length?'No pages left to read.':'Your first page begins the city.') :''))}</p>
+      <!-- Bottom-left: a notice when there is one, otherwise the song that is playing -->
+      <div class="lead"><p class="status" role="status">{statusLine}</p>{#if !statusLine}<NowPlaying/>{/if}</div>
       <div class="actions">
         {#if graphicsError}<IconAction icon="retry" label="Retry city" onclick={graphics}/>{/if}
         {#if !ready&&error}<IconAction icon="retry" label="Retry journal" onclick={read}/>{/if}
@@ -233,15 +236,15 @@
             <textarea id="entry" rows="5" maxlength="500" required placeholder="What would you like to remember?" bind:value={draft}
               oninput={()=>draftId=''} onkeydown={e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)&&!e.isComposing){e.preventDefault();void save();}}}></textarea>
             <div class="leaf-foot"><span class="count" aria-label={draft.length+' of 500 characters'}>{draft.length} / 500</span>
-              <button disabled={busy||!ready||!draft.trim()} class="ink">{busy?'Saving…':'Save page'}</button></div>
+              <button disabled={busy||!ready||!draft.trim()} class="atlas-primary">{busy?'Saving…':'Save page'}</button></div>
           </form>
         {:else if panel==='forget' && openedPage}
           <h2 id="journal-heading">Forget this page?</h2>
           <p>This removes the words from your active journal. {neighbors.length>1?'The other pages at this address will stay.':'The building will stay, and its lights will go out.'}</p>
           {#if !guest}<p class="note">Related readings will disappear. Earlier backups and exports can still contain the page.</p>{/if}
           <div class="leaf-foot">
-            <button class="text-action" data-keep-page disabled={busy} onclick={()=>open('read')}>Keep this page</button>
-            <button class="ink" disabled={busy} onclick={forgetPage}>{busy?'Forgetting…':'Forget page'}</button>
+            <button class="atlas-link" data-keep-page disabled={busy} onclick={()=>open('read')}>Keep this page</button>
+            <button class="atlas-primary danger" disabled={busy} onclick={forgetPage}>{busy?'Forgetting…':'Forget page'}</button>
           </div>
         {:else if panel==='read' && openedPage}
           <h2 id="journal-heading" tabindex="-1">{weekday.format(openedPage.created_at*1000)}</h2>
@@ -255,9 +258,9 @@
                 <button class="paper-control" aria-label="Next page at this building" disabled={room>=neighbors.length-1} onclick={()=>readPage(neighbors[room+1]!.id)}><Icon name="chevron-right"/></button>
               </nav>
             {/if}
-            <button class="text-action" onclick={()=>open('pages')}>All pages</button>
+            <button class="atlas-link push" onclick={()=>open('pages')}>All pages</button>
           </div>
-          <button class="text-action" onclick={()=>open('forget')}>Forget this page</button>
+          <button class="atlas-link subtle forget" onclick={()=>open('forget')}>Forget this page</button>
         {:else}
           <h2 id="journal-heading" tabindex="-1">Your pages</h2>
           <div class="index">
@@ -267,7 +270,7 @@
                   <time datetime={new Date(page.created_at*1000).toISOString()}>{date.format(page.created_at*1000)}</time>
                   <span>{page.body}</span>
                 </button>
-                {#if scene && plan.addresses.has(page.id)}<button class="visit-site" onclick={()=>{dialog.close();scene?.visit('Page',page.id);}}>Visit in city ↗</button>{/if}
+                {#if scene && plan.addresses.has(page.id)}<button class="atlas-link subtle visit-site" onclick={()=>{dialog.close();scene?.visit('Page',page.id);}}>Visit in city ↗</button>{/if}
               </article>
             {:else}<p>Your saved pages will appear here.</p>{/each}
           </div>
@@ -284,8 +287,9 @@
   canvas{content-visibility:auto;contain-intrinsic-size:auto 700px;width:100%;height:100%;display:block;touch-action:none;cursor:grab}canvas:active{cursor:grabbing}
   .bottom{position:absolute;inset:auto var(--gutter) var(--edge-bottom);display:flex;align-items:flex-end;justify-content:space-between;gap:var(--space-3);pointer-events:none}
   .actions{margin-left:auto;display:grid;justify-items:end;gap:var(--control-gap);pointer-events:none}
-  button{min-height:var(--control);cursor:pointer;font:400 var(--ui-md)/1.2 var(--font)}
+  button{min-height:var(--control);cursor:pointer}
   button:disabled{cursor:default}
+  .lead{flex:0 1 auto;min-width:0;max-width:calc(100% - var(--control) - 8rem);pointer-events:none}
   .status{margin:0;padding-block:.6rem;color:var(--scene-ink);text-shadow:var(--scene-type-shadow);font:var(--ui-md)/1.4 var(--font)}.status:empty{display:none}
 
   /* Page markers over the city */
@@ -306,7 +310,7 @@
   .cover::after{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(0deg,color-mix(in srgb,var(--scene-shade) 96%,transparent),transparent 66%);box-shadow:inset -6px 0 10px -7px var(--scene-shade)}
   .imprint{padding:1.65rem 1.4rem;display:grid;gap:2px}
   .imprint span,.leaf-head,.count,.turns span,.note,time{font:var(--ui-sm)/1.45 var(--font)}
-  .imprint strong{font:400 clamp(1.7rem,3.5vw,2.7rem)/1.03 var(--font);letter-spacing:-.035em}
+  .imprint strong{font:400 var(--display-2)/var(--lh-display) var(--font);letter-spacing:var(--ls-display)}
   .reading .cover{background:var(--line);color:var(--ink);justify-content:center}
   .reading .cover::after{background:none}
   .plate{margin:.8rem .5rem 0}.plate img{display:block;width:100%;max-height:15rem;object-fit:contain;filter:drop-shadow(0 5px 3px color-mix(in srgb,var(--ink) 13%,transparent))}
@@ -316,22 +320,20 @@
   .leaf-head{color:var(--ink-muted);margin-bottom:var(--space-5)}
   /* Pull the tools out by half the hit-area padding so the × lines up with the text edge */
   .leaf-tools{display:flex;margin-right:calc((var(--icon) - var(--control)) / 2)}
-  .leaf h2{font:400 clamp(2.1rem,4vw,3.15rem)/1.07 var(--font);letter-spacing:-.05em;margin-bottom:.42rem}
+  .leaf h2{font:400 var(--display-2)/var(--lh-display) var(--font);letter-spacing:var(--ls-display);margin-bottom:var(--space-2)}
   .leaf time,.count,.note{color:var(--ink-subtle)}
   form{display:flex;flex-direction:column;gap:var(--space-5);flex:1;margin-top:var(--space-6)}
-  textarea{width:100%;min-height:7.5rem;resize:vertical;border:0;border-radius:0;padding:0 .2rem;color:var(--ink);caret-color:var(--accent);font:1.26rem/2rem var(--font);background:repeating-linear-gradient(transparent 0 calc(2rem - 1px),color-mix(in srgb,var(--ink-subtle) 12%,transparent) calc(2rem - 1px) 2rem);scroll-padding:.25rem}
+  textarea{width:100%;min-height:7.5rem;resize:vertical;border:0;border-radius:0;padding:0 .2rem;color:var(--ink);caret-color:var(--accent);font:400 var(--text-lg)/2rem var(--font);background:repeating-linear-gradient(transparent 0 calc(2rem - 1px),color-mix(in srgb,var(--ink-subtle) 12%,transparent) calc(2rem - 1px) 2rem);scroll-padding:.25rem}
   textarea::placeholder{color:var(--ink-subtle);font-style:italic}
-  .leaf-foot{margin-top:auto;padding-top:.9rem}
-  .ink{background:var(--ink);color:var(--paper);border:0;border-radius:var(--radius-pill);padding:.72rem 1.4rem}
-  .ink:enabled:hover{background:var(--accent)}.ink:disabled{background:var(--valley);color:var(--ink-subtle)}
-  .entry-body{white-space:pre-wrap;overflow-wrap:anywhere;font:1.4rem/1.65 var(--font);margin:1.4rem 0 2.2rem}
-  .index{margin-top:.8rem;max-height:48dvh;overflow:auto;overscroll-behavior:contain;padding-right:.4rem}.index article{padding:var(--space-4) 0}.index article+article{border-top:1px solid var(--rule)}
-  .index-entry,.text-action,.visit-site{background:none;color:var(--ink);border:0;text-align:left}
-  .index-entry{width:100%;display:grid;gap:.35rem}.index-entry span{font:1.16rem/1.45 var(--font);white-space:pre-wrap;overflow-wrap:anywhere}
-  .visit-site,.text-action{text-decoration:underline;text-underline-offset:.22em;font-size:var(--ui-sm)}.text-action{margin-left:auto}
+  .leaf-foot{margin-top:auto;padding-top:var(--space-4)}
+  .entry-body{white-space:pre-wrap;overflow-wrap:anywhere;font:400 var(--text-xl)/1.6 var(--font);letter-spacing:var(--ls-prose);text-wrap:pretty;margin:var(--space-5) 0 var(--space-6)}
+  .index{margin-top:var(--space-3);max-height:48dvh;overflow:auto;overscroll-behavior:contain;padding-right:.4rem}.index article{padding:var(--space-4) 0}.index article+article{border-top:1px solid var(--rule)}
+  .index-entry{padding:0;background:none;color:var(--ink);border:0;text-align:left;font:inherit;transition:color var(--dur-micro) var(--ease-soft)}
+  .index-entry{width:100%;display:grid;gap:var(--space-1)}.index-entry span{font:400 var(--text-md)/var(--lh-ui) var(--font);white-space:pre-wrap;overflow-wrap:anywhere}
+  .visit-site{min-height:36px}.push{margin-left:auto}.forget{margin-top:var(--space-2)}
   .turns{display:flex;align-items:center;gap:var(--space-1);margin-left:calc((var(--icon) - var(--control)) / 2)}
-  .note{margin:.7rem 0 0;font-size:var(--ui-xs)}
-  .leaf :is(.index-entry,.text-action,.visit-site):enabled:is(:hover,:focus-visible){color:var(--accent);text-decoration:underline;text-underline-offset:.28em}
+  .note{margin-top:var(--space-3);font-size:var(--ui-xs)}
+  .index-entry:is(:hover,:focus-visible){color:var(--accent)}
   @media(hover:hover) and (prefers-reduced-motion:no-preference){
     .page-marker .marker-face,.leaf button:not(.paper-control){transition:translate var(--dur-micro) var(--ease-soft)}
     .page-marker:hover .marker-face,.leaf button:not(.paper-control):enabled:hover{translate:0 -1px}
@@ -342,14 +344,15 @@
   .leaf h2:focus-visible{outline:0;text-decoration:underline;text-decoration-color:var(--line-strong);text-decoration-thickness:1px;text-underline-offset:.12em}
   textarea:focus-visible{outline:0;box-shadow:inset 2px 0 var(--line-strong);padding-left:.65rem}
   @media(prefers-reduced-motion:no-preference){dialog[open]{animation:unfold .22s var(--ease-out)}@keyframes unfold{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}}
-  @media(max-width:600px) and (hover:none){.bottom .status{flex-basis:100%}}
+  /* Phones: a notice or the song takes its own line above the write action, so neither is cut short */
+  @media(max-width:600px){.bottom .lead:has(.status:not(:empty),:global(.now-playing)){flex-basis:100%;max-width:none}}
   @media(max-width:600px){
     .bottom{flex-wrap:wrap}
     dialog{max-height:92dvh}.folio{display:flex;flex-direction:column;min-height:0}.cover{min-height:5rem;background-position:center 55%}
-    .imprint,.reading .imprint{padding:.65rem 1.3rem}.imprint strong{font-size:1.7rem}
+    .imprint,.reading .imprint{padding:.65rem 1.3rem}.imprint strong{font-size:var(--display-3)}
     .reading .cover{flex-direction:row-reverse;justify-content:space-between;align-items:center}
     .plate{margin:.2rem 1rem;width:5.75rem}.plate img{max-height:4.65rem}
-    .leaf{padding:.65rem var(--sheet-inset) var(--space-5)}.leaf-head{margin-bottom:.9rem}.leaf-foot{gap:.15rem}
-    .entry-body{margin:1.1rem 0 1.45rem}
+    .leaf{padding:var(--space-3) var(--sheet-inset) var(--space-5)}.leaf-head{margin-bottom:var(--space-4)}.leaf-foot{gap:var(--space-1)}
+    .entry-body{margin:var(--space-4) 0 var(--space-5)}
   }
 </style>

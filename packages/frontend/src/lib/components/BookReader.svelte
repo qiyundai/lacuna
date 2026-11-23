@@ -77,17 +77,22 @@
         {#each c.passages as p (p.id)}<div class="passage"><p>{p.prose}</p>{@render evidence(p.sources)}</div>{/each}
       </article>
     {:else}<p class="empty">Your memoir will gather pages from different days into chapters.</p>{/each}
-    {#if visible.length}<button onclick={save}>Export this edition</button>{/if}
+    {#if visible.length}<button class="atlas-link" onclick={save}>Export this edition</button>{/if}
   {/if}
 </section>
 <style>
-  .book{max-width:43rem;margin:0 auto;padding:clamp(2rem,7vw,6rem) clamp(1.2rem,4vw,3rem) 8rem;color:var(--ink);font-family:var(--font)}
-  header{border-bottom:1px solid var(--ink-subtle);padding-bottom:1.4rem}
-  h1{font:400 clamp(2.6rem,6vw,4.2rem)/1.05 var(--font);margin:0}
-  h2{font:400 clamp(1.6rem,4vw,2.3rem)/1.2 var(--font);margin:.6rem 0 1.5rem}
-  article{padding-top:2.4rem} .passage{margin-bottom:1.6rem} .passage>p,.empty{font-size:1.19rem;line-height:1.8;white-space:pre-line;overflow-wrap:anywhere}
-  time,summary,label,button{font:normal .9rem/1.5 var(--font);color:var(--ink-muted)}
-  summary,button,select{cursor:pointer} summary{width:fit-content;padding:.7rem 0}
-  label{display:block;margin:1rem 0 0} select,button{background:var(--paper);color:inherit;border:1px solid var(--ink-subtle);border-radius:.25rem;padding:.5rem}
-  .source{border-left:1px solid var(--ink-subtle);padding:0 1rem;margin:1rem 0} .source p{white-space:pre-line;overflow-wrap:anywhere}
+  .book{max-width:var(--measure-page);margin:0 auto;padding:clamp(var(--space-8),11vh,var(--space-9)) var(--gutter) var(--space-9);color:var(--ink);font-family:var(--font)}
+  header{padding-bottom:var(--space-5);border-bottom:1px solid var(--rule)}
+  h1{font:400 var(--display-1)/var(--lh-display) var(--font);letter-spacing:var(--ls-display);text-wrap:balance}
+  h2{margin:var(--space-2) 0 var(--space-5);font:400 var(--display-3)/var(--lh-heading) var(--font);letter-spacing:var(--ls-heading);text-wrap:balance}
+  article{padding-top:var(--space-7)}
+  .passage{margin-bottom:var(--space-5)}
+  .passage>p,.empty{font:400 var(--text-lg)/var(--lh-prose) var(--font);letter-spacing:var(--ls-prose);color:var(--ink-muted);white-space:pre-line;overflow-wrap:anywhere;text-wrap:pretty}
+  time,summary,label{font:400 var(--ui-sm)/var(--lh-ui) var(--font);letter-spacing:var(--ls-ui);color:var(--ink-subtle)}
+  summary{width:fit-content;min-height:var(--control);display:flex;align-items:center;cursor:pointer;color:var(--ink-muted)}
+  summary:hover{color:var(--ink)}
+  label{display:flex;align-items:center;gap:var(--space-3);margin-top:var(--space-4)}
+  select{min-height:var(--control);padding:0 var(--space-1);border:0;border-bottom:1px solid var(--line-strong);border-radius:0;background:transparent;color:var(--ink);font:400 var(--ui-md) var(--font);cursor:pointer}
+  .source{margin:var(--space-4) 0;padding:0 var(--space-4);border-left:1px solid var(--line)}
+  .source p{margin-top:var(--space-1);font:400 var(--text-sm)/var(--lh-prose) var(--font);color:var(--ink-muted);white-space:pre-line;overflow-wrap:anywhere}
 </style>

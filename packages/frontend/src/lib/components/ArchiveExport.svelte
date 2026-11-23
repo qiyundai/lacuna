@@ -22,25 +22,26 @@
   }
 </script>
 {#if show}
-  <div class="export-screen" use:modal={{ dismiss: () => show = false }} role="dialog" aria-modal="true" aria-label="Take your words with you" tabindex="-1" onclick={e => { if (e.target === e.currentTarget) show = false; }} onkeydown={e => { if (e.key === 'Escape') show = false; }} transition:fade={{ duration: 400 }}>
-    <div class="export-content journal-sheet">
+  <div class="sheet-screen" style:z-index="220" use:modal={{ dismiss: () => show = false }} role="dialog" aria-modal="true" aria-label="Take your words with you" tabindex="-1" onclick={e => { if (e.target === e.currentTarget) show = false; }} onkeydown={e => { if (e.key === 'Escape') show = false; }} transition:fade={{ duration: 400 }}>
+    <div class="journal-sheet">
       <h2>Export journal</h2>
       <p>Markdown and JSON exports contain your saved words in readable text. Anyone with the file can read them, even after you forget a page. For a file you can restore with your passphrase, choose Download an encrypted backup in Privacy &amp; storage.</p>
-      <button disabled={busy} onclick={() => take('markdown')}>A readable book · Markdown</button>
-      <button disabled={busy} onclick={() => take('json')}>The complete archive · JSON</button>
-      <p class="quiet">JSON also includes any saved reflections and concept map data.</p>
-      {#if done}<p role="status" class="quiet">Your archive is ready in your downloads.</p>{/if}
-      {#if error}<p role="alert">{error}</p>{/if}
-      <button class="return" onclick={() => show = false}>Return</button>
+      <div class="formats">
+        <button class="format" disabled={busy} onclick={() => take('markdown')}><span>A readable book</span><small>Markdown</small></button>
+        <button class="format" disabled={busy} onclick={() => take('json')}><span>The complete archive</span><small>JSON</small></button>
+      </div>
+      <p class="note">JSON also includes any saved reflections and concept map data.</p>
+      {#if done}<p role="status" class="note">Your archive is ready in your downloads.</p>{/if}
+      {#if error}<p role="alert" class="error">{error}</p>{/if}
+      <div class="sheet-foot"><button class="atlas-link" onclick={() => show = false}>Return</button></div>
     </div>
   </div>
 {/if}
 <style>
-  .export-screen { position: fixed; inset: 0; z-index: 220; display: flex; align-items: safe center; justify-content: center; overflow-y: auto; background: color-mix(in srgb, var(--paper) 94%, transparent); backdrop-filter: blur(22px); padding: 3rem 1.5rem; }
-  .export-content { max-width: 35ch; text-align: center; display: flex; flex-direction: column; gap: 1.5rem; line-height: 1.9; }
-  h2 { font: 400 2rem/1.4 var(--font); }
-  p { color: var(--ink-muted); }
-  button { border: none; background: none; color: var(--ink); font: inherit; line-height: 1.8; padding: .5rem 0; cursor: pointer; transition: color .3s ease; }
-  button:hover { color: var(--moss); }
-  .return { color: var(--ink-subtle); font-size: var(--ui-sm); margin-top: 1rem; }
+  .formats{display:grid;border-block:1px solid var(--rule)}
+  .format{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-4);min-height:64px;padding:0;border:0;background:none;color:var(--ink);font:400 var(--display-3)/var(--lh-heading) var(--font);letter-spacing:var(--ls-heading);text-align:start;cursor:pointer;transition:color var(--dur-micro) var(--ease-soft)}
+  .format + .format{border-top:1px solid var(--rule)}
+  .format small{font:400 var(--ui-sm)/1 var(--font);letter-spacing:var(--ls-label);text-transform:uppercase;color:var(--ink-subtle)}
+  .format:enabled:hover{color:var(--accent)}
+  .error{color:var(--danger)}
 </style>

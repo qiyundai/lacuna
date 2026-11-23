@@ -17,9 +17,9 @@
     <h1>Soul map</h1>
     <p class="quiet">{tone || 'Small recurrences, gradually becoming visible.'}</p>
   </header>
-  <div class="map-modes" aria-label="Explore your map">
-    <button class:chosen={!lenses} aria-pressed={!lenses} onclick={() => lenses = false}>constellation</button>
-    <button class:chosen={lenses} aria-pressed={lenses} onclick={() => lenses = true}>six lenses</button>
+  <div class="quiet-toggles map-modes" role="group" aria-label="Explore your map">
+    <button class="quiet-toggle" aria-pressed={!lenses} onclick={() => lenses = false}>constellation</button>
+    <button class="quiet-toggle" aria-pressed={lenses} onclick={() => lenses = true}>six lenses</button>
   </div>
   {#if lenses}
     <div class="lens-room" transition:fade={{ duration: 350 }}>
@@ -28,10 +28,10 @@
       <p class="quiet">These are interpretations. You decide what feels true.</p>
     </div>
   {:else}
-    <div class="kinds" aria-label="Concept types">
-      <button class:chosen={kind === 'theme'} aria-pressed={kind === 'theme'} onclick={() => choose('theme')}>threads</button>
-      <button class:chosen={kind === 'emotion'} aria-pressed={kind === 'emotion'} onclick={() => choose('emotion')}>feelings</button>
-      <button class:chosen={kind === 'entity'} aria-pressed={kind === 'entity'} onclick={() => choose('entity')}>people & places</button>
+    <div class="quiet-toggles kinds" role="group" aria-label="Concept types">
+      <button class="quiet-toggle" aria-pressed={kind === 'theme'} onclick={() => choose('theme')}>threads</button>
+      <button class="quiet-toggle" aria-pressed={kind === 'emotion'} onclick={() => choose('emotion')}>feelings</button>
+      <button class="quiet-toggle" aria-pressed={kind === 'entity'} onclick={() => choose('entity')}>people & places</button>
     </div>
     <div class="constellation" class:feelings={kind === 'emotion'} class:places={kind === 'entity'}>
       <svg viewBox="0 0 800 480" preserveAspectRatio="none" aria-hidden="true" class="sky">
@@ -50,7 +50,7 @@
           <span aria-hidden="true">✧</span>
           <p>{storyStore.status === 'error' ? 'Your map couldn’t be reached.' : 'Let a few words find each other.'}</p>
           <p class="quiet">{storyStore.status === 'error' ? 'Your saved thoughts are still here.' : 'Save a thought and let ChatGPT reflect. The first threads can appear right away.'}</p>
-          {#if storyStore.status === 'error'}<button onclick={loadStory}>try again</button>{/if}
+          {#if storyStore.status === 'error'}<button class="quiet-toggle" onclick={loadStory}>try again</button>{/if}
         </div>
       {/if}
     </div>
@@ -67,31 +67,30 @@
 <style>
   .map-page { max-width: 68rem; }
   .centered { text-align: center; }
-  button { border: 0; background: none; color: var(--ink-subtle); font: inherit; cursor: pointer; transition: color .35s ease, opacity .35s ease; }
-  button:hover, button.chosen { color: var(--ink); }
-  .map-modes, .kinds { display: flex; justify-content: center; gap: 2.4rem; }
-  .map-modes { margin: 2.8rem 0 1.5rem; }
-  .kinds { gap: 1.8rem; font-size: var(--ui-sm); }
-  .map-modes button, .kinds button { padding: .5rem 0; }
-  .constellation { height: clamp(26rem, 48vw, 35rem); position: relative; --star-color: var(--lavender); margin: .5rem -1rem 0; }
+  .map-modes, .kinds { justify-content: center; }
+  .map-modes { column-gap: var(--space-6); }
+  .map-modes .quiet-toggle { font-size: var(--ui-md); }
+  .kinds { margin-top: var(--space-1); }
+  .constellation { height: clamp(26rem, 48vw, 35rem); position: relative; --star-color: var(--lavender); margin: var(--space-4) calc(-1 * var(--space-4)) 0; }
   .constellation.feelings { --star-color: var(--rose); }
   .constellation.places { --star-color: var(--moss); }
   .sky { position: absolute; width: 100%; height: 100%; pointer-events: none; }
   .sky ellipse { stroke: var(--line); stroke-width: .6; fill: none; opacity: .45; }
   .sky circle { fill: var(--ink-subtle); opacity: .35; }
-  .star { position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: .75rem; width: 8rem; min-height: 44px; padding: .4rem; }
-  .point { width: var(--size); height: var(--size); border-radius: 50%; background: var(--star-color); box-shadow: 0 0 18px color-mix(in srgb, var(--star-color) 24%, transparent); transition: box-shadow .5s ease, transform .5s ease; }
-  .concept { font-size: clamp(.8rem, 1.5vw, 1.05rem); line-height: 1.5; overflow-wrap: anywhere; max-width: 100%; display: -webkit-box; line-clamp: 2; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .star.selected { color: var(--ink); }
+  .star { position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: var(--space-2); width: 8rem; min-height: var(--control); padding: var(--space-1); border: 0; background: none; color: var(--ink-subtle); font: inherit; cursor: pointer; transition: color var(--dur-fast) var(--ease-soft); }
+  .star:hover, .star.selected { color: var(--ink); }
+  .point { width: var(--size); height: var(--size); border-radius: 50%; background: var(--star-color); box-shadow: 0 0 18px color-mix(in srgb, var(--star-color) 24%, transparent); transition: box-shadow var(--dur-slow) var(--ease-soft), transform var(--dur-slow) var(--ease-soft); }
+  .concept { max-width: 100%; font: 400 var(--ui-md)/var(--lh-tight) var(--font); letter-spacing: var(--ls-ui); overflow-wrap: anywhere; display: -webkit-box; line-clamp: 2; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .star.selected .point, .star:hover .point { transform: scale(1.3); box-shadow: 0 0 30px color-mix(in srgb, var(--star-color) 50%, transparent); }
-  .constellation-note { text-align: center; min-height: 7rem; }
-  .selected-name { font: 1.6rem/1.8 var(--font); overflow-wrap: anywhere; }
-  .map-footnote { margin-top: 1.8rem; color: var(--ink-subtle); font-size: var(--ui-xs); }
-  .unformed { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; text-align: center; padding: 2rem; }
-  .unformed > span { color: var(--lavender); font-size: 2rem; margin-bottom: 1rem; }
-  .unformed > p { max-width: 30ch; }
-  .lens-room { text-align: center; margin-top: 2rem; }
-  .lens-room :global(.soul-map) { padding: 2rem 0; min-height: auto; }
-  .lens-room :global(.labels) { max-width: 34rem; text-align: left; display: grid; grid-template-columns: 1fr 1fr; gap: 1.4rem 2rem; }
-  @media(max-width: 600px) { .star { width: 5.7rem; } .constellation { margin-left: -.6rem; margin-right: -.6rem; } .kinds { gap: 1.2rem; } .lens-room :global(.labels) { grid-template-columns: 1fr; } }
+  .constellation-note { min-height: 7rem; text-align: center; }
+  .selected-name { font: 400 var(--display-3)/var(--lh-heading) var(--font); letter-spacing: var(--ls-heading); overflow-wrap: anywhere; }
+  .map-footnote { margin-top: var(--space-5); font: 400 var(--ui-xs)/var(--lh-ui) var(--font); letter-spacing: var(--ls-ui); color: var(--ink-subtle); }
+  .unformed { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-4); padding: var(--space-6); text-align: center; }
+  .unformed > span { color: var(--lavender); font-size: var(--text-xl); line-height: 1; }
+  .unformed > p:not(.quiet) { max-width: 30ch; font: 400 var(--text-xl)/var(--lh-heading) var(--font); letter-spacing: var(--ls-heading); }
+  .unformed > p.quiet { max-width: 34ch; }
+  .lens-room { margin-top: var(--space-5); text-align: center; }
+  .lens-room :global(.soul-map) { padding: var(--space-6) 0; min-height: auto; }
+  .lens-room :global(.labels) { max-width: 34rem; text-align: left; display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5) var(--space-6); }
+  @media (max-width: 600px) { .star { width: 5.75rem; } .concept { font-size: var(--ui-sm); } .constellation { margin-inline: calc(-1 * var(--space-2)); } .lens-room :global(.labels) { grid-template-columns: 1fr; } }
 </style>

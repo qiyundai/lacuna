@@ -46,28 +46,29 @@
   {#if !account}
     <p>A subscription adds a Soul Map and a memoir written from your pages. Writing and reading your existing book stay free.</p>
     <form onsubmit={e=>{e.preventDefault();void run(signIn);}}>
-      <label>Email <input required type="email" autocomplete="email" bind:value={email} disabled={sent}/></label>
-      {#if sent}<label>Code from your email <input required maxlength="12" autocomplete="one-time-code" bind:value={code}/></label>{/if}
-      <button disabled={busy}>{sent?'Sign in':'Email a sign-in code'}</button>
-      {#if sent}<button type="button" disabled={busy} onclick={()=>{sent=false;code='';}}>Change email</button>{/if}
+      <div class="field"><label for="billing-email">Email</label><input id="billing-email" required type="email" autocomplete="email" bind:value={email} disabled={sent}/></div>
+      {#if sent}<div class="field"><label for="billing-code">Code from your email</label><input id="billing-code" required maxlength="12" autocomplete="one-time-code" bind:value={code}/></div>{/if}
+      <button class="atlas-primary" disabled={busy}>{sent?'Sign in':'Email a sign-in code'}</button>
+      {#if sent}<button class="atlas-link" type="button" disabled={busy} onclick={()=>{sent=false;code='';}}>Change email</button>{/if}
     </form>
   {:else}
-    <p>{account.email}</p>
+    <p class="note">{account.email}</p>
     {#if account.paid}
       <p>With your permission, Lacuna sends excerpts from past and future pages to OpenAI while this journal is unlocked. Your book is saved here.</p>
-      <button disabled={busy} onclick={()=>run(()=>share(!enabled))}>{enabled?'Pause reflections':'Allow reflections on this journal'}</button>
+      <button class="atlas-link" disabled={busy} onclick={()=>run(()=>share(!enabled))}>{enabled?'Pause reflections':'Allow reflections on this journal'}</button>
     {:else}
       <p>A subscription adds new readings and memoir passages. You can review the price at checkout.</p>
-      <button disabled={busy} onclick={()=>run(()=>checkout('checkout'))}>View subscription</button>
-      {#if enabled}<button disabled={busy} onclick={()=>run(()=>share(false))}>Withdraw journal consent</button>{/if}
+      <button class="atlas-link" disabled={busy} onclick={()=>run(()=>checkout('checkout'))}>View subscription</button>
+      {#if enabled}<button class="atlas-link" disabled={busy} onclick={()=>run(()=>share(false))}>Withdraw journal consent</button>{/if}
     {/if}
-    {#if account.customer}<button disabled={busy} onclick={()=>run(()=>checkout('portal'))}>Manage billing</button>{/if}
-    <button disabled={busy} onclick={()=>run(async()=>{await browserVault().update(d=>{delete d.reflectionConsent;});announceBrowserLock();await hosted('logout',{});account=null;enabled=false;sent=false;})}>Sign out of billing account</button>
+    {#if account.customer}<button class="atlas-link" disabled={busy} onclick={()=>run(()=>checkout('portal'))}>Manage billing</button>{/if}
+    <button class="atlas-link" disabled={busy} onclick={()=>run(async()=>{await browserVault().update(d=>{delete d.reflectionConsent;});announceBrowserLock();await hosted('logout',{});account=null;enabled=false;sent=false;})}>Sign out of billing account</button>
   {/if}
-  {#if error}<p role="alert">{error}</p>{/if}
+  {#if error}<p role="alert" class="error">{error}</p>{/if}
   {#if enabled && progress}<p role="status">{progress}</p>{/if}
 </div>
 <style>
-  .membership{display:grid;gap:.8rem}.membership form,label{display:grid;gap:.5rem}input,button{font:inherit;padding:.65rem .8rem;border:1px solid var(--ink-subtle);border-radius:.25rem;background:var(--paper);color:var(--ink)}
-  button{cursor:pointer}button:disabled{opacity:.65}p{line-height:1.65}
+  .membership,form{display:grid;gap:var(--space-4);justify-items:start}
+  .field{justify-self:stretch}
+  .error{color:var(--danger)}
 </style>

@@ -84,30 +84,30 @@
   <header class="story-heading">
     <h1>Your journal</h1>
     {#if storyStore.data?.summary.total}
-      <p class="quiet">{storyStore.data.summary.total} {storyStore.data.summary.total === 1 ? 'thought' : 'thoughts'} gathered{#if storyStore.data.summary.first_at} since {dateLabel(storyStore.data.summary.first_at, { month: 'long', year: 'numeric' })}{/if}.</p>
+      <p class="quiet">{storyStore.data.summary.total} {storyStore.data.summary.total === 1 ? 'thought' : 'thoughts'} gathered{#if storyStore.data.summary.first_at}{' since '}{dateLabel(storyStore.data.summary.first_at, { month: 'long', year: 'numeric' })}{/if}.</p>
     {/if}
   </header>
   <div class="archive-controls">
-    <div class="filters" aria-label="Filter thoughts">
-      <button class:chosen={!kept} aria-pressed={!kept} onclick={() => kept = false}>everything</button>
-      <button class:chosen={kept} aria-pressed={kept} onclick={() => kept = true}>kept close{#if storyStore.data?.summary.kept} <span>{storyStore.data.summary.kept}</span>{/if}</button>
+    <div class="quiet-toggles" role="group" aria-label="Filter thoughts">
+      <button class="quiet-toggle" aria-pressed={!kept} onclick={() => kept = false}>everything</button>
+      <button class="quiet-toggle" aria-pressed={kept} onclick={() => kept = true}>kept close{#if storyStore.data?.summary.kept}<span class="count">{storyStore.data.summary.kept}</span>{/if}</button>
     </div>
-    <button aria-expanded={searching} onclick={() => { searching = !searching; if (!searching) query = ''; }}>find a word</button>
+    <button class="quiet-toggle" aria-expanded={searching} onclick={() => { searching = !searching; if (!searching) query = ''; }}>find a word</button>
   </div>
   {#if searching}
     <div class="search-line" transition:fade={{ duration: 250 }}>
       <input type="search" aria-label="Search all your thoughts" placeholder="a person, a place, a feeling…" bind:value={query} maxlength="200" />
-      {#if query}<button onclick={() => query = ''}>clear</button>{/if}
+      {#if query}<button class="quiet-toggle" onclick={() => query = ''}>clear</button>{/if}
     </div>
   {/if}
-  {#if error}<p class="quiet" role="alert">{error} <button onclick={() => searchEntries(query.trim(), kept, requestId)}>try again</button></p>{/if}
+  {#if error}<p class="quiet" role="alert">{error} <button class="quiet-toggle" onclick={() => searchEntries(query.trim(), kept, requestId)}>try again</button></p>{/if}
   {#if loading || (entriesStore.status === 'loading' && !entries.length)}<p class="quiet waiting" role="status">gathering your words…</p>
   {:else if !entries.length}
     <div class="empty-story">
       <span class="seed" aria-hidden="true">✧</span>
       <p>{filtered ? 'No thoughts here yet.' : 'Your journal is ready.'}</p>
       <p class="quiet">{query ? 'Try another word, or clear your search.' : kept ? 'Open a thought and choose “keep close” to find it here.' : 'Write a thought in town to meet its resident. Your original words will appear here.'}</p>
-      {#if entriesStore.status === 'error'}<button onclick={loadEntries}>try loading again</button>{/if}
+      {#if entriesStore.status === 'error'}<button class="quiet-toggle" onclick={loadEntries}>try loading again</button>{/if}
     </div>
   {:else}
     {#each groups as group (group.key)}
@@ -124,8 +124,8 @@
         </div>
       </section>
     {/each}
-    {#if filtered ? nextCursor : entriesStore.nextCursor}<button class="earlier" disabled={loading || entriesStore.status === 'loading'} onclick={earlier}>a little earlier</button>{/if}
-    {#if !filtered && entriesStore.status === 'error'}<p class="quiet">Could not load earlier thoughts. <button onclick={earlier}>try again</button></p>{/if}
+    {#if filtered ? nextCursor : entriesStore.nextCursor}<button class="quiet-toggle earlier" disabled={loading || entriesStore.status === 'loading'} onclick={earlier}>a little earlier</button>{/if}
+    {#if !filtered && entriesStore.status === 'error'}<p class="quiet">Could not load earlier thoughts. <button class="quiet-toggle" onclick={earlier}>try again</button></p>{/if}
   {/if}
 </section>
 
@@ -135,50 +135,53 @@
       <time class="whisper">{dateLabel(selected.created_at)}</time>
       <p class="held-words">{selected.body}</p>
       <div class="thought-actions">
-        <button disabled={busy} aria-pressed={!!selected.kept_at} onclick={keepThought}>{selected.kept_at ? '✧ kept close' : '✧ keep close'}</button>
-        <button disabled={busy} onclick={() => confirming = !confirming}>Forget this page</button>
+        <button class="quiet-toggle kept" disabled={busy} aria-pressed={!!selected.kept_at} onclick={keepThought}>{selected.kept_at ? '✧ kept close' : '✧ keep close'}</button>
+        <button class="quiet-toggle" disabled={busy} aria-expanded={confirming} onclick={() => confirming = !confirming}>forget this page</button>
       </div>
       {#if confirming}
         <div class="release" transition:fade={{ duration: 250 }}>
           <p>This removes the words and related readings from your active journal. The address stays. Earlier backups and exports may still contain the page.</p>
-          <button disabled={busy} onclick={() => confirming = false}>Keep this page</button>
-          <button class="danger" disabled={busy} onclick={forgetThought}>Forget page</button>
+          <div class="release-actions"><button class="quiet-toggle" disabled={busy} onclick={() => confirming = false}>keep this page</button>
+          <button class="quiet-toggle danger" disabled={busy} onclick={forgetThought}>forget page</button></div>
         </div>
       {/if}
       {#if detailError}<p role="alert" class="quiet">{detailError}</p>{/if}
-      <button class="back" disabled={busy} onclick={close}>return to your words</button>
+      <button class="quiet-toggle back" disabled={busy} onclick={close}>return to your words</button>
     </article>
   </div>
 {/if}
 
 <style>
-  .archive-controls, .filters { display: flex; align-items: center; gap: 1.8rem; }
-  .archive-controls { justify-content: space-between; margin: 3.3rem 0 2rem; flex-wrap: wrap; gap: .8rem; }
-  button { background: none; border: none; color: var(--ink-subtle); font: inherit; cursor: pointer; line-height: 1.8; transition: color .3s ease; }
-  .archive-controls button { font-size: .9rem; padding: .5rem 0; }
-  button:hover, button.chosen { color: var(--ink); }
-  .filters span { margin-left: .4rem; color: var(--moss); }
-  .search-line { display: flex; gap: 1rem; margin: 0 0 2.5rem; }
-  input { width: 100%; background: none; border: none; border-bottom: 1px solid var(--line); padding: .8rem 0; color: var(--ink); font: inherit; font-size: 1.2rem; border-radius: 0; }
-  input::placeholder { color: var(--ink-subtle); }
-  .month { display: grid; grid-template-columns: 9rem 1fr; gap: 2rem; margin: 3rem 0 4rem; }
-  h2 { font-size: .95rem; font-weight: 400; color: var(--ink-subtle); padding-top: .3rem; }
-  .thoughts { display: flex; flex-direction: column; gap: 2.7rem; }
-  .thought { display: grid; grid-template-columns: 4rem 1fr 1rem; gap: 1rem; text-align: left; width: 100%; }
-  .thought time { font-size: var(--ui-xs); color: var(--ink-subtle); padding-top: .3rem; }
-  .words { font-family: var(--font); font-size: clamp(1.1rem, 1.7vw, 1.35rem); line-height: 1.85; color: var(--ink-muted); white-space: pre-wrap; overflow-wrap: anywhere; transition: color .3s ease; }
+  /* The month and date columns need room beside a full reading line */
+  .timeline { max-width: 62rem; }
+  .archive-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-5); padding-bottom: var(--space-2); border-bottom: 1px solid var(--rule); }
+  .search-line { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-4); }
+  input { width: 100%; min-height: 48px; padding: var(--space-2) 0; border: 0; border-bottom: 1px solid var(--line-strong); border-radius: 0; background: none; color: var(--ink); font: 400 var(--text-lg)/1.4 var(--font); }
+  input:focus-visible { outline: 0; border-bottom-color: var(--ink); }
+  input::placeholder { color: var(--ink-subtle); font-style: italic; }
+  /* Month on the left, thoughts on the right; every line shares the entry's first baseline */
+  .month { display: grid; grid-template-columns: 8rem minmax(0, 1fr); column-gap: var(--space-6); align-items: baseline; margin-top: var(--space-8); }
+  .month:first-of-type { margin-top: var(--space-7); }
+  h2 { font: 400 var(--ui-sm)/var(--lh-ui) var(--font); letter-spacing: var(--ls-ui); color: var(--ink-subtle); }
+  .thoughts { display: flex; flex-direction: column; gap: var(--space-6); }
+  .thought { display: grid; grid-template-columns: 3.75rem minmax(0, 1fr) 1.25rem; column-gap: var(--space-4); align-items: baseline; width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .thought time { font: 400 var(--ui-xs)/var(--lh-ui) var(--font); letter-spacing: var(--ls-ui); color: var(--ink-subtle); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .words { font: 400 var(--text-lg)/var(--lh-prose) var(--font); letter-spacing: var(--ls-prose); color: var(--ink-muted); white-space: pre-wrap; overflow-wrap: anywhere; transition: color var(--dur-fast) var(--ease-soft); }
   .thought:hover .words { color: var(--ink); }
-  .kept-mark { color: var(--moss); font-size: 1.2rem; }
-  .earlier { display: block; margin: 3rem auto; padding: .8rem; }
-  .waiting { padding: 3rem 0; }
-  .thought-screen { position: fixed; inset: 0; z-index: 220; overflow-y: auto; display: flex; align-items: safe center; justify-content: center; background: color-mix(in srgb, var(--paper) 95%, transparent); backdrop-filter: blur(22px); padding: 5rem 1.5rem; }
-  .thought-reader { width: min(100%, 36rem); text-align: center; }
-  .held-words { margin: 2rem 0 2.5rem; font: clamp(1.4rem, 3vw, 2rem)/1.8 var(--font); white-space: pre-wrap; overflow-wrap: anywhere; }
-  .thought-actions { display: flex; gap: 2rem; justify-content: center; }
-  .thought-actions button[aria-pressed="true"] { color: var(--moss); }
-  .back { display: block; margin: 3rem auto 0; font-size: var(--ui-sm); }
-  .release { margin-top: 2rem; font-size: .95rem; line-height: 1.9; color: var(--ink-subtle); }
-  .release button { margin: 1rem .8rem 0; }
-  .danger { color: var(--danger); }
-  @media(max-width: 640px) { .month { grid-template-columns: 1fr; gap: 1.5rem; } .thought { grid-template-columns: 2.6rem 1fr .8rem; gap: .7rem; } .archive-controls { margin-top: 2.4rem; } }
+  .kept-mark { justify-self: end; color: var(--moss); font-size: var(--ui-md); }
+  .earlier { display: flex; margin: var(--space-8) auto 0; }
+  .waiting { padding: var(--space-7) 0; }
+  .thought-screen { position: fixed; inset: 0; z-index: 220; overflow-y: auto; display: flex; align-items: safe center; justify-content: center; padding: var(--space-9) var(--gutter); background: color-mix(in srgb, var(--paper) 95%, transparent); -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px); }
+  .thought-reader { width: min(100%, 36rem); display: grid; justify-items: center; text-align: center; }
+  .held-words { margin: var(--space-5) 0 var(--space-7); font: 400 var(--text-xl)/1.65 var(--font); letter-spacing: var(--ls-prose); white-space: pre-wrap; overflow-wrap: anywhere; text-wrap: pretty; }
+  .thought-actions, .release-actions { display: flex; flex-wrap: wrap; justify-content: center; column-gap: var(--space-6); }
+  .kept[aria-pressed=true] { color: var(--moss); }
+  .back { margin-top: var(--space-6); }
+  .release { max-width: 32rem; margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--rule); font: 400 var(--ui-md)/var(--lh-prose) var(--font); color: var(--ink-subtle); }
+  .release-actions { margin-top: var(--space-2); }
+  .danger, .danger:enabled:hover { color: var(--danger); }
+  @media (max-width: 640px) {
+    .month { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-4); margin-top: var(--space-7); }
+    .thought { grid-template-columns: 3.25rem minmax(0, 1fr) 1rem; column-gap: var(--space-3); }
+  }
 </style>

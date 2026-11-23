@@ -68,39 +68,56 @@
   --sheet-inset: clamp(1.4rem, 4vw, 3.25rem);
   --edge-bottom: max(1rem, env(safe-area-inset-bottom));
 
-  /* Stacking: chrome 2 · loading 5 · player 12 · overlays 200–225 */
+  /* Stacking: chrome 2 · loading 5 · overlays 200–225 (the listening room 205) */
   --z-chrome: 2;
   --z-loading: 5;
-  --z-player: 12;
+  --z-room: 205;
 
   /* ── Type ──────────────────────────────────────────────────── */
   /* One family: serif for prose and interface alike */
   --font: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
   --font-mono: 'Courier New', Courier, monospace;
 
+  /* Display scale — headings only. Each role has one size everywhere. */
+  --display-hero: clamp(3.75rem, 8.2vw, 8.75rem); /* the welcome title over the valley */
+  --display-1: clamp(2.5rem, 4.4vw, 3.5rem);      /* page titles: Your journal, Soul map, Quiet writing */
+  --display-2: clamp(2.125rem, 3.4vw, 2.75rem);   /* sheet titles: settings, forms, the journal leaf */
+  --display-3: clamp(1.4rem, 2.2vw, 1.625rem);    /* section heads inside a sheet or page */
+  --text-signature: 1.75rem;                      /* the "Lacuna" wordmark in the top bar */
+
   /* Reading scale (serif prose) */
   --text-xs: 0.875rem;
-  --text-sm: 1rem;
-  --text-md: 1.125rem;
-  --text-lg: 1.375rem;
-  --text-xl: 1.75rem;
+  --text-sm: 1rem;            /* supporting prose */
+  --text-md: 1.125rem;        /* sheet body copy */
+  --text-lg: clamp(1.1875rem, 1.5vw, 1.3125rem); /* journal entries, memoir prose */
+  --text-xl: clamp(1.375rem, 2.2vw, 1.625rem);     /* a single thought held up to read */
   --text-void: clamp(1.125rem, 2.6vw, 1.5rem);
 
   /* Interface scale (controls, captions, meta) — a step larger than a sans
      would need, since the serif's x-height is smaller */
   --ui-xs: 0.8125rem;         /* 13px meta, counts, timestamps */
-  --ui-sm: 0.875rem;          /* 14px captions, helper text */
+  --ui-sm: 0.875rem;          /* 14px captions, helper text, quiet toggles */
   --ui-md: 1rem;              /* 16px buttons and labels */
-  --ui-lg: 1.0625rem;         /* 17px inputs */
+  --ui-lg: 1.0625rem;         /* 17px inputs, primary actions over the scene */
 
+  --lh-display: 1.06;
+  --lh-heading: 1.25;
   --lh-tight: 1.4;
   --lh-ui: 1.6;
   --lh-prose: 1.8;
 
-  --ls-prose: 0.02em;
-  --ls-ui: 0.04em;
+  /* Tracking. Display type tightens as it grows; small type opens up. */
+  --ls-hero: -0.055em;
+  --ls-display: -0.035em;
+  --ls-heading: -0.015em;
+  --ls-prose: 0.01em;
+  --ls-ui: 0.02em;
   --ls-label: 0.08em;
-  --ls-display: 0.16em;
+
+  /* Measures */
+  --measure-sheet: 36rem;     /* settings sheets and notes */
+  --measure-form: 30rem;      /* the passphrase card */
+  --measure-page: 46rem;      /* reading pages: journal, memoir */
 
   /* ── Spacing — 4px base ────────────────────────────────────── */
   --space-1: 0.25rem;

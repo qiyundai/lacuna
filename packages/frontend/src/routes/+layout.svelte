@@ -120,5 +120,5 @@
   {@render children()}
 {/if}
 <style>
-  .vault-loading{display:grid;place-content:center;gap:1rem;height:100%;background:var(--valley);color:var(--ink);font:1.5rem var(--font)}
+  .vault-loading{display:grid;place-content:center;justify-items:center;gap:var(--space-4);height:100%;padding:var(--gutter);background:var(--valley);color:var(--ink);font:400 var(--text-lg)/var(--lh-ui) var(--font);text-align:center}
 </style>

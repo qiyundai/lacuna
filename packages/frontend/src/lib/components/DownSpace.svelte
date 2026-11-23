@@ -80,17 +80,16 @@
   </div>
 
   <!-- Dot indicators -->
-  <div class="dots">
+  <nav class="dots" aria-label="Story views">
     {#each [0, 1, 2] as i}
       <button
-        class="dot"
-        class:active={currentView === i}
+        class="quiet-toggle dot"
         onclick={() => (currentView = i as View)}
         aria-label={labels[i]+(!aiAvailable && i?' · Coming soon':'')}
         aria-current={currentView === i ? 'page' : undefined}
-      >{i === 0 ? 'your words' : labels[i]}{#if !aiAvailable && i}<small>Coming soon</small>{/if}</button>
+      >{i === 0 ? 'your words' : labels[i]}{#if !aiAvailable && i}<small>soon</small>{/if}</button>
     {/each}
-  </div>
+  </nav>
 </div>
 
 <style>
@@ -101,6 +100,8 @@
     height: 100%;
     display: grid;
     grid-template-rows: minmax(0, 1fr) auto;
+    /* Pin the track to the viewport so a wide row of tabs can never stretch the views */
+    grid-template-columns: minmax(0, 1fr);
     background: var(--paper);
     overflow: hidden;
     transition: filter var(--dur-slow) var(--ease-soft);
@@ -121,29 +122,22 @@
     height: 100%;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+    /* Words soften into the page edge above the view switcher instead of being cut */
+    mask-image: linear-gradient(to bottom, var(--ink) calc(100% - var(--space-7)), transparent);
   }
 
   .dots {
     justify-self: center;
+    max-width: 100%;
     display: flex;
     gap: var(--space-6);
-    padding: var(--space-2) var(--space-5) var(--edge-bottom);
-    white-space: nowrap;
+    padding: 0 var(--gutter) var(--edge-bottom);
   }
 
-  .dot {
-    min-width: var(--control);
-    min-height: var(--control);
-    display: grid;
-    place-items: center;
-    padding: 0;
-    border: none;
-    background: none;
-    color: var(--ink-subtle);
-    font: var(--ui-sm)/1.5 var(--font);
-    cursor: pointer;
-    transition: color var(--dur-base) var(--ease-soft);
-  }
-
-  .dot.active, .dot:hover { color: var(--ink); }
+  /* A label and its quiet note share one line, so every tab sits on the same baseline */
+  .dot { align-items: baseline; gap: var(--space-1); }
+  .dot small { font-size: var(--ui-xs); font-style: italic; color: var(--ink-subtle); }
+  @media (max-width: 420px) { .dots { gap: var(--space-4); } }
 </style>

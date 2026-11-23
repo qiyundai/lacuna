@@ -56,10 +56,12 @@
     <p class="field-note" id="key-help">{restoring || existing || linking ? 'Use the passphrase you originally chose.' : 'Use at least 12 characters. Keep your passphrase and an encrypted backup somewhere safe. A lost passphrase cannot be reset.'}</p>
     {#if error}<p class="form-error" role="alert" id="key-error">{error}</p>{/if}
     <button class="atlas-primary" type="submit" disabled={busy} aria-label={submitLabel+(audible&&!busy?' and enter the valley with sound':'')}>{submitLabel}{#if !busy}<SoundCue/>{/if}</button>
-    {#if !isCompanion && !restoring}<button class="atlas-link" type="button" disabled={busy} onclick={()=>{linking=!linking;code='';passphrase='';confirmation='';error='';mismatch=false;}}>{linking?'Return to this device':'Link a synced journal'}</button>{/if}
+    <div class="atlas-links">
+      {#if !isCompanion && !restoring}<button class="atlas-link" type="button" disabled={busy} onclick={()=>{linking=!linking;code='';passphrase='';confirmation='';error='';mismatch=false;}}>{linking?'Return to this device':'Link a synced journal'}</button>{/if}
     {#if !linking}
     <button class="atlas-link" type="button" disabled={busy} onclick={() => { restoring = !restoring; error = ''; mismatch=false; passphrase = ''; confirmation = ''; backup = null; }}>{restoring ? 'Return to this device' : 'Restore from backup'}</button>
     {#if isCompanion}<button class="atlas-link" type="button" disabled={busy} onclick={async () => { try { await api.auth.logout(); signOut(); } catch { error = 'Could not sign out. Try again.'; } }}>Sign out</button>{/if}
     {/if}
+    </div>
   </form>
 </TownWelcome>

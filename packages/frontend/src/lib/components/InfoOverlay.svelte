@@ -15,8 +15,8 @@
 {#if show}
   <div
     use:modal={{ dismiss }}
-    class="screen-overlay info-overlay"
-    transition:fade={{ duration: 500, easing: cubicOut }}
+    class="sheet-screen"
+    transition:fade={{ duration: 400, easing: cubicOut }}
     role="dialog"
     tabindex="-1"
     aria-modal="true"
@@ -24,14 +24,14 @@
     onclick={e => { if (e.target === e.currentTarget) dismiss(); }}
     onkeydown={(e) => { if (e.key === 'Escape') dismiss(); }}
   >
-    <div class="info-content journal-sheet">
+    <div class="journal-sheet">
       <h2>About Lacuna</h2>
       <p>Each page has an address in the city. Select its building to read it again.</p>
       <p>Soul Map and Living Memoir · Coming soon. Your journal already holds every saved page.</p>
       <p>Quiet writing gives you a blank page. Hold to save, or press Control or Command and Enter.</p>
       <p>Find encrypted sync and backups in Journal settings → Privacy &amp; storage. Choose Export journal to download a readable copy.</p>
-      {#if aiAvailable && isCompanion}<div class="lenses-section">
-        <p class="lenses-intro">as you write, we read through six lenses — not to label you, but to find the shape of what keeps returning.</p>
+      {#if aiAvailable && isCompanion}<section>
+        <p class="note">as you write, we read through six lenses — not to label you, but to find the shape of what keeps returning.</p>
 
         <ul class="lenses">
           <li>
@@ -60,117 +60,17 @@
           </li>
         </ul>
 
-        <p class="lenses-close">these lenses shape your soul map and, in time, the living memoir — a piece of prose that becomes more honest the longer you stay.</p>
-      </div>{/if}
+        <p class="note">these lenses shape your soul map and, in time, the living memoir — a piece of prose that becomes more honest the longer you stay.</p>
+      </section>{/if}
 
-      <button class="atlas-link" onclick={dismiss}>Close</button>
+      <div class="sheet-foot"><button class="atlas-link" onclick={dismiss}>Close</button></div>
     </div>
   </div>
 {/if}
 
 <style>
-  .screen-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 200;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .info-overlay {
-    background: color-mix(in srgb, var(--paper) 82%, transparent);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    cursor: pointer;
-  }
-
-  .info-content {
-    position: relative;
-    z-index: 1;
-    max-width: 42ch;
-    max-height: 90vh;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    padding: var(--space-6);
-    text-align: center;
-  }
-
-  @media (max-width: 640px) {
-    .info-content {
-      width: 100%;
-      max-width: 100%;
-      padding: var(--space-6) var(--space-5);
-    }
-  }
-
-  .info-content p {
-    color: var(--ink);
-    font-family: var(--font);
-    font-size: var(--text-md);
-    line-height: var(--lh-prose);
-    letter-spacing: var(--ls-prose);
-    margin: 0;
-  }
-
-  .info-content h2 {font:400 2.5rem/1.1 var(--font);letter-spacing:-.045em}
-  .lenses-section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    margin-top: var(--space-2);
-  }
-
-  .lenses-intro {
-    color: var(--ink-subtle) !important;
-    font-family: var(--font);
-    font-size: var(--text-sm) !important;
-    line-height: var(--lh-prose);
-    letter-spacing: var(--ls-prose);
-    margin: 0;
-  }
-
-  .lenses {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-
-  .lenses li {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25em;
-  }
-
-  .lens-label {
-    color: var(--ink);
-    font-family: var(--font);
-    font-size: var(--text-sm);
-    line-height: 1.5;
-    letter-spacing: var(--ls-prose);
-  }
-
-  .lens-desc {
-    color: var(--ink-subtle);
-    font-family: var(--font);
-    font-size: var(--text-xs);
-    line-height: var(--lh-prose);
-    letter-spacing: var(--ls-prose);
-  }
-
-  .lenses-close {
-    color: var(--ink-subtle) !important;
-    font-family: var(--font);
-    font-size: var(--text-sm) !important;
-    line-height: var(--lh-prose);
-    letter-spacing: var(--ls-prose);
-    font-style: italic;
-    margin: 0;
-  }
-
+  .lenses{list-style:none;display:grid;gap:var(--space-4)}
+  .lenses li{display:grid;gap:var(--space-1)}
+  .lens-label{font:400 var(--ui-lg)/var(--lh-tight) var(--font);color:var(--ink)}
+  .lens-desc{font:400 var(--ui-sm)/var(--lh-ui) var(--font);color:var(--ink-subtle)}
 </style>
