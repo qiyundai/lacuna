@@ -166,4 +166,10 @@ Pushing to `main` runs checks and tests, applies D1 migrations, deploys the Work
 
 ## License
 
-[MIT](./LICENSE)
+Copyright (C) 2026 Qiyun Dai
+
+Lacuna is free software: you can redistribute it and modify it under the terms of version 3 of the [GNU Affero General Public License](./LICENSE) as published by the Free Software Foundation (`AGPL-3.0-only`). It is distributed in the hope that it will be useful, but without any warranty; without even the implied warranty of merchantability or fitness for a particular purpose. See the licence for details.
+
+In short: you may read, run, modify, and share the code. If you run a modified version as a service that others use over a network, you must offer those users the corresponding source code under the same licence.
+
+Versions published before this change remain available under the MIT licence they were released with.
