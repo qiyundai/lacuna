@@ -13,6 +13,17 @@ const now = () => Math.floor(Date.now()/1000);
 const unavailable = () => new HTTPException(503,{message:'Hosted reflections are unavailable.'});
 const emailOf = (v: unknown) => typeof v==='string' && v.length<=254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()) ? v.trim().toLowerCase() : '';
 const entitled = (a:Account) => a.paid_until > now();
+function modelBudget(env: Env) {
+  const [accountCap, globalCap, inputRate, outputRate] = [
+    env.REFLECTION_ACCOUNT_MICROS, env.REFLECTION_GLOBAL_MICROS,
+    env.MODEL_INPUT_MICROS_PER_TOKEN, env.MODEL_OUTPUT_MICROS_PER_TOKEN
+  ].map(Number);
+  if (!env.OPENAI_MODEL || !env.OPENAI_API_KEY ||
+      ![accountCap, globalCap, inputRate, outputRate].every(value => Number.isFinite(value) && value > 0)) {
+    throw unavailable();
+  }
+  return {accountCap, globalCap, inputRate, outputRate};
+}
 const publicStatus = (a:Account) => ({id:a.id,email:a.email,paid:entitled(a),customer:!!a.customer,consent:a.consent});
 route.use('*',async(c,next)=>{
   if(!c.env.JWT_SECRET)throw unavailable();
@@ -106,6 +117,15 @@ route.post('/consent',async c=>{
 route.post('/checkout',async c=>{
   const a=c.get('account');
   if (entitled(a)) return c.json({error:'Your subscription is already active.'},409);
+  modelBudget(c.env);
+  if (!c.env.STRIPE_WEBHOOK_SECRET) throw unavailable();
+  const price = c.env.STRIPE_PRICE_ID;
+  if (!price) throw unavailable();
+  const offer = await stripe<{active:boolean;currency:string;unit_amount:number;recurring?:{interval:string;interval_count:number;usage_type:string}}>(
+    c.env, 'prices/'+encodeURIComponent(price)
+  );
+  if (!offer.active || offer.currency!=='cad' || offer.unit_amount!==500 ||
+      offer.recurring?.interval!=='month' || offer.recurring.interval_count!==1 || offer.recurring.usage_type!=='licensed') throw unavailable();
   let customer=a.customer;
   if (!customer) {
     customer=(await stripe(c.env,'customers',{email:a.email},'customer-'+a.id)).id;
@@ -114,10 +134,14 @@ route.post('/checkout',async c=>{
   const url=c.env.FRONTEND_ORIGIN+'/';
   const active=await stripe<Subscriptions>(c.env,'subscriptions?customer='+encodeURIComponent(customer)+'&status=active&limit=100');
   if(active.data.some(s=>s.items.data.some(i=>i.price.id===c.env.STRIPE_PRICE_ID)))return c.json({error:'Payment received. Reopen settings when billing finishes updating.'},409);
-  const open=await stripe<{data:{url:string;mode:string}[]}>(c.env,'checkout/sessions?status=open&customer='+encodeURIComponent(customer)+'&limit=10');
-  const existing=open.data.find(s=>s.mode==='subscription' && s.url);
+  const open=await stripe<{data:{url:string;mode:string;automatic_tax?:{enabled:boolean};metadata?:{lacuna_price?:string}}[]}>(c.env,'checkout/sessions?status=open&customer='+encodeURIComponent(customer)+'&limit=10');
+  const existing=open.data.find(s=>s.mode==='subscription' && s.url && s.automatic_tax?.enabled && s.metadata?.lacuna_price===c.env.STRIPE_PRICE_ID);
   if(existing)return c.json({url:existing.url});
-  const session=await stripe(c.env,'checkout/sessions',{customer,mode:'subscription','line_items[0][price]':c.env.STRIPE_PRICE_ID!,'line_items[0][quantity]':'1',success_url:url+'?billing=returned',cancel_url:url},'checkout-'+a.id+'-'+Math.floor(now()/1800));
+  const session = await stripe(c.env, 'checkout/sessions', {
+    customer, mode: 'subscription', 'line_items[0][price]': price, 'line_items[0][quantity]': '1',
+    'automatic_tax[enabled]': 'true', billing_address_collection: 'required', 'customer_update[address]': 'auto',
+    'metadata[lacuna_price]': price, success_url: url+'?billing=returned', cancel_url: url
+  }, 'tax-checkout-'+a.id+'-'+price+'-'+Math.floor(now()/1800));
   return c.json({url:session.url});
 });
 route.post('/portal',async c=>{
@@ -130,9 +154,7 @@ route.post('/generate',async c=>{
   if (!entitled(a) || !(a.consent%2) || input?.consent!==a.consent || input.account!==a.id) return c.json({error:'Paid access and consent are required.'},403);
   if (typeof input.unit!=='string' || !/^[a-f0-9]{64}$/.test(input.unit) || !validEvidenceRequest(input)) return c.json({error:'Invalid source material.'},400);
   const model=c.env.OPENAI_MODEL;
-  const limits=[c.env.REFLECTION_ACCOUNT_MICROS,c.env.REFLECTION_GLOBAL_MICROS,c.env.MODEL_INPUT_MICROS_PER_TOKEN,c.env.MODEL_OUTPUT_MICROS_PER_TOKEN].map(Number);
-  if (!model || !c.env.OPENAI_API_KEY || !limits.every(x=>Number.isFinite(x)&&x>0)) throw unavailable();
-  const [accountCap,globalCap,inputRate,outputRate]=limits;
+  const {accountCap,globalCap,inputRate,outputRate}=modelBudget(c.env);
   const instructions=reflectionInstructions(input.kind), content=JSON.stringify({primary:input.primary,pages:input.evidence});
   const maxOutput=input.kind==='observe'?500:1400;
   const reserve=Math.ceil((encoder.encode(content+instructions).length+256)*inputRate+maxOutput*outputRate);

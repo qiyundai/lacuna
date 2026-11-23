@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { aiAvailable } from '../../../../shared/ai-release.js';
+  import { aiAvailable } from '$lib/ai-release.js';
   import { onMount } from 'svelte';
   import { browserVault, type WebJournal } from '$lib/web-vault.js';
   import { lenses, writingDay, type Page } from '../../../../shared/living-book.js';

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { aiAvailable } from '../../../../shared/ai-release.js';
+  import { aiAvailable } from '$lib/ai-release.js';
   import { session, signOut } from '$lib/stores/session.svelte.js';
   import { api } from '$lib/api.js';
   import { fade } from 'svelte/transition';

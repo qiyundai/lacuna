@@ -2,6 +2,7 @@ name = "lacuna-api"
 main = "src/index.ts"
 compatibility_date = "2025-04-01"
 compatibility_flags = ["nodejs_compat"]
+keep_vars = true
 
 [[d1_databases]]
 binding = "DB"
@@ -11,3 +12,4 @@ migrations_dir = "migrations"
 
 [vars]
 FRONTEND_ORIGIN = "https://lacuna-app.pages.dev"
+EMAIL_FROM = "Lacuna <lacuna@quietatlas.io>"

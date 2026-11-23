@@ -12,13 +12,13 @@ A portable browser backup requires its original passphrase. Restoring a file sta
 
 ## AI reflections
 
-The public release disables background analysis, hosted reflection endpoints and subscriptions. The reserved browser flow would require separate consent to send selected source material for AI processing. Browser sync grants no such consent.
+The deployment switch defaults to off. When enabled, a paid account and separate journal consent allow the unlocked browser to send bounded, dated excerpts and source notes through the Worker to OpenAI. The Worker uses the Responses API with `store: false`. The browser validates and encrypts returned passages in the journal. Sync and restored backups exclude device consent.
 
 ## What the server holds
 
-The Worker serves `/journal-sync` and the disabled `/reflections` endpoint. It has no accounts and no journal routes. For sync it stores a SHA-256 hash of the bearer credential as the slot, the version, the IV and ciphertext chunks, with no timestamps or identifiers. Rate limits count requests under an HMAC of the IP address keyed with the server secret and the current day, and expire within a day. Errors log only the error name. The app's Content-Security-Policy limits connections to its own origin and the sync endpoint, and fonts and media are self-hosted.
+The Worker serves `/journal-sync` and `/reflections`. For sync it stores the hashed bearer credential, version, IV and ciphertext chunks. Reflections use separate D1 tables for email challenges, accounts, sessions, consent, Stripe customer references, paid access and metered usage. Resend delivers sign-in codes. Stripe receives the billing email and collects payment and address information at checkout. Errors log only the error name.
 
-Migration 0009 dropped the tables from pre-release prototypes. D1 holds only sync records, rate-limit counters and the empty, reserved reflections tables.
+Migration 0009 dropped the tables from pre-release prototypes. D1 holds sync records, rate-limit counters and reflection account and usage records.
 
 ## Limits
 

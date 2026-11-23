@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { aiAvailable } from '../../../../shared/ai-release.js';
+  import { aiAvailable } from '$lib/ai-release.js';
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { modal } from '$lib/modal.js';

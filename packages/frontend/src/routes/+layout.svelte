@@ -1,7 +1,7 @@
 <script lang="ts">
   import '../app.css';
   import { onMount } from 'svelte';
-  import { aiAvailable } from '../../../shared/ai-release.js';
+  import { aiAvailable } from '$lib/ai-release.js';
   import { backgroundBook } from '$lib/reflection-service.js';
   import { watchBrowserSync } from '$lib/browser-sync.js';
   import { session, hydrateSession, setAuthed, resetJournalData } from '$lib/stores/session.svelte.js';

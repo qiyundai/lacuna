@@ -11,7 +11,7 @@
   <article>
     <header>
       <h1>Privacy at Lacuna</h1>
-      <p class="opening">Lacuna is a journal that lives in your browser. You don’t need an account, email address or installation, and your pages stay encrypted on your device unless you choose to sync them.</p>
+      <p class="opening">Your journal lives in your browser. You can write and read without an account. You choose whether to sync an encrypted copy or share excerpts for AI reflections.</p>
       <p>Updated <time datetime="2026-11-23">November 23, 2026</time></p>
     </header>
     <section>
@@ -23,7 +23,7 @@
     <section>
       <h2>What reaches our servers</h2>
       <p>Cloudflare hosts Lacuna. When you open the app, Cloudflare receives ordinary web requests for the app, images, models and music, including your IP address. Lacuna has no advertising, analytics or tracking, and it never requests your location.</p>
-      <p>Your journal reaches our servers only if you turn on sync, and only in encrypted form. The app is configured to connect only to its own site and to the sync service.</p>
+      <p>Encrypted sync sends a protected copy to Lacuna. AI reflections use a separate service that handles readable excerpts with your permission.</p>
     </section>
     <section>
       <h2>Optional encrypted sync</h2>
@@ -34,8 +34,10 @@
       <p>Deleted data can remain in Cloudflare’s database recovery history for up to 30 days. <a href="https://developers.cloudflare.com/d1/reference/time-travel/" rel="noreferrer">Cloudflare’s backup documentation</a></p>
     </section>
     <section>
-      <h2>AI reflections · Coming soon</h2>
-      <p>The Soul Map and Living Memoir are not available yet, and Lacuna sends no pages for AI analysis. Turning on sync only lets Lacuna store your encrypted journal. If reflections launch, they will need your separate consent, and we will update this policy first to explain what is shared and with whom.</p>
+      <h2>Optional AI reflections</h2>
+      <p>Where subscriptions are available, Lacuna stores your billing email, session, Stripe customer reference, paid access, consent and usage records. Resend handles your email address and sign-in code. Stripe handles checkout, billing address, applicable taxes, payments and cancellation.</p>
+      <p>After subscribing, you can allow reflections on an unlocked journal. Lacuna then forwards selected past and future pages, their dates, page identifiers and related reading notes to OpenAI. Lacuna returns the result to your browser for encrypted storage. Its database records usage and cost without storing those excerpts or readings. Requests use OpenAI’s storage opt-out. <a href="https://developers.openai.com/api/docs/guides/your-data" rel="noreferrer">OpenAI’s API data controls and retention</a></p>
+      <p>Pause reflections in Journal settings to stop new requests. You can manage or cancel your subscription there. Saved readings remain in your journal. Deleting your browser journal does not cancel billing.</p>
     </section>
     <section>
       <h2>Backups and readable exports</h2>

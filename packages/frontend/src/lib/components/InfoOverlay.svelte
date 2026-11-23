@@ -25,7 +25,7 @@
     <div class="journal-sheet">
       <h2>About Lacuna</h2>
       <p>Each page has an address in the city. Select its building to read it again.</p>
-      <p>Soul Map and Living Memoir · Coming soon. Your journal already holds every saved page.</p>
+      <p>Find the Soul Map and Living Memoir in the Journal view. AI reflections in Journal settings shows their availability.</p>
       <p>Quiet writing gives you a blank page. Hold to save, or press Control or Command and Enter.</p>
       <p>Find encrypted sync and backups in Journal settings → Privacy &amp; storage. Choose Export journal to download a readable copy.</p>
       <div class="sheet-foot"><button class="atlas-link" onclick={dismiss}>Close</button></div>

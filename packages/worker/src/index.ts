@@ -6,7 +6,6 @@ import type { Env } from './types.js';
 import reflections from './routes/reflections.js';
 import browserSync from './routes/browser-sync.js';
 import { syncLimit } from '../../shared/sync-packet.js';
-import { aiAvailable } from '../../shared/ai-release.js';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -36,8 +35,10 @@ app.use('*', async (c, next) => {
 app.get('/health', (c) => c.json({ ok: true, version: '0.4.0' }));
 
 app.route('/journal-sync', browserSync);
-if (aiAvailable) app.route('/reflections', reflections);
-else app.all('/reflections/*', c => c.json({code:'COMING_SOON',error:'AI reflections are coming soon.'},503));
+app.use('/reflections/*', async (c, next) => c.env.REFLECTIONS_ENABLED === 'true'
+  ? next()
+  : c.json({code:'COMING_SOON',error:'AI reflections are coming soon.'},503));
+app.route('/reflections', reflections);
 
 app.onError((err, c) => {
   if (err instanceof SyntaxError) return c.json({ error: { code: 'BAD_REQUEST', message: 'Invalid JSON' } }, 400);
