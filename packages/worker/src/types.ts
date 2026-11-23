@@ -1,6 +1,7 @@
 export interface Env {
   DB: D1Database;
   FRONTEND_ORIGIN: string;
+  LEGACY_SYNC_ORIGIN?: string;
   JWT_SECRET: string;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;

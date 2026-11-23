@@ -291,6 +291,18 @@ test('release headers allow the configured encrypted sync endpoint and keep othe
   }
 });
 
+test('journal sync accepts both journal addresses during the domain move', async ()=>{
+  const primary='https://lacuna.quietatlas.io', legacy='https://lacuna-app.pages.dev';
+  const env={FRONTEND_ORIGIN:primary,LEGACY_SYNC_ORIGIN:legacy,JWT_SECRET:'fixture'};
+  for(const origin of [primary,legacy,'https://other.example']){
+    const allowed=origin===primary || origin===legacy;
+    const preflight=await app.request(primary+'/journal-sync',{method:'OPTIONS',headers:{Origin:origin,'Access-Control-Request-Method':'PUT'}},env);
+    assert.equal(preflight.headers.get('Access-Control-Allow-Origin'),allowed?origin:null);
+    const write=await app.request(primary+'/journal-sync',{method:'PUT',headers:{Origin:origin}},env);
+    assert.equal(write.status,allowed?401:403);
+  }
+});
+
 test('browser devices pair privately, converge offline additions and preserve both sides of conflicting edits', async t=>{
   const DB=await createTestDatabase();t.after(()=>DB.sqlite.close());
   const origin='https://lacuna.example', env={DB,JWT_SECRET:'synthetic rate limit secret',FRONTEND_ORIGIN:origin};

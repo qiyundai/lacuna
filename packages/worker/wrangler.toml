@@ -10,4 +10,5 @@ database_id = "aa2e68ac-6b77-4c8f-9947-6865d5e8d330"
 migrations_dir = "migrations"
 
 [vars]
-FRONTEND_ORIGIN = "https://lacuna-app.pages.dev"
+FRONTEND_ORIGIN = "https://lacuna.quietatlas.io"
+LEGACY_SYNC_ORIGIN = "https://lacuna-app.pages.dev"
