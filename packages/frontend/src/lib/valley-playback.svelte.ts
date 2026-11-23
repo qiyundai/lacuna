@@ -57,3 +57,8 @@ export function leaveValley() {
 }
 
 export function valleyAudioContext() { return context; }
+
+/** Whether entering the valley now would start any audio. Reactive in $derived. */
+export function willPlaySound() {
+  return !valleyPlayback.muted && (valleyPlayback.ambience || valleyPlayback.music);
+}

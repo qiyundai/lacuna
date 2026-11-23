@@ -65,8 +65,7 @@
   .privacy-overlay {
     overflow-y: auto;
     padding: 2rem 0;
-    background: rgba(19, 16, 16, 0.82);
-    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    background: color-mix(in srgb, var(--paper) 82%, transparent);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
     cursor: pointer;
@@ -93,8 +92,8 @@
   }
 
   .privacy-content p {
-    color: var(--void-text);
-    font-family: var(--font-serif);
+    color: var(--ink);
+    font-family: var(--font);
     font-size: var(--text-md);
     line-height: var(--lh-prose);
     letter-spacing: var(--ls-prose);
@@ -102,7 +101,7 @@
   }
 
   .privacy-content .hint {
-    color: var(--void-text-hint);
+    color: var(--ink-subtle);
     font-size: var(--text-xs);
     letter-spacing: var(--ls-label);
     margin-top: var(--space-3);

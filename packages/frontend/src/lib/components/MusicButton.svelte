@@ -13,4 +13,4 @@
   }
 </script>
 
-<IconAction icon="music" label="Music" onclick={openAlbum} controls="soundtrack" expanded={musicWindow.mode !== 'closed'}/>
+<IconAction icon="library" label="Music library" onclick={openAlbum} controls="soundtrack" expanded={musicWindow.mode !== 'closed'}/>

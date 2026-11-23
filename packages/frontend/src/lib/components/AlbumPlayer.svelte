@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import PlayerIcon from './PlayerIcon.svelte';
+  import Icon from './Icon.svelte';
   import { deviceAlbum, deviceTracks, importMusic, loadAlbums, readAudio, removeMusic, type Track } from '$lib/music-library.js';
   import { musicWindow } from '$lib/music-window.svelte.js';
   import { readLocal, writeLocal } from '$lib/storage.js';
@@ -276,14 +276,14 @@
 {#snippet transport(compact: boolean)}
   <div class="transport">
     {#if !compact}
-      <button class:enabled={shuffled} aria-label="Shuffle" aria-pressed={shuffled} title="Shuffle" onclick={() => { shuffled = !shuffled; heard.clear(); }}><PlayerIcon name="shuffle"/></button>
+      <button class:enabled={shuffled} aria-label="Shuffle" aria-pressed={shuffled} title="Shuffle" onclick={() => { shuffled = !shuffled; heard.clear(); }}><Icon name="shuffle"/></button>
     {/if}
-    <button aria-label="Previous track" title="Previous track" disabled={!current} onclick={previous}><PlayerIcon name="previous"/></button>
-    <button class="play" aria-label={playing ? 'Pause' : 'Play'} title={playing ? 'Pause' : 'Play'} disabled={!current} onclick={toggle}><PlayerIcon name={playing ? 'pause' : 'play'}/></button>
-    <button aria-label="Next track" title="Next track" disabled={!current} onclick={() => next()}><PlayerIcon name="next"/></button>
+    <button aria-label="Previous track" title="Previous track" disabled={!current} onclick={previous}><Icon name="previous"/></button>
+    <button class="play" aria-label={playing ? 'Pause' : 'Play'} title={playing ? 'Pause' : 'Play'} disabled={!current} onclick={toggle}><Icon name={playing ? 'pause-solid' : 'play-solid'}/></button>
+    <button aria-label="Next track" title="Next track" disabled={!current} onclick={() => next()}><Icon name="next"/></button>
     {#if !compact}
       <button class:enabled={repeat !== 'off'} aria-label={'Repeat: ' + repeat} title={'Repeat: ' + repeat}
-        onclick={() => repeat = repeat === 'all' ? 'one' : repeat === 'one' ? 'off' : 'all'}><PlayerIcon name="repeat"/>{#if repeat === 'one'}<sup>1</sup>{/if}</button>
+        onclick={() => repeat = repeat === 'all' ? 'one' : repeat === 'one' ? 'off' : 'all'}><Icon name="repeat"/>{#if repeat === 'one'}<sup>1</sup>{/if}</button>
     {/if}
   </div>
 {/snippet}
@@ -295,13 +295,13 @@
         <small>{current?.album ?? 'Music'}</small><strong>{current?.title ?? 'Library'}</strong>
       </button>
       {@render transport(true)}
-      <button aria-label="Close music" title="Close music" onclick={close}><PlayerIcon name="close"/></button>
+      <button aria-label="Close music" title="Close music" onclick={close}><Icon name="close"/></button>
     </div>
   {:else if musicWindow.mode === 'library'}
     <div class="cover" class:local={current && !current.url}>
       <div class="cover-tools">
-        <button aria-label="Minimize player" title="Minimize player" onclick={resize}><PlayerIcon name="minimize"/></button>
-        <button aria-label="Close music" title="Close music" onclick={close}><PlayerIcon name="close"/></button>
+        <button aria-label="Minimize player" title="Minimize player" onclick={resize}><Icon name="minimize"/></button>
+        <button aria-label="Close music" title="Close music" onclick={close}><Icon name="close"/></button>
       </div>
       <div class="caption"><small>{current?.album ?? 'Music library'}</small><h2>{current?.title ?? (loading ? 'Loading music…' : 'Choose a track')}</h2></div>
     </div>
@@ -315,7 +315,7 @@
       <div class="deck-controls">
         {@render transport(false)}
         <div class="volume">
-          <button title={muted ? 'Unmute' : 'Mute'} aria-label={muted ? 'Unmute' : 'Mute'} onclick={() => valleyPlayback.music = muted}><PlayerIcon name={muted || volume === 0 ? 'muted' : 'volume'}/></button>
+          <button title={muted ? 'Unmute' : 'Mute'} aria-label={muted ? 'Unmute' : 'Mute'} onclick={() => valleyPlayback.music = muted}><Icon name="volume" off={muted || volume === 0}/></button>
           <input id="music-volume" type="range" aria-label="Volume" min="0" max="1" step=".01" value={muted ? 0 : volume}
             oninput={event => { volume = +event.currentTarget.value; valleyPlayback.music = true; }}/>
           <label class="level" for="music-volume">{muted ? 0 : Math.round(volume * 100)}%</label>
@@ -328,7 +328,7 @@
           <button aria-pressed={view === 'library'} onclick={() => { view = 'library'; limit = 50; }}>Library</button>
           <button aria-pressed={view === 'queue'} onclick={() => { view = 'queue'; limit = 50; }}>Queue <span>{queued.length}</span></button>
         </div>
-        <button class="add" disabled={importing || loading} aria-expanded={importOptions} onclick={() => importOptions = !importOptions}><PlayerIcon name="plus"/>{importing ? 'Adding…' : 'Add music'}</button>
+        <button class="add" disabled={importing || loading} aria-expanded={importOptions} onclick={() => importOptions = !importOptions}><Icon name="plus"/>{importing ? 'Adding…' : 'Add music'}</button>
       </header>
       {#if importOptions}
         <div class="import-options">
@@ -348,14 +348,14 @@
           <div class="row" class:active={current?.id === track.id}>
             <button class="song" aria-label={'Play ' + track.title} aria-current={current?.id === track.id ? 'true' : undefined}
               onclick={() => { if (view === 'queue') dequeue(i); void play(track); }}>
-              <span class="number">{#if track.id === current?.id}<PlayerIcon name={playing ? 'volume' : 'note'}/>{:else}{String(i + 1).padStart(2,'0')}{/if}</span>
+              <span class="number">{#if track.id === current?.id}<Icon name={playing ? 'volume' : 'music'}/>{:else}{String(i + 1).padStart(2,'0')}{/if}</span>
               <span class="song-title">{track.title}</span><span class="length">{track.seconds ? time(track.seconds) : ''}</span>
             </button>
             {#if view === 'queue'}
-              <button aria-label={'Remove ' + track.title + ' from queue'} title="Remove from queue" onclick={() => dequeue(i)}><PlayerIcon name="remove"/></button>
+              <button aria-label={'Remove ' + track.title + ' from queue'} title="Remove from queue" onclick={() => dequeue(i)}><Icon name="remove"/></button>
             {:else}
-              <button aria-label={'Queue ' + track.title} title="Add to queue" onclick={() => { queue.push(track.id); notice = 'Queued ' + track.title + '.'; }}><PlayerIcon name="queue"/></button>
-              {#if !track.url}<button aria-label={'Remove ' + track.title + ' from device library'} title="Remove imported copy" onclick={() => remove(track)}><PlayerIcon name="remove"/></button>{/if}
+              <button aria-label={'Queue ' + track.title} title="Add to queue" onclick={() => { queue.push(track.id); notice = 'Queued ' + track.title + '.'; }}><Icon name="queue"/></button>
+              {#if !track.url}<button aria-label={'Remove ' + track.title + ' from device library'} title="Remove imported copy" onclick={() => remove(track)}><Icon name="remove"/></button>{/if}
             {/if}
           </div>
         {:else}
@@ -371,60 +371,60 @@
 </aside>
 
 <style>
-  aside{position:fixed;z-index:12;inset:calc(var(--mast-height) + .6rem) var(--gutter) auto auto;width:min(26rem,calc(100vw - 1.5rem));max-height:calc(100dvh - var(--mast-height) - 1.5rem);display:flex;flex-direction:column;overflow:auto;overscroll-behavior:contain;border:0;border-radius:9px;background:var(--paper);color:var(--ink);box-shadow:0 12px 48px #0c231e45;font:400 .91rem/1.3 var(--font-ui);color-scheme:light}
+  aside{position:fixed;z-index:var(--z-player);inset:calc(var(--mast-height) + .6rem) var(--gutter) auto auto;width:min(26rem,calc(100vw - 1.5rem));max-height:calc(100dvh - var(--mast-height) - 1.5rem);display:flex;flex-direction:column;overflow:auto;overscroll-behavior:contain;border:0;border-radius:var(--radius-m);background:var(--paper);color:var(--ink);box-shadow:var(--shadow-float);--icon-size:var(--icon-sm);font:400 .91rem/1.3 var(--font);color-scheme:light}
   aside[hidden]{display:none}
-  aside:focus-visible{outline:2px solid var(--river);outline-offset:2px}
-  aside :focus-visible{outline:2px solid #b17739;outline-offset:-2px}
+  aside:focus-visible{outline:var(--focus-width) solid var(--focus);outline-offset:var(--focus-offset)}
+  aside :focus-visible{outline:var(--focus-width) solid var(--focus);outline-offset:calc(-1 * var(--focus-width))}
   button{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;min-height:40px;min-width:40px;padding:0;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer}
-  button:hover{background:#58705612}
+  button:hover{background:color-mix(in srgb,var(--accent) 9%,transparent)}
   button:disabled{opacity:.5;cursor:default}
-  .cover{position:relative;flex:none;min-height:8.3rem;display:flex;align-items:end;color:#fff6dd;background:linear-gradient(0deg,#132c26fa,#172b256b 63%,transparent),url('/city/valley-print.webp') center 52% / cover}
-  .cover.local{background:linear-gradient(0deg,#172d29e8,#24352d55),url('/city/valley-flight.webp') center / cover}
-  .cover-tools{position:absolute;top:.25rem;right:.3rem;display:flex;color:#fff9e8}
-  .cover-tools button{background:#192e286e;border-radius:50%;min-width:36px;min-height:36px}
+  .cover{position:relative;flex:none;min-height:8.3rem;display:flex;align-items:end;color:var(--scene-ink);background:linear-gradient(0deg,color-mix(in srgb,var(--scene-shade) 98%,transparent),color-mix(in srgb,var(--scene-shade) 42%,transparent) 63%,transparent),url('/city/valley-print.webp') center 52% / cover}
+  .cover.local{background:linear-gradient(0deg,color-mix(in srgb,var(--scene-shade) 91%,transparent),color-mix(in srgb,var(--scene-shade) 33%,transparent)),url('/city/valley-flight.webp') center / cover}
+  .cover-tools{position:absolute;top:.25rem;right:.3rem;display:flex;color:var(--scene-ink)}
+  .cover-tools button{background:color-mix(in srgb,var(--scene-shade) 43%,transparent);border-radius:50%;min-width:36px;min-height:36px}
   .caption{padding:2.75rem 1.15rem .95rem;min-width:0}
-  small{display:block;font:500 .76rem/1.3 var(--font-ui);letter-spacing:.025em}
-  h2{margin:.15rem 0 0;font:400 clamp(1.65rem,4vw,2.05rem)/1.08 var(--font-reading);letter-spacing:-.035em;overflow-wrap:anywhere}
-  .deck{padding:.55rem 1rem .65rem;background:#eaf0e5;border-bottom:1px solid var(--line)}
+  small{display:block;font:400 var(--ui-xs)/1.3 var(--font);letter-spacing:.025em}
+  h2{margin:.15rem 0 0;font:400 clamp(1.65rem,4vw,2.05rem)/1.08 var(--font);letter-spacing:-.035em;overflow-wrap:anywhere}
+  .deck{padding:.55rem 1rem .65rem;background:var(--field);border-bottom:1px solid var(--line)}
   .timeline,.deck-controls,.volume,.transport,header,.views,.filters,.row,.compact{display:flex;align-items:center}
-  .timeline{gap:.55rem;font-variant-numeric:tabular-nums;font-size:.72rem;color:var(--muted)}
-  input[type="range"]{min-width:0;width:100%;height:24px;accent-color:var(--river);cursor:pointer}
+  .timeline{gap:.55rem;font-variant-numeric:tabular-nums;font-size:var(--ui-xs);color:var(--ink-muted)}
+  input[type="range"]{min-width:0;width:100%;height:24px;accent-color:var(--accent);cursor:pointer}
   .timeline label,.timeline span{min-width:2rem}.timeline span:last-child{text-align:right}
   .deck-controls,header{justify-content:space-between;gap:.5rem}
   .transport{gap:2px}.transport button,.volume button{border-radius:50%;position:relative}
-  .play{background:var(--ink);color:#fcf7e7;border-radius:50%;min-height:42px;min-width:42px}.play:hover{background:var(--river)}
-  button.enabled{color:#1e5c43;background:#ccdcca}
-  sup{position:absolute;right:5px;bottom:4px;font-size:.67rem}
-  .volume{width:min(32%,8rem);gap:2px}.volume button{min-width:34px}.level{min-width:2.4em;text-align:right;font-size:.7rem;font-variant-numeric:tabular-nums}
+  .play{background:var(--ink);color:var(--paper);border-radius:50%;min-height:42px;min-width:42px}.play:hover{background:var(--accent)}
+  button.enabled{color:var(--accent);background:color-mix(in srgb,var(--accent) 20%,transparent)}
+  sup{position:absolute;right:5px;bottom:4px;font-size:.67rem} /* icon badge, not text */
+  .volume{width:min(32%,8rem);gap:2px}.volume button{min-width:34px}.level{min-width:2.4em;text-align:right;font-size:var(--ui-xs);font-variant-numeric:tabular-nums}
   .collection{min-height:0;display:flex;flex-direction:column;padding:0 var(--space-5) .7rem}
   header{flex:none;margin:.35rem 0}.views{gap:.75rem}
-  .views button{border-bottom:2px solid transparent;color:var(--muted);font-size:.9rem}
-  .views [aria-pressed="true"]{border-color:var(--river);font-weight:650;color:var(--ink)}
-  .views span{margin-left:.25rem;font-size:.72rem;font-variant-numeric:tabular-nums}
-  .add{gap:.2rem;color:var(--river);font-size:.83rem;font-weight:600}
-  .import-options{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;padding:.35rem .5rem;margin-bottom:.4rem;background:var(--field);border-radius:4px}
-  .import-options small{flex:1}.import-options button{padding:0 .4rem;color:var(--river);font-size:.8rem;text-decoration:underline}
+  .views button{border-bottom:2px solid transparent;color:var(--ink-muted);font-size:.9rem}
+  .views [aria-pressed="true"]{border-color:var(--accent);font-weight:600;color:var(--ink)}
+  .views span{margin-left:.25rem;font-size:var(--ui-xs);font-variant-numeric:tabular-nums}
+  .add{gap:.2rem;color:var(--accent);font-size:var(--ui-sm)}
+  .import-options{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;padding:.35rem .5rem;margin-bottom:.4rem;background:var(--field);border-radius:var(--radius-s)}
+  .import-options small{flex:1}.import-options button{padding:0 .4rem;color:var(--accent);font-size:var(--ui-xs);text-decoration:underline}
   .filters{gap:var(--space-4);flex:none;margin:0 0 .35rem}
-  .filters label{display:grid;gap:.2rem;flex:1;min-width:0;color:var(--muted);font-size:.75rem}
+  .filters label{display:grid;gap:.2rem;flex:1;min-width:0;color:var(--ink-muted);font-size:var(--ui-xs)}
   .filters .search-field{flex:1.25}
-  .filters input,.filters select{min-width:0;width:100%;min-height:44px;padding:0 .1rem;background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;color:var(--ink);font:400 .85rem var(--font-ui)}
+  .filters input,.filters select{min-width:0;width:100%;min-height:44px;padding:0 .1rem;background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;color:var(--ink);font:400 var(--ui-sm) var(--font)}
   .list{min-height:3rem;max-height:21.5rem;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
   .row{border-bottom:1px solid var(--rule);min-height:46px}.row:last-child{border:0}
-  .row.active{background:#e7eee1}
+  .row.active{background:var(--field)}
   .song{flex:1;min-width:0;justify-content:start;gap:.5rem;text-align:left}
-  .number,.length{font-size:.72rem;color:var(--muted);font-variant-numeric:tabular-nums}
-  .number{width:1.8rem;flex:none;text-align:center}.number :global(svg){vertical-align:middle;width:15px}
+  .number,.length{font-size:var(--ui-xs);color:var(--ink-muted);font-variant-numeric:tabular-nums}
+  .number{width:1.8rem;flex:none;text-align:center}.number :global(svg){vertical-align:middle}
   .song-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .row>button:not(.song){min-width:34px;color:var(--muted)}
-  .more,.empty{width:100%;text-align:center}.empty,.notice,.error{padding:.55rem;font-size:.82rem}
-  .notice{color:var(--muted)}.error{color:#783e2d}
-  .compact{gap:.1rem;padding:.4rem .5rem;background:#edf1e6;border-left:4px solid var(--river)}
+  .row>button:not(.song){min-width:34px;color:var(--ink-muted)}
+  .more,.empty{width:100%;text-align:center}.empty,.notice,.error{padding:.55rem;font-size:var(--ui-sm)}
+  .notice{color:var(--ink-muted)}.error{color:var(--danger)}
+  .compact{gap:.1rem;padding:.4rem .5rem;background:var(--field);border-left:4px solid var(--accent)}
   .compact-title{min-width:0;flex:1;display:block;padding:0 .45rem;text-align:left}
   .compact-title strong,.compact-title small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .compact-title strong{display:block;font:500 1.08rem/1.25 var(--font-reading)}
-  .compact-title small{color:var(--muted);font-size:.7rem}
+  .compact-title strong{display:block;font:400 1.08rem/1.25 var(--font)}
+  .compact-title small{color:var(--ink-muted);font-size:var(--ui-xs)}
   @media(prefers-reduced-motion:no-preference){
-    button{transition:background-color 140ms,color 140ms}
+    button{transition:background-color var(--dur-micro) var(--ease-soft),color var(--dur-micro) var(--ease-soft)}
     .transport button:active,.cover-tools button:active{transform:translateY(1px)}
   }
   @media(max-width:600px){

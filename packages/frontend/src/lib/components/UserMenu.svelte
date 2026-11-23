@@ -129,7 +129,7 @@
 <VaultSettings bind:show={showVault} />
 
 <style>
-  .deletion-scope { max-width: 40ch; text-align: center; line-height: 1.8; color: var(--void-text-dim); font-size: .85rem; padding: 0 1rem; }
+  .deletion-scope { max-width: 40ch; text-align: center; line-height: 1.8; color: var(--ink-muted); font-size: var(--ui-sm); padding: 0 1rem; }
   .screen-overlay {
     position: fixed;
     inset: 0;
@@ -137,8 +137,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(19, 16, 16, 0.82);
-    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    background: color-mix(in srgb, var(--paper) 82%, transparent);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
     cursor: pointer;
@@ -146,9 +145,9 @@
 
   .screen-overlay{overflow:auto;align-items:safe center;background:var(--field);padding:22px}
   .menu-content{width:min(100%,32rem);margin:auto;display:grid;gap:var(--space-5);cursor:default}
-  h2{font:400 2.65rem/1.1 var(--font-reading);letter-spacing:-.05em}
-  .menu-email{color:var(--muted);font:.9rem var(--font-ui)}
+  h2{font:400 2.65rem/1.1 var(--font);letter-spacing:-.05em}
+  .menu-email{color:var(--ink-muted);font:.9rem var(--font)}
   .menu-actions{display:grid;justify-items:start;gap:.15rem;margin:.5rem 0}
-  .menu-item{font:500 1rem var(--font-ui);min-height:48px;padding:.6rem .2rem;text-align:left;color:var(--ink);background:transparent;border:0;cursor:pointer}
-  .menu-item:is(:hover,:focus-visible){color:var(--river);text-decoration:underline;text-underline-offset:.32em}.menu-item.danger{color:var(--void-danger)}
+  .menu-item{font:400 1rem var(--font);min-height:48px;padding:.6rem .2rem;text-align:left;color:var(--ink);background:transparent;border:0;cursor:pointer}
+  .menu-item:is(:hover,:focus-visible){color:var(--accent);text-decoration:underline;text-underline-offset:.32em}.menu-item.danger{color:var(--danger)}
 </style>

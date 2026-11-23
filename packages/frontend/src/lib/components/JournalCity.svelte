@@ -1,6 +1,7 @@
 <script lang="ts">
   import IconAction from './IconAction.svelte';
-  import PlayerIcon from './PlayerIcon.svelte';
+  import Icon from './Icon.svelte';
+  import SoundToggle from './SoundToggle.svelte';
   import { activateValleyAudio, enterValley, leaveValley, toggleValleySound, valleyAudioContext, valleyPlayback } from '$lib/valley-playback.svelte.js';
   import { onMount, tick, type Snippet } from 'svelte';
   import Masthead from './Masthead.svelte';
@@ -161,10 +162,9 @@
   }
 </script>
 
-{#snippet muteAll()}
-  <button type="button" class="mute-all" aria-label="Mute all" aria-pressed={valleyPlayback.muted} title={valleyPlayback.muted?'Unmute all':'Mute all'} onclick={()=>toggleValleySound('muted')}>
-    <PlayerIcon name={valleyPlayback.muted?'muted':'volume'}/>
-  </button>
+{#snippet soundToggles()}
+  <IconAction icon="music" label="Soundtrack" pressed={valleyPlayback.music} onclick={()=>toggleValleySound('music')}/>
+  {#if scene}<IconAction icon="ambience" label="Ambience" pressed={valleyPlayback.ambience} onclick={()=>toggleValleySound('ambience')}/>{/if}
 {/snippet}
 <main class="coast" aria-label="Journal city">
   <canvas bind:this={canvas} inert={opening} tabindex="0" aria-label="A city growing along the valley river. Drag or use arrow keys to orbit, right-drag to pan, and scroll or pinch to zoom. Home returns to the city. Select a building to read its page."></canvas>
@@ -180,10 +180,10 @@
       {/if}
     {/each}
   {/if}
-  {#if opening}<ValleyLoading label={ready?'Opening the valley…':'Opening your journal…'} onExit={guest?onExit:undefined}/><div class="loading-mute">{@render muteAll()}</div>{/if}
-  <h1 class="sr-only" tabindex="-1">{guest?'Example city':'Your city'}</h1>
+  {#if opening}<ValleyLoading audio label={ready?'Opening the valley…':'Opening your journal…'} onExit={guest?onExit:undefined}/>{/if}
+  <h1 class="visually-hidden" tabindex="-1">{guest?'Example city':'Your city'}</h1>
   {#if !opening}
-    <Masthead floating quick={muteAll} disabled={busy} world={guest?'Example city':'The valley city'} pageCount={entries.length}>
+    <Masthead floating audio sound={soundToggles} disabled={busy} world={guest?'Example city':'The valley city'} pageCount={entries.length}>
       <IconAction icon="pages" label="Pages" onclick={()=>open('pages')} disabled={!ready}/>
       {#if scene}
         {#each valleyViews as view}
@@ -191,8 +191,6 @@
         {/each}
         <IconAction icon={paused?'play':'pause'} label={paused?'Resume ambient motion':'Pause ambient motion'} onclick={()=>paused=!paused}/>
       {/if}
-      <IconAction icon="music" label="Soundtrack playback" pressed={valleyPlayback.music} onclick={()=>toggleValleySound('music')}/>
-      {#if scene}<IconAction icon="ambience" label="Ambience" pressed={valleyPlayback.ambience} onclick={()=>toggleValleySound('ambience')}/>{/if}
       {@render navigation?.()}
       {#if guest}
         <IconAction icon="privacy" label="Privacy" href="/privacy"/>
@@ -204,7 +202,7 @@
       <div class="actions">
         {#if graphicsError}<IconAction icon="retry" label="Retry city" onclick={graphics}/>{/if}
         {#if !ready&&error}<IconAction icon="retry" label="Retry journal" onclick={read}/>{/if}
-        <IconAction primary icon="write" label={draft?'Return to draft':'Write a page'} disabled={!ready||busy} onclick={()=>open('write')}/>
+        <IconAction tone="raised" icon="write" label={draft?'Return to draft':'Write a page'} disabled={!ready||busy} onclick={()=>open('write')}/>
       </div>
     </div>
   {/if}
@@ -222,14 +220,16 @@
       <div class="leaf">
         <header class="leaf-head">
           <span>{panel==='write'?'Page '+(folios.size+1):panel==='pages'?'Journal index':'Page '+(folios.get(readId)??'')}</span>
-          {@render muteAll()}
-          <button class="close" aria-label="Close" disabled={busy} onclick={()=>dialog.close()}>×</button>
+          <div class="leaf-tools">
+            <SoundToggle surface="paper"/>
+            <button class="paper-control" aria-label="Close" disabled={busy} onclick={()=>dialog.close()}><Icon name="close"/></button>
+          </div>
         </header>
         {#if panel==='write'}
           <h2 id="journal-heading" tabindex="-1">A new page</h2>
           <time datetime={writingDate.toISOString()}>{weekday.format(writingDate)}, {fullDate.format(writingDate)}</time>
           <form onsubmit={event=>{event.preventDefault();void save();}}>
-            <label class="sr-only" for="entry">Your journal entry</label>
+            <label class="visually-hidden" for="entry">Your journal entry</label>
             <textarea id="entry" rows="5" maxlength="500" required placeholder="What would you like to remember?" bind:value={draft}
               oninput={()=>draftId=''} onkeydown={e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)&&!e.isComposing){e.preventDefault();void save();}}}></textarea>
             <div class="leaf-foot"><span class="count" aria-label={draft.length+' of 500 characters'}>{draft.length} / 500</span>
@@ -250,9 +250,9 @@
           <div class="leaf-foot">
             {#if neighbors.length>1}
               <nav class="turns" aria-label="Pages at this building">
-                <button aria-label="Previous page at this building" disabled={room<=0} onclick={()=>readPage(neighbors[room-1]!.id)}>‹</button>
+                <button class="paper-control" aria-label="Previous page at this building" disabled={room<=0} onclick={()=>readPage(neighbors[room-1]!.id)}><Icon name="chevron-left"/></button>
                 <span>{room+1} of {neighbors.length} here</span>
-                <button aria-label="Next page at this building" disabled={room>=neighbors.length-1} onclick={()=>readPage(neighbors[room+1]!.id)}>›</button>
+                <button class="paper-control" aria-label="Next page at this building" disabled={room>=neighbors.length-1} onclick={()=>readPage(neighbors[room+1]!.id)}><Icon name="chevron-right"/></button>
               </nav>
             {/if}
             <button class="text-action" onclick={()=>open('pages')}>All pages</button>
@@ -279,67 +279,69 @@
   </dialog>
 </main>
 <style>
-  .coast{position:relative;height:100%;min-height:0;overflow:hidden;color:#fff4e8;background:linear-gradient(#8c8395,#3d5466)}
+  /* Sky gradient is a pre-render placeholder painted to match the scene, not UI color */
+  .coast{position:relative;height:100%;min-height:0;overflow:hidden;color:var(--scene-ink);background:linear-gradient(#8c8395,#3d5466)}
   canvas{content-visibility:auto;contain-intrinsic-size:auto 700px;width:100%;height:100%;display:block;touch-action:none;cursor:grab}canvas:active{cursor:grabbing}
-  .bottom{position:absolute;inset:auto var(--gutter) max(1rem,env(safe-area-inset-bottom));display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;pointer-events:none}
-  .actions{margin-left:auto;display:grid;justify-items:end;gap:.4rem;pointer-events:none}
-  button{min-height:44px;cursor:pointer;font:500 .92rem/1.2 var(--font-ui)}
-  .mute-all{width:44px;height:44px;display:grid;place-items:center;border:0;border-radius:50%;background:#24463cd9;color:#fff6df;pointer-events:auto}
-  .mute-all:focus-visible{outline:2px solid #e2bd7a;outline-offset:2px}.mute-all:hover{background:var(--river)}
-  .loading-mute{position:absolute;z-index:5;right:calc(var(--gutter) + 7rem);top:1rem}
-  .leaf-head .mute-all{margin-left:auto;color:var(--ink);background:transparent}
-  .status{margin:0;padding-block:.6rem;color:var(--scene-ink);text-shadow:var(--scene-type-shadow);font:.9rem/1.4 var(--font-ui)}.status:empty{display:none}
-  .page-marker{position:absolute;transform:translate(-50%,-100%);height:49px;min-width:44px;padding:0 3px 13px;display:grid;place-items:center;background:transparent;border:0;color:#fff8df}
-  .page-marker::after{content:'';position:absolute;bottom:0;height:13px;width:1px;background:#fff5cf;box-shadow:0 1px 2px #203a32}
-  .marker-face{display:flex;align-items:center;gap:6px;border:1px solid #e9d69c;border-radius:20px;background:#1d3834f2;box-shadow:0 2px 7px #10272680;padding:7px}
-  .marker-label{display:none;font:600 .75rem var(--font-ui);white-space:nowrap}
-  .featured .marker-face,.page-marker:is(:hover,:focus-visible) .marker-face{padding-inline:10px;background:#f3e4b9;color:#25382d}
-  .featured .marker-label,.page-marker:is(:hover,:focus-visible) .marker-label{display:block}
-  dialog{position:fixed;inset:0;margin:auto;width:min(50rem,calc(100% - 2rem));max-height:88dvh;color:#233b36;background:#f8f5e9;border:0;padding:0;border-radius:3px;overflow:auto;overscroll-behavior:contain;box-shadow:0 20px 85px #0a1c21a6,2px 3px 0 #d1c8ad}
-  dialog::backdrop{background:#132d3280}
-  .folio{display:grid;grid-template-columns:minmax(10rem,.52fr) minmax(0,1fr);min-height:26rem}
-  .cover{display:flex;flex-direction:column;justify-content:flex-end;position:relative;isolation:isolate;background:#24473e url('/city/valley-print.webp') 56% center/cover;color:#fff6d9}
-  .cover::after{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(0deg,#17392ff5,transparent 66%);box-shadow:inset -6px 0 10px -7px #112d24}
-  .imprint{padding:1.65rem 1.4rem;display:grid;gap:2px}
-  .imprint span,.leaf-head,.count,.turns span,.note,time{font:.8rem/1.45 var(--font-ui)}
-  .imprint strong{font:400 clamp(1.7rem,3.5vw,2.7rem)/1.03 var(--font-reading);letter-spacing:-.035em}
-  .reading .cover{background:#c6cfba;color:#25413b;justify-content:center}
-  .reading .cover::after{background:none}
-  .plate{margin:.8rem .5rem 0}.plate img{display:block;width:100%;max-height:15rem;object-fit:contain;filter:drop-shadow(0 5px 3px #46533822)}
-  .reading .imprint{padding:1rem 1.35rem 1.5rem}
-  .leaf{min-width:0;display:flex;flex-direction:column;padding:var(--space-5) var(--sheet-inset) var(--space-6);background:linear-gradient(90deg,#b9b39c33,transparent 15px)}
-  .leaf-head,.leaf-foot{display:flex;justify-content:space-between;align-items:center;gap:1rem}
-  .leaf-head{color:var(--muted);margin-bottom:var(--space-5)}
-  .close,.turns button{width:44px;height:44px;border:0;background:none;color:#29463c;font-size:1.5rem}.close{margin-right:-.7rem}
-  .leaf h2{font:400 clamp(2.1rem,4vw,3.15rem)/1.07 var(--font-reading);letter-spacing:-.05em;margin-bottom:.42rem}
-  .leaf time,.count,.note{color:#54655a}.sr-only{position:absolute;width:1px;height:1px;padding:0;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
-  form{display:flex;flex-direction:column;gap:var(--space-5);flex:1;margin-top:var(--space-6)}
-  textarea{width:100%;min-height:7.5rem;resize:vertical;border:0;border-radius:0;padding:0 .2rem;color:#203c34;caret-color:#416a52;font:1.26rem/2rem var(--font-reading);background:repeating-linear-gradient(transparent 0 calc(2rem - 1px),#768b771e calc(2rem - 1px) 2rem);scroll-padding:.25rem}
-  textarea::placeholder{color:#66776a;font-style:italic}
-  .leaf-foot{margin-top:auto;padding-top:.9rem}
-  .ink{background:var(--ink);color:var(--paper);border:0;border-radius:2rem;padding:.72rem 1.4rem}
-  .ink:enabled:hover{background:#32634f}.ink:disabled{background:#d7dacc;color:#536253}
+  .bottom{position:absolute;inset:auto var(--gutter) var(--edge-bottom);display:flex;align-items:flex-end;justify-content:space-between;gap:var(--space-3);pointer-events:none}
+  .actions{margin-left:auto;display:grid;justify-items:end;gap:var(--control-gap);pointer-events:none}
+  button{min-height:var(--control);cursor:pointer;font:400 var(--ui-md)/1.2 var(--font)}
   button:disabled{cursor:default}
-  .entry-body{white-space:pre-wrap;overflow-wrap:anywhere;font:1.4rem/1.65 var(--font-reading);margin:1.4rem 0 2.2rem}
+  .status{margin:0;padding-block:.6rem;color:var(--scene-ink);text-shadow:var(--scene-type-shadow);font:var(--ui-md)/1.4 var(--font)}.status:empty{display:none}
+
+  /* Page markers over the city */
+  .page-marker{position:absolute;transform:translate(-50%,-100%);height:49px;min-width:var(--control);padding:0 3px 13px;display:grid;place-items:center;background:transparent;border:0;color:var(--scene-ink)}
+  .page-marker::after{content:'';position:absolute;bottom:0;height:13px;width:1px;background:var(--scene-ink);box-shadow:0 1px 2px var(--scene-shade)}
+  .marker-face{display:flex;align-items:center;gap:6px;padding:7px;border:1px solid var(--scene-focus);border-radius:var(--radius-pill);background:color-mix(in srgb,var(--scene-shade) 94%,transparent);box-shadow:0 2px 7px color-mix(in srgb,var(--scene-shade) 50%,transparent)}
+  .marker-label{display:none;font:400 var(--ui-xs) var(--font);white-space:nowrap}
+  .featured .marker-face,.page-marker:is(:hover,:focus-visible) .marker-face{padding-inline:10px;background:var(--scene-raised);color:var(--scene-on-raised)}
+  .featured .marker-label,.page-marker:is(:hover,:focus-visible) .marker-label{display:block}
+  .page-marker:focus-visible{outline:0}
+  .page-marker:focus-visible .marker-face{outline:var(--focus-width) solid var(--scene-focus);outline-offset:var(--focus-offset)}
+
+  /* The journal: a two-leaf book on paper */
+  dialog{position:fixed;inset:0;margin:auto;width:min(50rem,calc(100% - 2rem));max-height:88dvh;padding:0;border:0;border-radius:var(--radius-s);color:var(--ink);background:var(--paper);overflow:auto;overscroll-behavior:contain;box-shadow:var(--shadow-sheet)}
+  dialog::backdrop{background:var(--scene-backdrop)}
+  .folio{display:grid;grid-template-columns:minmax(10rem,.52fr) minmax(0,1fr);min-height:26rem}
+  .cover{display:flex;flex-direction:column;justify-content:flex-end;position:relative;isolation:isolate;background:var(--scene-shade) url('/city/valley-print.webp') 56% center/cover;color:var(--scene-ink)}
+  .cover::after{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(0deg,color-mix(in srgb,var(--scene-shade) 96%,transparent),transparent 66%);box-shadow:inset -6px 0 10px -7px var(--scene-shade)}
+  .imprint{padding:1.65rem 1.4rem;display:grid;gap:2px}
+  .imprint span,.leaf-head,.count,.turns span,.note,time{font:var(--ui-sm)/1.45 var(--font)}
+  .imprint strong{font:400 clamp(1.7rem,3.5vw,2.7rem)/1.03 var(--font);letter-spacing:-.035em}
+  .reading .cover{background:var(--line);color:var(--ink);justify-content:center}
+  .reading .cover::after{background:none}
+  .plate{margin:.8rem .5rem 0}.plate img{display:block;width:100%;max-height:15rem;object-fit:contain;filter:drop-shadow(0 5px 3px color-mix(in srgb,var(--ink) 13%,transparent))}
+  .reading .imprint{padding:1rem 1.35rem 1.5rem}
+  .leaf{min-width:0;display:flex;flex-direction:column;padding:var(--space-5) var(--sheet-inset) var(--space-6);background:linear-gradient(90deg,color-mix(in srgb,var(--line) 45%,transparent),transparent 15px)}
+  .leaf-head,.leaf-foot{display:flex;justify-content:space-between;align-items:center;gap:var(--space-4)}
+  .leaf-head{color:var(--ink-muted);margin-bottom:var(--space-5)}
+  /* Pull the tools out by half the hit-area padding so the × lines up with the text edge */
+  .leaf-tools{display:flex;margin-right:calc((var(--icon) - var(--control)) / 2)}
+  .leaf h2{font:400 clamp(2.1rem,4vw,3.15rem)/1.07 var(--font);letter-spacing:-.05em;margin-bottom:.42rem}
+  .leaf time,.count,.note{color:var(--ink-subtle)}
+  form{display:flex;flex-direction:column;gap:var(--space-5);flex:1;margin-top:var(--space-6)}
+  textarea{width:100%;min-height:7.5rem;resize:vertical;border:0;border-radius:0;padding:0 .2rem;color:var(--ink);caret-color:var(--accent);font:1.26rem/2rem var(--font);background:repeating-linear-gradient(transparent 0 calc(2rem - 1px),color-mix(in srgb,var(--ink-subtle) 12%,transparent) calc(2rem - 1px) 2rem);scroll-padding:.25rem}
+  textarea::placeholder{color:var(--ink-subtle);font-style:italic}
+  .leaf-foot{margin-top:auto;padding-top:.9rem}
+  .ink{background:var(--ink);color:var(--paper);border:0;border-radius:var(--radius-pill);padding:.72rem 1.4rem}
+  .ink:enabled:hover{background:var(--accent)}.ink:disabled{background:var(--valley);color:var(--ink-subtle)}
+  .entry-body{white-space:pre-wrap;overflow-wrap:anywhere;font:1.4rem/1.65 var(--font);margin:1.4rem 0 2.2rem}
   .index{margin-top:.8rem;max-height:48dvh;overflow:auto;overscroll-behavior:contain;padding-right:.4rem}.index article{padding:var(--space-4) 0}.index article+article{border-top:1px solid var(--rule)}
-  .index-entry,.text-action,.visit-site{background:none;color:#294d3d;border:0;text-align:left}
-  .index-entry{width:100%;display:grid;gap:.35rem}.index-entry span{font:1.16rem/1.45 var(--font-reading);white-space:pre-wrap;overflow-wrap:anywhere}
-  .visit-site,.text-action{text-decoration:underline;text-underline-offset:.22em;font-size:.82rem}.text-action{margin-left:auto}
-  .turns{display:flex;align-items:center;gap:.2rem}.turns button:disabled{opacity:.3}
-  .note{margin:.7rem 0 0;font-size:.74rem}
-  :is(button,textarea):focus-visible{outline:2px solid #7e5725;outline-offset:2px}
-  .page-marker:focus-visible .marker-face{outline:2px solid #fff7db;outline-offset:2px}
-  .leaf :is(.index-entry,.text-action,.visit-site,.turns button,.close):enabled:is(:hover,:focus-visible){color:var(--river);text-decoration:underline;text-underline-offset:.28em}
+  .index-entry,.text-action,.visit-site{background:none;color:var(--ink);border:0;text-align:left}
+  .index-entry{width:100%;display:grid;gap:.35rem}.index-entry span{font:1.16rem/1.45 var(--font);white-space:pre-wrap;overflow-wrap:anywhere}
+  .visit-site,.text-action{text-decoration:underline;text-underline-offset:.22em;font-size:var(--ui-sm)}.text-action{margin-left:auto}
+  .turns{display:flex;align-items:center;gap:var(--space-1);margin-left:calc((var(--icon) - var(--control)) / 2)}
+  .note{margin:.7rem 0 0;font-size:var(--ui-xs)}
+  .leaf :is(.index-entry,.text-action,.visit-site):enabled:is(:hover,:focus-visible){color:var(--accent);text-decoration:underline;text-underline-offset:.28em}
   @media(hover:hover) and (prefers-reduced-motion:no-preference){
-    .page-marker .marker-face,.leaf button{transition:translate .15s ease-out}
-    .page-marker:hover .marker-face,.leaf button:enabled:hover{translate:0 -1px}
+    .page-marker .marker-face,.leaf button:not(.paper-control){transition:translate var(--dur-micro) var(--ease-soft)}
+    .page-marker:hover .marker-face,.leaf button:not(.paper-control):enabled:hover{translate:0 -1px}
   }
   @media(prefers-reduced-motion:no-preference){
-    .page-marker:active .marker-face,.leaf button:enabled:active{translate:0 1px}
+    .page-marker:active .marker-face,.leaf button:not(.paper-control):enabled:active{translate:0 1px}
   }
-  .leaf h2:focus-visible{outline:0;text-decoration:underline;text-decoration-color:#909f87;text-decoration-thickness:1px;text-underline-offset:.12em}
-  textarea:focus-visible{outline:0;box-shadow:inset 2px 0 #8f9d77;padding-left:.65rem}
-  @media(prefers-reduced-motion:no-preference){dialog[open]{animation:unfold .22s ease-out}@keyframes unfold{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}}
+  .leaf h2:focus-visible{outline:0;text-decoration:underline;text-decoration-color:var(--line-strong);text-decoration-thickness:1px;text-underline-offset:.12em}
+  textarea:focus-visible{outline:0;box-shadow:inset 2px 0 var(--line-strong);padding-left:.65rem}
+  @media(prefers-reduced-motion:no-preference){dialog[open]{animation:unfold .22s var(--ease-out)}@keyframes unfold{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}}
   @media(max-width:600px) and (hover:none){.bottom .status{flex-basis:100%}}
   @media(max-width:600px){
     .bottom{flex-wrap:wrap}

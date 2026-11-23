@@ -153,8 +153,8 @@
   }
 
   .state-message {
-    color: var(--void-text-hint);
-    font-family: var(--font-serif);
+    color: var(--ink-subtle);
+    font-family: var(--font);
     font-size: var(--text-sm);
     text-align: center;
     padding-top: var(--space-7);
@@ -167,7 +167,7 @@
 
   .sub {
     font-size: var(--text-xs);
-    color: var(--void-text-faint);
+    color: var(--ink-subtle);
   }
 
   .map-svg {
@@ -210,15 +210,15 @@
   }
 
   .label-text {
-    color: var(--void-text-dim);
-    font-family: var(--font-serif);
+    color: var(--ink-muted);
+    font-family: var(--font);
     font-size: var(--text-xs);
     letter-spacing: var(--ls-ui);
   }
 
   .label-summary {
-    color: var(--void-text-hint);
-    font-family: var(--font-serif);
+    color: var(--ink-subtle);
+    font-family: var(--font);
     font-size: var(--text-xs);
     line-height: var(--lh-ui);
     font-style: italic;

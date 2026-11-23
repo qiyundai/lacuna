@@ -68,6 +68,6 @@
   {#if enabled && progress}<p role="status">{progress}</p>{/if}
 </div>
 <style>
-  .membership{display:grid;gap:.8rem}.membership form,label{display:grid;gap:.5rem}input,button{font:inherit;padding:.65rem .8rem;border:1px solid var(--void-text-hint);border-radius:.25rem;background:var(--bg);color:var(--void-text)}
+  .membership{display:grid;gap:.8rem}.membership form,label{display:grid;gap:.5rem}input,button{font:inherit;padding:.65rem .8rem;border:1px solid var(--ink-subtle);border-radius:.25rem;background:var(--paper);color:var(--ink)}
   button{cursor:pointer}button:disabled{opacity:.65}p{line-height:1.65}
 </style>

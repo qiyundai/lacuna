@@ -56,7 +56,7 @@
   {#if message}<p role="status">{message}</p>{/if}
 </section>
 <style>
-  section{display:grid;gap:.85rem}h3{font:400 1.35rem var(--font-reading)}
-  p,label{color:var(--void-text-dim)}input{display:block;width:100%;font:1rem monospace;padding:.55rem;margin-top:.35rem}
-  button{justify-self:start;background:none;border:0;color:var(--void-text);font:inherit;cursor:pointer;padding:.45rem 0;text-align:left;text-decoration:underline;text-underline-offset:.23em}button:disabled{opacity:.5}
+  section{display:grid;gap:.85rem}h3{font:400 1.35rem var(--font)}
+  p,label{color:var(--ink-muted)}input{display:block;width:100%;font:1rem monospace;padding:.55rem;margin-top:.35rem}
+  button{justify-self:start;background:none;border:0;color:var(--ink);font:inherit;cursor:pointer;padding:.45rem 0;text-align:left;text-decoration:underline;text-underline-offset:.23em}button:disabled{opacity:.5}
 </style>

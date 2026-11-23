@@ -213,6 +213,12 @@ The populated browser fixture uses synthetic content and a disposable SQLite dat
 
 ---
 
+## Design System
+
+`DESIGN.md` defines the tokens, surfaces (paper vs. scene), control primitives, icon set, sound-control pattern and layout rules. Read it before styling anything. In short: colors and sizes come from `src/lib/styles/tokens.css` only; icons come from `Icon.svelte`; round controls use `IconAction` / `.scene-control` / `.paper-control` at 44px; a pattern used twice moves to `src/lib/styles/components.css`.
+
+---
+
 ## UI & Interaction Philosophy (Mandatory)
 
 Lacuna is a **low-UI, gestural space**. Every interface element must dissolve into the experience rather than announce itself. These are not preferences — violating them is a defect:

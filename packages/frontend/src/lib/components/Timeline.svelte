@@ -154,31 +154,31 @@
 <style>
   .archive-controls, .filters { display: flex; align-items: center; gap: 1.8rem; }
   .archive-controls { justify-content: space-between; margin: 3.3rem 0 2rem; flex-wrap: wrap; gap: .8rem; }
-  button { background: none; border: none; color: var(--void-text-hint); font: inherit; cursor: pointer; line-height: 1.8; transition: color .3s ease; }
+  button { background: none; border: none; color: var(--ink-subtle); font: inherit; cursor: pointer; line-height: 1.8; transition: color .3s ease; }
   .archive-controls button { font-size: .9rem; padding: .5rem 0; }
-  button:hover, button.chosen { color: var(--void-text); }
+  button:hover, button.chosen { color: var(--ink); }
   .filters span { margin-left: .4rem; color: var(--moss); }
   .search-line { display: flex; gap: 1rem; margin: 0 0 2.5rem; }
-  input { width: 100%; background: none; border: none; border-bottom: 1px solid var(--hairline); padding: .8rem 0; color: var(--void-text); font: inherit; font-size: 1.2rem; border-radius: 0; }
-  input::placeholder { color: var(--void-text-faint); }
+  input { width: 100%; background: none; border: none; border-bottom: 1px solid var(--line); padding: .8rem 0; color: var(--ink); font: inherit; font-size: 1.2rem; border-radius: 0; }
+  input::placeholder { color: var(--ink-subtle); }
   .month { display: grid; grid-template-columns: 9rem 1fr; gap: 2rem; margin: 3rem 0 4rem; }
-  h2 { font-size: .95rem; font-weight: 400; color: var(--void-text-hint); padding-top: .3rem; }
+  h2 { font-size: .95rem; font-weight: 400; color: var(--ink-subtle); padding-top: .3rem; }
   .thoughts { display: flex; flex-direction: column; gap: 2.7rem; }
   .thought { display: grid; grid-template-columns: 4rem 1fr 1rem; gap: 1rem; text-align: left; width: 100%; }
-  .thought time { font-size: .8rem; color: var(--void-text-faint); padding-top: .3rem; }
-  .words { font-family: var(--font-reading); font-size: clamp(1.1rem, 1.7vw, 1.35rem); line-height: 1.85; color: var(--void-text-dim); white-space: pre-wrap; overflow-wrap: anywhere; transition: color .3s ease; }
-  .thought:hover .words { color: var(--void-text); }
+  .thought time { font-size: var(--ui-xs); color: var(--ink-subtle); padding-top: .3rem; }
+  .words { font-family: var(--font); font-size: clamp(1.1rem, 1.7vw, 1.35rem); line-height: 1.85; color: var(--ink-muted); white-space: pre-wrap; overflow-wrap: anywhere; transition: color .3s ease; }
+  .thought:hover .words { color: var(--ink); }
   .kept-mark { color: var(--moss); font-size: 1.2rem; }
   .earlier { display: block; margin: 3rem auto; padding: .8rem; }
   .waiting { padding: 3rem 0; }
-  .thought-screen { position: fixed; inset: 0; z-index: 220; overflow-y: auto; display: flex; align-items: safe center; justify-content: center; background: color-mix(in srgb, var(--bg) 95%, transparent); backdrop-filter: blur(22px); padding: 5rem 1.5rem; }
+  .thought-screen { position: fixed; inset: 0; z-index: 220; overflow-y: auto; display: flex; align-items: safe center; justify-content: center; background: color-mix(in srgb, var(--paper) 95%, transparent); backdrop-filter: blur(22px); padding: 5rem 1.5rem; }
   .thought-reader { width: min(100%, 36rem); text-align: center; }
-  .held-words { margin: 2rem 0 2.5rem; font: clamp(1.4rem, 3vw, 2rem)/1.8 var(--font-reading); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .held-words { margin: 2rem 0 2.5rem; font: clamp(1.4rem, 3vw, 2rem)/1.8 var(--font); white-space: pre-wrap; overflow-wrap: anywhere; }
   .thought-actions { display: flex; gap: 2rem; justify-content: center; }
   .thought-actions button[aria-pressed="true"] { color: var(--moss); }
-  .back { display: block; margin: 3rem auto 0; font-size: .85rem; }
-  .release { margin-top: 2rem; font-size: .95rem; line-height: 1.9; color: var(--void-text-hint); }
+  .back { display: block; margin: 3rem auto 0; font-size: var(--ui-sm); }
+  .release { margin-top: 2rem; font-size: .95rem; line-height: 1.9; color: var(--ink-subtle); }
   .release button { margin: 1rem .8rem 0; }
-  .danger { color: var(--void-danger); }
+  .danger { color: var(--danger); }
   @media(max-width: 640px) { .month { grid-template-columns: 1fr; gap: 1.5rem; } .thought { grid-template-columns: 2.6rem 1fr .8rem; gap: .7rem; } .archive-controls { margin-top: 2.4rem; } }
 </style>

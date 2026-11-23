@@ -86,11 +86,11 @@
   </div>
 {/if}
 <style>
-  .privacy-screen { position: fixed; inset: 0; z-index: 225; background: color-mix(in srgb, var(--bg) 96%, transparent); backdrop-filter: blur(20px); overflow-y: auto; padding: 4rem 1.5rem; }
+  .privacy-screen { position: fixed; inset: 0; z-index: 225; background: color-mix(in srgb, var(--paper) 96%, transparent); backdrop-filter: blur(20px); overflow-y: auto; padding: 4rem 1.5rem; }
   .privacy-settings { max-width: 46ch; margin: auto; display: flex; flex-direction: column; gap: 1.8rem; line-height: 1.9; letter-spacing: .02em; }
-  h2 { font: 400 2.4rem/1.5 var(--font-reading); } h3 { font: 400 1.35rem/1.7 var(--font-reading); margin-bottom: 1.2rem; }
-  p { color: var(--void-text-dim); } section { margin: 1.2rem 0; display: flex; flex-direction: column; gap: 1.3rem; }
+  h2 { font: 400 2.4rem/1.5 var(--font); } h3 { font: 400 1.35rem/1.7 var(--font); margin-bottom: 1.2rem; }
+  p { color: var(--ink-muted); } section { margin: 1.2rem 0; display: flex; flex-direction: column; gap: 1.3rem; }
   label { display: flex; align-items: baseline; gap: .9rem; cursor: pointer; } input { accent-color: var(--moss); flex-shrink: 0; }
-  button, a { color: var(--void-text); border: none; background: none; font: inherit; line-height: 1.8; text-align: left; padding: .35rem 0; text-decoration: none; cursor: pointer; transition: color .3s ease; }
-  button:hover, a:hover { color: var(--moss); } button:disabled { opacity: .5; cursor: default; } .quiet { color: var(--void-text-hint); font-size: .82rem; }
+  button, a { color: var(--ink); border: none; background: none; font: inherit; line-height: 1.8; text-align: left; padding: .35rem 0; text-decoration: none; cursor: pointer; transition: color .3s ease; }
+  button:hover, a:hover { color: var(--moss); } button:disabled { opacity: .5; cursor: default; } .quiet { color: var(--ink-subtle); font-size: var(--ui-sm); }
 </style>

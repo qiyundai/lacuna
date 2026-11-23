@@ -79,11 +79,11 @@
   </div>
 {/if}
 <style>
-  .plan-screen { position: fixed; inset: 0; z-index: 210; background: color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: blur(18px); display: flex; align-items: center; justify-content: center; padding: 2rem; overflow-y: auto; }
+  .plan-screen { position: fixed; inset: 0; z-index: 210; background: color-mix(in srgb, var(--paper) 90%, transparent); backdrop-filter: blur(18px); display: flex; align-items: center; justify-content: center; padding: 2rem; overflow-y: auto; }
   .plan-content { max-width: 42ch; max-height: 100%; text-align: center; display: flex; flex-direction: column; gap: 1.4rem; line-height: 1.8; letter-spacing: .03em; }
-  button, a { background: none; border: none; color: var(--void-text-dim); font: inherit; cursor: pointer; text-decoration: none; line-height: 1.8; transition: color .35s ease; }
-  button:hover, a:hover, button.selected { color: var(--void-text); }
+  button, a { background: none; border: none; color: var(--ink-muted); font: inherit; cursor: pointer; text-decoration: none; line-height: 1.8; transition: color .35s ease; }
+  button:hover, a:hover, button.selected { color: var(--ink); }
   button:disabled { opacity: .45; cursor: default; }
-  .small { font-size: var(--text-xs); color: var(--void-text-hint); }
+  .small { font-size: var(--text-xs); color: var(--ink-subtle); }
   .models { display: flex; flex-direction: column; gap: .7rem; }
 </style>
