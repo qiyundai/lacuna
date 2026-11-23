@@ -1,125 +1,168 @@
 # Lacuna
 
-A quiet reflection space. Open [Lacuna](https://lacuna-app.pages.dev) on a phone or computer, choose a private passphrase, and start writing. No account, email link, or desktop installation is needed for browser journaling. Hold to save a thought; move down to search your archive, keep thoughts close, and export your words.
+A private journal that grows a city, one page at a time.
 
-## On your phone
+Open [Lacuna](https://lacuna-app.pages.dev) on a phone or computer, choose a passphrase, and start writing. Each page you keep lights a building in a valley city along a river. There is no account, email, or installation: the journal is encrypted and stored in your browser.
 
-1. Open the public URL in a normal browser tab.
-2. Create a long, unique passphrase and save it in your password manager. It cannot be reset.
-3. Write, then hold to save. On a keyboard, Control/Command+Enter also saves.
-4. From your story's menu, open **privacy & storage** and download an encrypted browser backup.
+## Using Lacuna
 
-The browser encrypts the journal using Web Crypto AES-256-GCM and PBKDF2-HMAC-SHA256 (600,000 iterations, random salt). Only ciphertext is persisted in IndexedDB. The passphrase and non-extractable key are held only in memory while unlocked. Atomic compare-and-replace transactions reject competing-tab writes; quota failures retain the last saved copy. The journal locks after 15 idle minutes and on reload. Clearing site storage, private browsing, or device loss can erase the only copy. Keep backups outside the browser.
+### Start
 
-Restore `.lacuna-web-vault` backups in another browser with their original passphrase. An existing encrypted copy is kept before replacement and can be downloaded under privacy & storage. Deleting this browser journal removes its active copy and those restore copies, not downloaded backups or other devices.
+- **Create journal** asks for a passphrase of at least 12 characters. Save it in a password manager. **It cannot be reset**, and nobody else holds a copy.
+- **Visit the example city** opens a sample journal to look around. Changes there last only for the visit.
+- Returning visitors see **Unlock journal**. The journal locks on reload and after 15 idle minutes.
 
-## Optional browser sync
+### Write and read
 
-In **Journal settings → Privacy & storage**, enable encrypted sync and save the private pairing code. On another device choose **Link a synced journal** from the passphrase screen. Enter the code and the original journal passphrase. Sync works while the journal is unlocked. Local saves continue offline. Compatible additions from both devices are combined. If other changes conflict, sync keeps both versions and offers to back up the local journal before using the online copy.
+- **Write a page** (the pen, bottom right) opens a blank page of up to 500 characters. **Save page**, or press Control/Command+Enter.
+- Saved pages appear as markers above their buildings. Select a marker or a building to read its page; buildings holding several pages let you turn between them. **Forget this page** removes a page from the active journal.
+- **Pages** in the menu lists every page, with a link to visit each one in the city.
 
-The browser generates a 256-bit random pairing secret. HKDF-SHA-256 derives independent storage access and AES-GCM keys. The browser encrypts a portable, passphrase-encrypted vault again with a fresh 96-bit IV and authenticates its version. Device pairing settings and AI consent are excluded from the transferred journal. The service receives a bearer credential and opaque ciphertext. It stores a hash of the credential as the storage address. No email or subscription is required. Deleting the active online copy leaves a version tombstone to prevent stale uploads. Downloaded backups still work independently.
+### Move around the city
 
-Apply Worker D1 migration `0008_browser_sync.sql` before releasing the Worker and frontend. Set the Worker's `JWT_SECRET` for pseudonymous rate limits and `FRONTEND_ORIGIN` to the frontend origin. Browsers send encrypted transfers directly to the existing API origin at `/journal-sync`. The ciphertext limit is 8 MiB after encoding. A larger journal remains usable locally.
+Drag or use the arrow keys to orbit, right-drag to pan, and scroll or pinch to zoom. Home returns to the city. The menu offers **City view** and **Overlook**, and can pause ambient motion; Lacuna starts paused when the system asks for reduced motion. The light, sky, and windows follow your local time of day.
 
-## Living memoir subscriptions · Coming soon
+### Sound
 
-The public release disables background analysis and subscription endpoints. The following describes the implementation reserved for launch.
+Entering the valley starts a soundtrack and positional ambience: river, wind, leaves, birds, the ferry. The entry buttons show a speaker when sound will play.
 
-The browser is the product client. Free journals can write, read, export, and forget offline. In **Menu → AI reflections**, writers can sign in with an email code, purchase a subscription, and independently allow analysis of past and future pages. Background work resumes in an unlocked browser. Published chapters and the Soul Map stay in the encrypted vault after cancellation.
+- The **Sound** switch beside the menu button turns everything off or on. It is also on the loading screen and on open journal pages.
+- **Soundtrack** and **Ambience** in the menu turn each channel off separately.
+- **Music library** opens the player: browse the included album, queue tracks, shuffle and repeat, or **Add music** from your own files. Imported audio stays in this browser.
 
-The Pages function proxies `/reflections/*` to the Worker on the same origin as the browser session. For development run the frontend and Wrangler on port 8787 and set `FRONTEND_ORIGIN` to the exact frontend origin. Set `REFLECTION_WORKER_ORIGIN` on Pages when using a different Worker host. Both deployments must use HTTPS in production.
+### Other views
 
-Configure Worker secrets `JWT_SECRET`, `RESEND_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `OPENAI_API_KEY`. Set `EMAIL_FROM` to a verified sender, `STRIPE_PRICE_ID` to a recurring price, and `OPENAI_MODEL` to the evaluated Responses model. Enable the Stripe billing portal, apply migration 0007, and register the Worker's `/reflections/webhook` for checkout completion, subscription creation/update/deletion, and invoice paid/payment-failed events. Use test credentials and a test price before activating live billing.
+The menu also leads to:
 
-Set `REFLECTION_ACCOUNT_MICROS` and `REFLECTION_GLOBAL_MICROS` to monthly spending limits in millionths of a US dollar. Set `MODEL_INPUT_MICROS_PER_TOKEN` and `MODEL_OUTPUT_MICROS_PER_TOKEN` to the configured model's uncached rates in the same units per token. The Worker reserves a conservative request budget before sending excerpts and reconciles it against returned usage. Missing limits or credentials disable generation.
+- **Journal**: your pages as a timeline. Filter to **kept close**, search with **find a word**, and keep a thought close from its reading view. Soul map and memoir are marked Coming soon.
+- **Quiet writing**: a blank space for a single thought. Type, then hold for a moment (or press Control/Command+Enter) to save it.
+- **Journal settings**: About Lacuna; Data and privacy; **Privacy & storage** (backups, restore, sync); **Export journal** as a Markdown book or JSON; Lock journal; and delete this browser journal. AI reflections are marked Coming soon.
 
-Run `node scripts/evaluate-memoir.mjs` to list the synthetic review journals. With a model key, token rates and an explicit `EVAL_BUDGET_USD`, add `--live` to generate blinded comparisons and cost measurements under `.test-output`. Score the outputs before opening the answer key. The previous pipeline remains available for comparison.
+### Install on a phone
 
-The sections below document the separate legacy development companion. Existing desktop vaults stay in place.
+Lacuna is an installable web app. Use the browser's **Add to Home Screen** or **Install** option to open it full-screen with its own icon. The journal remains tied to that browser's storage.
 
-## ChatGPT plan companion
+## Privacy and storage
 
-Use Node.js 22.16+ and pnpm 9+:
+The browser encrypts the journal with Web Crypto AES-256-GCM and a key derived by PBKDF2-HMAC-SHA256 (600,000 iterations, random salt). Only ciphertext is stored, in IndexedDB. The passphrase and the non-extractable key exist only in memory while the journal is unlocked. Atomic compare-and-replace transactions reject writes from competing tabs, and quota failures keep the last saved copy. No advertising or analytics SDK, geolocation, or weather requests are included. See [PRIVACY-ARCHITECTURE.md](./PRIVACY-ARCHITECTURE.md) and the in-app policy at `/privacy`.
+
+**Keep a backup.** Clearing site storage, private browsing, or losing the device can erase the only copy. In **Journal settings → Privacy & storage**, download an encrypted `.lacuna-web-vault` backup. To restore it in any browser, choose **Restore from backup** on the passphrase screen and enter the original passphrase. A restored journal starts with sync off. A journal that is replaced is first kept as an encrypted copy, which you can download under Privacy & storage. Deleting the browser journal removes its active copy and those restore copies, but not downloaded backups or other devices.
+
+Exports are **plaintext**, unlike backups.
+
+### Optional browser sync
+
+In **Privacy & storage**, enable encrypted sync and save the private pairing code. On another device, choose **Link a synced journal** on the passphrase screen and enter the code and the original passphrase. Sync runs while the journal is unlocked, and saves continue offline. Compatible additions from both devices are combined. When changes conflict, sync keeps both versions and offers to back up the local journal before using the online copy.
+
+The browser generates a 256-bit random pairing secret. HKDF-SHA-256 derives independent storage-access and AES-GCM keys. The already passphrase-encrypted vault is encrypted again with a fresh 96-bit IV, and its version is authenticated. Device pairing settings and AI consent are not transferred. The service receives only a bearer credential and opaque ciphertext, and stores a hash of the credential as the storage address. Deleting the online copy leaves a version tombstone so that stale devices cannot upload it again. Transfers are limited to 8 MiB of encoded ciphertext; a larger journal still works locally.
+
+## AI reflections · Coming soon
+
+Background analysis and subscriptions are disabled in the public release (`aiAvailable` in `packages/shared/ai-release.ts`). The implementation reserved for launch works like this:
+
+- In **Journal settings → AI reflections**, writers sign in with an email code, subscribe, and separately allow analysis of past and future pages. Work resumes whenever the browser is unlocked. Published chapters and the Soul Map stay in the encrypted vault after cancelling.
+- A Pages function proxies `/reflections/*` to the Worker on the session's origin. Set `REFLECTION_WORKER_ORIGIN` on Pages if the Worker runs on another host. Both must use HTTPS in production.
+- Worker secrets: `JWT_SECRET`, `RESEND_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `OPENAI_API_KEY`. Variables: `EMAIL_FROM` (a verified sender), `STRIPE_PRICE_ID` (a recurring price), `OPENAI_MODEL` (the evaluated Responses model). Enable the Stripe billing portal, apply migration 0007, and register `/reflections/webhook` for checkout completion, subscription created/updated/deleted, and invoice paid/payment-failed events. Use test credentials and a test price first.
+- Spending limits: `REFLECTION_ACCOUNT_MICROS` and `REFLECTION_GLOBAL_MICROS` are monthly caps in millionths of a US dollar. `MODEL_INPUT_MICROS_PER_TOKEN` and `MODEL_OUTPUT_MICROS_PER_TOKEN` are the model's uncached rates in the same units. The Worker reserves a conservative budget before sending excerpts and reconciles it against reported usage. Generation is disabled when any limit or credential is missing.
+- `node scripts/evaluate-memoir.mjs` lists the synthetic review journals. With a model key, token rates, and an explicit `EVAL_BUDGET_USD`, `--live` generates blinded comparisons and cost measurements under `.test-output`. Score the outputs before opening the answer key.
+
+## Desktop companion (legacy)
+
+A separate loopback companion predates the browser journal. It signs in with ChatGPT and runs reflections against a local vault using your ChatGPT plan. Existing desktop vaults stay in place. The hosted app cannot open a companion vault, and it never redirects phones to localhost.
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm companion
+pnpm companion          # builds the app and serves it on http://127.0.0.1:1455
 ```
 
-1. Open `http://127.0.0.1:1455` using this exact host.
-2. Acknowledge data and privacy, then **Continue with ChatGPT**. No Lacuna email link is needed.
-3. Complete OpenAI sign-in and authorize eligible ChatGPT plan use. Create a long, unique vault passphrase and save it in your password manager. **There is no passphrase recovery.** Returning users unlock their existing vault.
-4. Open **Menu → privacy & storage** to migrate an older cloud journal, download an encrypted backup, and choose whether to enable the companion’s encrypted cloud copy. Signing in does not enable sync. AI reflections are marked Coming soon in this release.
+1. Open `http://127.0.0.1:1455`, using exactly that host.
+2. Acknowledge data and privacy, then **Continue with ChatGPT**. Complete OpenAI sign-in and authorize eligible plan use.
+3. Create or unlock the vault passphrase. **There is no recovery.**
+4. **Privacy & storage** migrates an older cloud journal, downloads an encrypted backup, and toggles the optional encrypted cloud copy. Signing in does not enable sync.
 
-In development builds with reflections enabled, the following controls become available.
-
-- **Test ChatGPT connection** makes a small inference request without journal content. It uses plan allowance or credits and does not save an entry.
-- If you allow journal sharing, **refresh reflections** sends context directly to OpenAI. Automatic reflections require a second opt-in. Extraction processes up to ten thoughts per run; refresh again while a backlog remains. Requests use plan allowance or credits.
-
-The companion follows [OpenAI's open-source registration flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in). OpenAI determines eligibility, models, and limits. **Manage usage** opens [ChatGPT settings](https://chatgpt.com/settings/usage). Sign-in can succeed without plan-use permission; reconnect to grant it. There is no fallback provider or API key requirement.
-
-The hosted app now opens its own encrypted browser journal; it does not redirect phones to localhost. It cannot open the companion's vault. New plaintext journal uploads and hosted AI result uploads still return 410. Older browser JWTs remain invalidated by the session requirement. A hosted OAuth callback requires separate OpenAI registration and is not configured here.
-
-## Private storage and recovery
-
-Vaults live in `~/.lacuna/vaults/<account-id>.vault`. AES-256-GCM uses a fresh 96-bit IV on each write, a 128-bit authentication tag, and format/account-bound additional authenticated data. The 256-bit key is derived with scrypt (`N=131072, r=8, p=1`) and a random 128-bit salt. Keys exist only in companion memory while unlocked. File writes are serialized, synced, and atomically replaced; plaintext is never written to a journal file. Local plaintext size is limited to 16 MiB. Locking cancels inference and clears UI state; idle polling does not extend the 15-minute lock timer.
-
-**Download an encrypted backup** creates a `.lacuna-vault` file. From the lock screen, choose restore, select that file, and enter its original passphrase using the same ChatGPT identity. A current local vault is preserved as an encrypted conflict backup before replacement. Restores disable AI sharing and cloud sync. Markdown and JSON archive exports are **plaintext**, unlike vault backups.
-
-Optional cloud sync sends only a supported encrypted envelope, never the passphrase/key or readable journal. Version comparisons reject conflicts. D1 stores bounded ciphertext chunks in the same transaction as the guarded version update, below its per-row size limit. Cloud copies support up to 6 MiB of base64 ciphertext (about 4.5 MiB of plaintext). Larger local vaults still save; sync reports an error. Turning sync off retains any remote copy. Explicit cloud deletion removes it and retains a version tombstone so stale devices cannot silently resurrect it. No automatic cross-device merge is implemented.
-
-**Older journals:** the explicit migration first downloads an account-scoped consistent snapshot, encrypts and durably saves it, reads it back to verify it, then removes active plaintext source/derived records in a version-guarded transaction. A conflict or failed local save keeps server records. Until migration/deletion, older data remains readable by the backend. Backups may retain that older plaintext temporarily: [D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/) retains 7 days on Free or 30 days on Paid. Migration never automatically merges retired email accounts or different ChatGPT registrations.
-
-## Identity and credentials
-
-The companion uses PKCE, state, nonce, and signed identity validation. Lacuna independently verifies the ID token against OpenAI's public keys, issuer, issued client ID, expiry, and a single-use server challenge. It issues a revocable 12-hour session kept only in the companion's protected credential store. A port-specific HttpOnly, SameSite cookie binds the browser; no bearer token or user identity is persisted in browser storage. Accounts use issuer/client/subject, never email matching. The backend retains a pseudonymous mapping rather than display email for ChatGPT identities. Old email accounts remain separate; email sign-in and old links are retired.
-
-Access and refresh tokens stay in `~/.lacuna/chatgpt.credentials`, protected with Windows DPAPI or Unix mode-0600 permissions in a mode-0700 directory. The ID token reaches the Worker only for verification and is not stored there or returned to the browser. No OAuth tokens belong in source control, logs, or browser storage. Process locking and serialized refresh prevent token-rotation races. Disconnect clears local OAuth tokens and attempts remote revocation; it retains the public client registration so signing in again returns to the same account.
-
-Keep the protected credential directory and its stable host/client registration. A fresh dynamic registration on another computer can produce a separate account identity; account transfer/linking is not implemented. Never copy another application's credentials.
-
-The companion binds to loopback, validates Host and Origin, serves the built interface, and runs the shared analysis pipeline against the unlocked local vault. Context and generated text never travel through Lacuna's hosted AI endpoints. AI sharing requires explicit permission; disabling it or locking cancels running inference. OpenAI necessarily receives readable context. `store: false` does not promise zero retention; review OpenAI's policies/account controls. Local sign-in currently needs the identity service and expires after 12 hours; this release does not promise fully offline authentication.
-
-No advertising/analytics SDK or geolocation/weather requests are included. Ambient color uses the local clock. Pages and the companion apply CSP (hashed static bootstrap / per-response nonce), framing restrictions, a device Permissions-Policy, and no-referrer. Sessions leave browser localStorage; login-rate buckets use daily keyed IP pseudonyms. Cloudflare/OpenAI still process their necessary service metadata. Keep the companion running for journaling/inference. After a crash, verify that no companion is running before removing its `companion.lock` file.
+In development builds with reflections enabled, **Test ChatGPT connection** sends a small request without journal content. With journal sharing allowed, **refresh reflections** sends context directly to OpenAI, up to ten thoughts per run; automatic reflections need a second opt-in. Requests use plan allowance or credits. OpenAI determines eligibility, models, and limits; **Manage usage** opens [ChatGPT settings](https://chatgpt.com/settings/usage). Sign-in follows [OpenAI's open-source registration flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in). There is no fallback provider or API key.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LACUNA_API_URL` | Production Worker | Backend; HTTPS required except loopback development |
+| `LACUNA_API_URL` | Production Worker | Backend; HTTPS required except on loopback |
 | `LACUNA_PORT` | `1455` | UI and `/auth/callback` port |
 | `LACUNA_DATA_DIR` | `~/.lacuna` | Private credential directory |
 
-## Development and deployment
+### Companion storage
+
+Vaults live in `~/.lacuna/vaults/<account-id>.vault`. AES-256-GCM uses a fresh 96-bit IV per write, a 128-bit tag, and additional authenticated data bound to the format and account. The 256-bit key comes from scrypt (`N=131072, r=8, p=1`) with a random 128-bit salt, and exists only in companion memory while unlocked. Writes are serialized, synced, and atomically replaced; plaintext never reaches a journal file. Plaintext is limited to 16 MiB. Locking cancels inference and clears UI state; idle polling does not extend the 15-minute lock.
+
+**Download an encrypted backup** creates a `.lacuna-vault` file. Restore it from the lock screen with its original passphrase and the same ChatGPT identity. A current vault is preserved as an encrypted conflict backup first. Restores turn off AI sharing and cloud sync.
+
+The optional cloud copy sends only a supported encrypted envelope. Version comparisons reject conflicts, and D1 stores bounded ciphertext chunks in the same transaction as the guarded version update. Cloud copies hold up to 6 MiB of base64 ciphertext (about 4.5 MiB of plaintext); larger vaults still save locally. Turning sync off keeps the remote copy; explicit deletion removes it and leaves a version tombstone. There is no automatic merge across devices.
+
+**Older journals:** migration downloads an account-scoped snapshot, encrypts and saves it, reads it back to verify, then removes the plaintext server records in a version-guarded transaction. A conflict or failed save keeps the server records. Until then, the backend can read that data, and backups may retain it for a while: [D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/) keeps 7 days on Free or 30 days on Paid. Retired email accounts and different ChatGPT registrations are never merged automatically.
+
+### Companion identity and credentials
+
+The companion uses PKCE, state, and a nonce. The Worker independently verifies the ID token's signature, issuer, issued client ID, expiry, and a single-use server challenge, then issues a revocable 12-hour session kept only in the companion's protected credential store. A port-specific HttpOnly, SameSite cookie binds the browser; no bearer token or identity is stored in browser storage. Accounts are keyed by issuer, client, and subject, never by email, and the backend keeps a pseudonymous mapping instead of the display email. Email sign-in and old links are retired.
+
+Access and refresh tokens stay in `~/.lacuna/chatgpt.credentials`, protected with Windows DPAPI or Unix mode 0600 in a mode-0700 directory. The ID token reaches the Worker only for verification and is never stored or returned to the browser. Process locking and serialized refresh prevent token-rotation races. Disconnecting clears local tokens and attempts remote revocation, but keeps the public client registration so that signing in again returns to the same account. Keep the credential directory: a new registration on another computer can create a separate identity, and account linking is not implemented.
+
+The companion binds to loopback and validates Host and Origin. Context and generated text never pass through Lacuna's hosted AI endpoints; OpenAI necessarily receives readable context, and `store: false` does not promise zero retention. Sign-in requires the identity service and expires after 12 hours. After a crash, confirm no companion is running before removing `companion.lock`.
+
+## Development
+
+Requires Node.js 22.16+ and pnpm 9+.
 
 ```bash
 pnpm install
-# Configure the D1 database ID in packages/worker/wrangler.toml.
-pnpm -F worker db:migrate:local
-# Set JWT_SECRET in the Worker's ignored .dev.vars for development.
-pnpm dev:worker
-# Set LACUNA_API_URL=http://127.0.0.1:8787 for the local companion.
-pnpm companion
+pnpm dev:frontend       # http://localhost:5173, the browser journal works on its own
+pnpm dev:worker         # http://localhost:8787, needed for sync and reflections
 ```
 
-Production requires the Worker's `JWT_SECRET` and configured `FRONTEND_ORIGIN`, plus Cloudflare deployment credentials in CI. No email service or Anthropic secret is required. Pushes to `main` run checks, apply D1 migrations, deploy the Worker, then deploy Cloudflare Pages. Do not run remote migrations manually. ChatGPT-only sign-in requires `0004_chatgpt_identity.sql` before the updated Worker and companion.
+For the Worker, set the D1 database ID in `packages/worker/wrangler.toml`, run `pnpm -F worker db:migrate:local`, and put `JWT_SECRET` in the ignored `packages/worker/.dev.vars`. `FRONTEND_ORIGIN` must match the frontend's exact origin.
 
 ```bash
-pnpm check
-pnpm test
+pnpm check              # Svelte diagnostics and Worker type check
+pnpm test               # regression suite: disposable SQLite, simulated OpenAI, no real AI requests
 pnpm build:frontend
 pnpm build:companion
-pnpm audit
-pnpm preview:story     # Disposable sample story at http://127.0.0.1:1456
+pnpm preview:story      # disposable sample story on http://127.0.0.1:1456
 ```
 
-Tests use disposable SQLite data and simulated OpenAI responses. Real OAuth consent and model inference require acceptance testing with an eligible account. See [AUDIT.md](./AUDIT.md), [CLAUDE.md](./CLAUDE.md), and [SPEC.md](./SPEC.md) for verification scope, contributor guidance, and product conventions.
+`preview:story` builds into `.test-output/preview-app`, migrates synthetic entries from an in-memory D1 fixture into a temporary encrypted vault, and never touches production data or OAuth credentials. Its sample-only passphrase is `sample story vault passphrase`. It uses ports 1456 and 8788, so the companion on 1455 can stay open.
 
-The sample-story preview builds into `.test-output/preview-app`, migrates synthetic entries from a disposable in-memory D1 fixture into a temporary encrypted vault, and never loads production data or OAuth credentials. The **sample-only** unlock passphrase is `sample story vault passphrase`. It uses ports 1456 and 8788 so the real companion on 1455 can remain open. Stop the preview before starting another instance.
+### Layout
 
-## Music library
+| Path | Contents |
+|---|---|
+| `packages/frontend` | SvelteKit single-page app: the city (`src/lib/town`), journal views, browser vault, sync, music player |
+| `packages/frontend/src/lib/styles` | Design tokens, base styles, and shared primitives; see [DESIGN.md](./DESIGN.md) |
+| `packages/worker` | Cloudflare Worker (Hono) on D1: sync, privacy, reflections, legacy companion APIs |
+| `packages/companion` | Legacy loopback companion |
+| `packages/shared` | Code shared by the app, Worker, and companion |
+| `tests`, `scripts` | Regression suite, previews, build and evaluation scripts |
 
-Open the music note beside Lacuna and choose **Add music** to keep audio files in the current browser. **Album folder** groups tracks by their containing folder name. Imported copies stay on this device and can be removed from the player.
+The `/studio` routes are development views for individual buildings.
 
-To ship an album with the app, put its audio and UTF-8 M3U playlist under `packages/frontend/static/music/` and add the relative playlist path to `library.json`. The player uses the `#PLAYLIST:` album name, the titles and durations from `#EXTINF:`, and audio paths relative to the playlist. Use [A River Remembers](packages/frontend/static/music/a-river-remembers.m3u8) as an example.
+### Design
+
+[DESIGN.md](./DESIGN.md) defines the interface: tokens for the paper and scene surfaces, serif type scales, 44px controls, the icon set, and the sound-control pattern. Read it before changing any styles.
+
+### Albums and sound
+
+To ship an album, put its audio and a UTF-8 M3U playlist under `packages/frontend/static/music/` and add the playlist path to `library.json`. The player reads the album name from `#PLAYLIST:`, titles and durations from `#EXTINF:`, and audio paths relative to the playlist. See [A River Remembers](packages/frontend/static/music/a-river-remembers.m3u8).
+
+Valley ambience lives in `packages/frontend/static/valley-sounds/`, with its source and licence in [credits.txt](packages/frontend/static/valley-sounds/credits.txt).
+
+### Deployment
+
+Pushing to `main` runs checks and tests, applies D1 migrations, deploys the Worker, then deploys Cloudflare Pages. Never apply remote migrations by hand. Production needs the Worker's `JWT_SECRET` and `FRONTEND_ORIGIN` and Cloudflare credentials in CI. Browser sync needs migration `0008_browser_sync.sql` before the matching Worker and frontend are released.
+
+## Further reading
+
+- [SPEC.md](./SPEC.md): product specification
+- [DESIGN.md](./DESIGN.md): design system
+- [PRIVACY-ARCHITECTURE.md](./PRIVACY-ARCHITECTURE.md): privacy model and data flows
+- [MOBILE-ONBOARDING.md](./MOBILE-ONBOARDING.md): phone onboarding direction
+- [AUDIT.md](./AUDIT.md): security audit and verification scope
+- [CLAUDE.md](./CLAUDE.md): contributor guidance
 
 ## License
 
