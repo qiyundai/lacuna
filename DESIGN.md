@@ -110,9 +110,15 @@ Valley audio plays by default, so the controls follow a fixed pattern:
 - **Music** has two places and no others. `NowPlaying` is one line of scene
   type in the city's bottom-left (it gives way to save notices), naming the
   song with a pause control; it settles to a whisper after a few seconds.
-  The listening room (`AlbumPlayer`) is a full-screen layer: the valley
-  painting with the song and transport on the scene side, the tracklist on
-  paper beside it (below it on phones). No floating player cards, volume
+  The listening room (`AlbumPlayer`) is a full-screen layer: the song and
+  transport on the scene side, the library on paper beside it (below it on
+  phones). The library has three quiet toggles: **albums** (a ruled shelf, one
+  line per album, that opens into a single album), **all songs** (every song
+  under a sticky album heading, numbered by its place on the album) and
+  **up next**. It holds only Lacuna's own albums; there is no import. Over a live scene (the city, the arrival flight) the scene side is
+  a window onto it, shaded only under the type, and the scene's own overlays
+  fade away while the room is open; a scene registers itself through
+  `musicWindow.scenes`. Over paper pages it shows the valley painting. No floating player cards, volume
   sliders or native dropdowns — device volume and the sound switches cover it.
 - **`SoundCue`** marks an action that will start audio (entering the valley).
   It appears only when sound will actually play, and the action's accessible

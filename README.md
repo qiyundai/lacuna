@@ -28,7 +28,7 @@ Entering the valley starts a soundtrack and positional ambience: river, wind, le
 
 - The **Sound** switch beside the menu button turns everything off or on. It is also on the loading screen and on open journal pages.
 - **Soundtrack** and **Ambience** in the menu turn each channel off separately.
-- **Music** opens the listening room: the song over the valley painting, and the tracklist beside it. Line songs up to play next, shuffle or repeat, find a song, or add your own music. Imported audio stays in this browser. While a song plays, its name rests in the bottom-left corner of the city; select it to return to the room.
+- **Music** opens the listening room: the song over the live city or arrival flight (the valley painting over journal pages), and the library beside it: albums to open one at a time, every song grouped under its album, and the songs lined up to play next. Shuffle or repeat, or find a song by title or album. While a song plays, its name rests in the bottom-left corner of the city; select it to return to the room.
 
 ### Other views
 
