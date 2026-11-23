@@ -10,7 +10,7 @@ Unless a file is listed under [Third-party assets](#third-party-assets), the fol
 
 | Path | Contents |
 |---|---|
-| `packages/frontend/static/music/` | The album *A River Remembers*: audio and playlist |
+| `packages/frontend/static/music/` | The albums *A River Remembers*, *Rain on the Low Roof* and *The Courtyard After Dusk*: audio and playlists |
 | `packages/frontend/static/valley-sounds/` | Valley ambience and sound effects |
 | `packages/frontend/static/city/paint/` | Painted building plates |
 | `packages/frontend/static/city/materials/` | Painted surface textures |
