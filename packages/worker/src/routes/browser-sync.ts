@@ -3,10 +3,15 @@ import { validPacket } from '../../../shared/sync-packet.js';
 import { checkRateLimit, privateRateKey, hashToken } from '../ratelimit.js';
 import type { Env } from '../types.js';
 
+export function syncOrigins(env: Env): string[] {
+  const primary = env.FRONTEND_ORIGIN ?? 'http://localhost:5173';
+  return env.LEGACY_SYNC_ORIGIN ? [primary, env.LEGACY_SYNC_ORIGIN] : [primary];
+}
+
 const route = new Hono<{Bindings:Env; Variables:{slot:string; peer:string}}>();
 route.use('*', async (c,next) => {
   if (!c.env.JWT_SECRET) return c.json({error:'Sync is unavailable.'},503);
-  if (c.req.method !== 'GET' && c.req.header('Origin') !== c.env.FRONTEND_ORIGIN) return c.body(null,403);
+  if (c.req.method !== 'GET' && !syncOrigins(c.env).includes(c.req.header('Origin') ?? '')) return c.body(null,403);
   const match = /^Bearer ([a-f0-9]{64})$/.exec(c.req.header('Authorization') ?? '');
   if (!match) return c.body(null,401);
   const peer = await privateRateKey(c.req.header('CF-Connecting-IP') ?? 'local',c.env.JWT_SECRET);

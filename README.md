@@ -2,7 +2,9 @@
 
 A private journal that grows a city, one page at a time.
 
-Open [Lacuna](https://lacuna-app.pages.dev) on a phone or computer, choose a passphrase, and start writing. Each page you keep lights a building in a valley city along a river. There is no account, email, or installation: the journal is encrypted and stored in your browser.
+Open [Lacuna](https://lacuna.quietatlas.io) on a phone or computer, choose a passphrase, and start writing. Each page you keep lights a building in a valley city along a river. There is no account, email, or installation: the journal is encrypted and stored in your browser.
+
+If you started a journal at [the original address](https://lacuna-app.pages.dev), open it there and download an encrypted backup in **Privacy & storage**. Restore the backup at the new address using your existing passphrase.
 
 ## Using Lacuna
 
