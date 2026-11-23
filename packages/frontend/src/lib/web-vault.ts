@@ -52,7 +52,7 @@ export const envelopeToken = (value: WebEnvelope | null) => value ? `${value.iv}
 function aad(owner: string) { return encoder.encode(`lacuna.web-vault.v1:${owner}:pbkdf2-sha256-600000`); }
 function validateEnvelope(value: unknown): asserts value is WebEnvelope {
   const v = value as WebEnvelope;
-  if (!v || Object.keys(v).sort().join(',') !== 'ciphertext,format,iv,kdf,owner,salt' || v.format !== 'lacuna.web-vault.v1' || v.kdf !== 'pbkdf2-sha256-600000' || !/^[a-f0-9]{32}$/.test(v.owner) || typeof v.salt !== 'string' || typeof v.iv !== 'string' || typeof v.ciphertext !== 'string' || v.ciphertext.length > Math.ceil((MAX_BYTES + 16) * 4 / 3)) throw new WebVaultError('INVALID_BACKUP', 'Choose an encrypted browser backup created by Lacuna. Desktop companion backups use a different format.');
+  if (!v || Object.keys(v).sort().join(',') !== 'ciphertext,format,iv,kdf,owner,salt' || v.format !== 'lacuna.web-vault.v1' || v.kdf !== 'pbkdf2-sha256-600000' || !/^[a-f0-9]{32}$/.test(v.owner) || typeof v.salt !== 'string' || typeof v.iv !== 'string' || typeof v.ciphertext !== 'string' || v.ciphertext.length > Math.ceil((MAX_BYTES + 16) * 4 / 3)) throw new WebVaultError('INVALID_BACKUP', 'Choose an encrypted backup created by Lacuna.');
   try { if (bytes(v.salt).length !== 32 || bytes(v.iv).length !== 12 || bytes(v.ciphertext).length < 16) throw new Error(); }
   catch { throw new WebVaultError('INVALID_BACKUP', 'The encrypted backup is damaged.'); }
 }

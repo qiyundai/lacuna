@@ -24,8 +24,8 @@ A low UI, self-memoir social space. Not a journal app. Not a chat app. A **refle
 | Hosting | Cloudflare Pages | |
 | API | Cloudflare Workers | AI synthesis, entry persistence |
 | Database | Cloudflare D1 | Entries, user state, pattern accumulation |
-| AI | ChatGPT plan through a local companion | Shared reflection pipeline; access and refresh tokens remain local |
-| Auth | ChatGPT OIDC + Lacuna JWT | Verified identity, no email link |
+| AI | Reserved; disabled in the public release | Requires separate consent before any page is sent |
+| Auth | None for journaling | Passphrase-encrypted browser vault; sync uses an account-free pairing code |
 
 ---
 

@@ -9,8 +9,6 @@ node_modules/
 dist/
 build/
 .test-output/
-*.credentials
-companion.lock
 .wrangler/
 
 # Environment

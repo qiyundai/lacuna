@@ -22,8 +22,9 @@ Core experience: the user types into **the void**, holds to solidify a thought, 
 | Hosting | Cloudflare Pages |
 | API | Cloudflare Workers (Hono router) |
 | Database | Cloudflare D1 (SQLite) |
-| AI | ChatGPT plan inference through the local companion |
-| Auth | ChatGPT OIDC identity and Lacuna JWT (`jose`) |
+| Journal storage | Passphrase-encrypted browser vault (Web Crypto + IndexedDB) |
+| Sync | Account-free, end-to-end encrypted snapshots in D1 |
+| AI | Reserved and disabled in the public release (`aiAvailable`) |
 
 ---
 
@@ -39,26 +40,27 @@ lacuna/
 │   │   ├── src/
 │   │   │   ├── routes/
 │   │   │   │   ├── +layout.ts           ← ssr:false, prerender:false
-│   │   │   │   ├── +layout.svelte       ← auth gate overlay
+│   │   │   │   ├── +layout.svelte       ← vault gate (lock screen)
 │   │   │   │   ├── +page.svelte         ← spatial container (Void + DownSpace)
 │   │   │   └── lib/
-│   │   │       ├── api.ts               ← typed fetch wrapper
-│   │   │       ├── auth.ts              ← local Lacuna session helpers
+│   │   │       ├── api.ts               ← typed journal API (served in-browser by web-api.ts)
+│   │   │       ├── web-vault.ts         ← encrypted IndexedDB vault
+│   │   │       ├── web-api.ts           ← journal operations against the vault
+│   │   │       ├── browser-sync.ts      ← pairing-code encrypted sync
 │   │   │       ├── gesture.ts           ← holdDetector, swipeDetector, shakeDetector
 │   │   │       ├── stores/              ← Svelte 5 $state stores (session, draft, entries, patterns, memoir)
 │   │   │       ├── utils/wordcloud.ts   ← grid-jitter word placement
-│   │   │       └── components/          ← Void, DownSpace, Timeline, SoulMap, LivingMemoir
+│   │   │       └── components/          ← Void, DownSpace, Timeline, BookReader, VaultGate
 │   │   └── static/_redirects ← "/* /index.html 200" for Pages SPA routing
 │   └── worker/               ← Cloudflare Worker
 │       ├── wrangler.toml     ← D1 binding, FRONTEND_ORIGIN var
 │       ├── migrations/       ← numbered D1 migrations (applied by CI on deploy)
 │       └── src/
 │           ├── index.ts      ← Hono app entry, CORS, route registration
-│           ├── types.ts      ← Env, row interfaces, JwtPayload
-│           ├── db.ts         ← D1 query helpers
-│           ├── middleware/auth.ts   ← JWT verification (jose)
-│           ├── routes/       ← auth, entries, patterns, memoir
-│           └── ai/           ← models, prompts, shared pipeline/storage
+│           ├── types.ts      ← Env and row interfaces
+│           ├── ratelimit.ts  ← rate limits, IP pseudonyms, token hashing
+│           ├── routes/       ← browser-sync, reflections (disabled)
+│           └── ai/           ← reflection prompts and the evaluation baseline pipeline
 ```
 
 ---
@@ -75,8 +77,7 @@ pnpm build:frontend  # outputs to packages/frontend/build/
 pnpm build:worker    # tsc --noEmit (wrangler bundles at deploy time)
 pnpm check          # frontend diagnostics + worker type check
 pnpm test           # regression suite (no real AI requests)
-pnpm companion      # build and serve the app locally with ChatGPT plan support
-pnpm preview:story  # isolated, populated sample story on 127.0.0.1:1456
+pnpm preview:web    # production build + disposable encrypted sample on 127.0.0.1:1457
 
 # Deploy
 pnpm deploy:worker   # wrangler deploy
@@ -98,7 +99,7 @@ wrangler d1 create lacuna-db
 # 3. Apply migrations locally (remote is applied automatically by CI on deploy)
 pnpm -F worker db:migrate:local
 
-# 4. Set the session-signing secret
+# 4. Set the server secret (keys IP pseudonyms for rate limits)
 wrangler secret put JWT_SECRET         # any strong random string
 
 # 5. Set FRONTEND_ORIGIN in wrangler.toml [vars] for production
@@ -122,46 +123,21 @@ Commit the new migration file with the code that depends on it. CI applies it to
 
 ### Data Flow
 
-Release 0.4 adds a phone-ready browser journal at the public URL. No account or companion is required for writing. `frontend/src/lib/web-vault.ts` uses Web Crypto AES-GCM/PBKDF2 and atomic IndexedDB envelope comparison; `web-api.ts` serves journal operations entirely in-browser. No plaintext journal, passphrase, or key is sent to the backend. Optional browser sync transfers a versioned encrypted snapshot using an account-free pairing code. AI reflections are gated separately and remain disabled in the public release. Browser and companion backup formats are separate. Never redirect hosted phone users to localhost.
+Lacuna is a browser journal at the public URL. No account, email or installation is required. `frontend/src/lib/web-vault.ts` uses Web Crypto AES-GCM/PBKDF2 and atomic IndexedDB envelope comparison; `web-api.ts` serves journal operations entirely in-browser. No plaintext journal, passphrase, or key is sent to the backend. Optional browser sync transfers a versioned encrypted snapshot using an account-free pairing code. AI reflections are gated separately and remain disabled in the public release. Never redirect hosted users to localhost.
 
 ```
 User types in Void
-  → hold 600ms to solidify → companion /api/entries → encrypted local vault
-  → optional local ChatGPT analysis → version-guarded encrypted local commit
-  → optional encrypted cloud sync → atomic, versioned ciphertext chunks in D1
+  → hold 600ms to solidify → web-api /entries → encrypted IndexedDB vault
+  → optional encrypted sync → /journal-sync → versioned ciphertext chunks in D1
 ```
 
-### Auth Flow
+### Worker
 
-1. After consent, the local companion requests a single-use challenge from `POST /auth/openai/start`.
-2. OpenAI loopback OAuth uses PKCE/state and the server nonce. The companion verifies the identity and sends the ID token and issued client ID to `POST /auth/openai/complete`.
-3. The Worker independently checks signature/issuer/audience/nonce/expiry, atomically consumes the challenge, maps issuer/client/subject to an account, and issues a revocable 12-hour Lacuna JWT with a session ID.
-4. A port-specific HttpOnly cookie binds the browser and callback. The JWT stays in the companion's protected store; JavaScript receives only user identity. Clear legacy browser JWT/user/weather keys on load.
-5. Preserve old email accounts/data. Never merge by email. Access/refresh tokens remain local. ID tokens may reach the verification endpoint, where they must never be logged or stored. Email sign-in is retired.
-
-### D1 Schema
-
-```sql
-users         (id, email, magic_token, magic_token_expires_at, created_at)
-entries       (id, user_id, body, created_at, solidified_at, kept_at)
-patterns      (id, user_id, model_weights JSON, entry_count_at_last_memoir, last_updated)
-memoir_snapshots (id, user_id, prose, generated_at)
-```
+The Worker serves only `/journal-sync` (bearer pairing credential, hashed into a storage slot; rate limits use daily keyed IP pseudonyms) and `/reflections` (503 while `aiAvailable` is false). Migration 0009 dropped the tables from pre-release prototypes; D1 holds only `browser_sync*`, `rate_limits` and the reserved `reflection_*` tables. Update the in-app policy at `routes/privacy/+page.svelte` whenever data handling changes.
 
 ### AI System
 
-The shared pipeline is `ai/pipeline.ts`. Release 0.3 executes it on a cloned local-vault snapshot, validates output, and commits only while sharing is enabled and the entry version still matches. Lock/opt-out/deletion cancels running work; entry deletion clears derived content. Failed extraction/memoir generation does not advance checkpoints. Hosted `/ai/context` and `/ai/results` writes are retired (410). `ai/storage.ts` remains for legacy regression coverage; it is not a route for new journal content. Access/refresh tokens never belong in the Worker, frontend, logs, or URLs. The Worker accepts an ID token only for verification. See README and AUDIT.md.
-
-Runs in the companion only with explicit AI-sharing consent. Automatic runs after saving require a second opt-in; otherwise use manual refresh. Uses the selected model from the account's ChatGPT catalog. Entry-count tiers:
-
-| Entries | Model | Output |
-|---|---|---|
-| 1 | selected ChatGPT model | `acknowledgment` string only |
-| 2–9 | selected ChatGPT model | `narrative_tone`, `emerging_theme`, `acknowledgment` |
-| 10+ | selected ChatGPT model | Full `weights` (0–1 per model) + `summaries` |
-| 20+, every 5 | selected ChatGPT model | Living Memoir prose (local companion) |
-
-Six models with plain-language labels and activation checks in `packages/worker/src/ai/models.ts`:
+Reserved for a later release. The planned flow is the Living Book: `shared/living-book.ts` plans tasks in the browser, and `/reflections` adds email-code sign-in, a Stripe subscription, consent and spending caps before forwarding bounded excerpts to OpenAI (see README). `ai/pipeline.ts`, `prompts.ts`, `graph.ts` and `validation.ts` are kept as the comparison baseline for `scripts/evaluate-memoir.mjs`. Six lenses with plain-language labels and activation checks in `packages/worker/src/ai/models.ts`:
 
 | Model | Plain Label | Activates When |
 |---|---|---|
@@ -186,18 +162,19 @@ All stores live in `packages/frontend/src/lib/stores/`. They are plain module-le
 - `session.svelte.ts` — auth status, user object
 - `draft.svelte.ts` — current unsaved text + floating word positions
 - `entries.svelte.ts` — solidified entries, keyset pagination
-- `patterns.svelte.ts` — model weights from worker
+- `patterns.svelte.ts` — model weights from the vault
 - `memoir.svelte.ts` — latest prose snapshot
+- `vault.svelte.ts` — vault status and controls (`vaultRequest`)
 
-### Soul Map
+### Soul Map and Living Memoir
 
-The default view is a constellation of actual stored concepts, grouped as threads, feelings, or people/places. Point size follows recurrence. Do not infer relationship edges from aggregate counts. `ReflectionLenses.svelte` retains the six-segment radial interpretation as an optional view.
+Both views render through `BookReader.svelte` from the encrypted vault's `book`, and are marked Coming soon while `aiAvailable` is false. Do not infer relationship edges from aggregate counts.
 
 ### Private archive
 
-`GET /entries` accepts literal `q` search and `kept=1`, with compound pagination and account-scoped cursors. `PATCH /entries/:id/keep` changes only `kept_at`; it must not invalidate AI versions. `GET /story` returns counts and a validated graph; malformed old graphs rebuild from source entries. `GET /memoir/history` paginates stable editions, including same-second snapshots. `GET /story/export` is authenticated and throttled; never include credentials or other accounts. Deletion still clears all derived text, including memoir history.
+`web-api.ts` handles `GET /entries` with literal `q` search and `kept=1`, using cursors bound to the query. `PATCH /entries/:id/keep` changes only `kept_at`. `GET /story/export` never includes the passphrase, pairing code or keys. Forgetting a page clears its words and derived text, keeping only its city address.
 
-The populated browser fixture uses synthetic content and a disposable SQLite database. `pnpm preview:story` builds the interface into `.test-output/preview-app` and serves it on 1456, independent of the real companion on 1455. Its local session is for QA only.
+`pnpm preview:web` builds the production app and serves it on 127.0.0.1:1457. Open `/fixture-setup` first to run IndexedDB checks and create a disposable sample journal. Never use real passphrases or journal text in QA.
 
 ---
 

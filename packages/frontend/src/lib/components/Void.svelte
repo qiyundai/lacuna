@@ -3,7 +3,7 @@
   import { onMount, onDestroy, tick as flushDom } from 'svelte';
   import { draft, insertAt, deleteRange, clearDraft, type DraftChar } from '$lib/stores/draft.svelte.js';
   import { holdDetector } from '$lib/gesture.js';
-  import { api, isCompanion } from '$lib/api.js';
+  import { api } from '$lib/api.js';
   import { prependEntry } from '$lib/stores/entries.svelte.js';
   import { sessionVersion } from '$lib/session-version.js';
   import { overlayStore } from '$lib/stores/overlay.svelte.js';
@@ -625,14 +625,14 @@
   ></textarea>
   <p class="visually-hidden" id="writing-keys">Hold to save your thought, or press Control or Command and Enter. Escape clears your unsaved draft.</p>
   {#if saveError}<p class="save-error" role="alert">{saveError}</p>{/if}
-  {#if !isCompanion && draft.text.trim()}
+  {#if draft.text.trim()}
     <button class="save-thought" disabled={saving || dissolving || scattering} onclick={solidifyEntry}>{saving ? 'saving…' : dissolving ? 'saved privately' : 'save thought'}</button>
   {/if}
 
   {#if nearLimit}
     <div class="char-limit" aria-live="polite">{charsLeft}</div>
   {/if}
-  <p class="plan-indicator">{vaultStore.status?.aiAllowed ? 'OpenAI reflections allowed' : isCompanion ? 'Encrypted on this computer · AI sharing off' : vaultStore.status?.sync.enabled ? 'Encrypted sync on' : 'Encrypted in this browser'}</p>
+  <p class="plan-indicator">{vaultStore.status?.aiAllowed ? 'OpenAI reflections allowed' : vaultStore.status?.sync.enabled ? 'Encrypted sync on' : 'Encrypted in this browser'}</p>
 
   <button class="down-hint" class:faint={draft.isDirty} onclick={onSwipeDown} aria-label="Go to your story">
     <span>↓</span>

@@ -15,12 +15,6 @@ importers:
         specifier: 0.28.1
         version: 0.28.1
 
-  packages/companion:
-    dependencies:
-      jose:
-        specifier: ^6.2.12
-        version: 6.2.12
-
   packages/frontend:
     dependencies:
       '@oddbird/popover-polyfill':

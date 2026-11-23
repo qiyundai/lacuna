@@ -1,9 +1,0 @@
-{
-  "name": "companion",
-  "private": true,
-  "license": "AGPL-3.0-only",
-  "type": "module",
-  "dependencies": {
-    "jose": "^6.2.12"
-  }
-}

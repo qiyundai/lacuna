@@ -1,9 +1,7 @@
 <script lang="ts">
   import TownWelcome from './TownWelcome.svelte';
-  import { companionRequest } from '$lib/stores/ai.svelte.js';
-  import { vaultStore, loadVault } from '$lib/stores/vault.svelte.js';
-  import { api, isCompanion } from '$lib/api.js';
-  import { signOut, setAuthed } from '$lib/stores/session.svelte.js';
+  import { vaultStore, vaultRequest, loadVault } from '$lib/stores/vault.svelte.js';
+  import { setAuthed } from '$lib/stores/session.svelte.js';
   import { linkDevice } from '$lib/browser-sync.js';
   import { browserVault } from '$lib/web-vault.js';
   import { prepareValleyAudio, leaveValley, willPlaySound } from '$lib/valley-playback.svelte.js';
@@ -26,10 +24,10 @@
       if (backup && backup.size > 23 * 1024 * 1024) throw new Error('This backup is too large.');
       const envelope = restoring && backup ? JSON.parse(await backup.text()) : undefined;
       if (linking) await linkDevice(browserVault(),code.trim(),passphrase);
-      else await companionRequest(restoring ? 'vault/restore' : 'vault/unlock', 'POST', { passphrase, create: !vaultStore.status?.exists, ...(envelope ? { envelope } : {}) });
+      else await vaultRequest(restoring ? 'vault/restore' : 'vault/unlock', 'POST', { passphrase, create: !vaultStore.status?.exists, ...(envelope ? { envelope } : {}) });
       code='';
       passphrase = ''; confirmation = '';
-      if (!isCompanion) setAuthed({ id: 'this-browser', email: 'on this device' });
+      setAuthed({ id: 'this-browser', email: 'on this device' });
       await loadVault();
     } catch (e) { leaveValley(); error = e instanceof Error ? e.message : 'Could not unlock the vault.'; }
     finally { busy = false; }
@@ -42,8 +40,8 @@
       <p>Enter the private code from the other device’s Privacy &amp; storage settings and the original journal passphrase.{existing?' Your current journal will be kept as an encrypted recovery copy.':''}</p>
       <div class="field"><label for="sync-code">Pairing code</label><input id="sync-code" type="password" bind:value={code} autocomplete="off" spellcheck="false" required disabled={busy}/></div>
     {:else}
-    <p>{restoring ? (isCompanion ? 'Choose an encrypted backup or leave the file empty to use your cloud copy. Your current vault is backed up before replacement.' : 'Choose an encrypted browser backup and enter its original passphrase. An existing journal is backed up first. File restores start with sync off.') : existing ? 'Your passphrase opens your journal and your city.' : 'Choose a passphrase to keep your writing encrypted on this device.'}</p>
-    {#if restoring}<div class="field"><label for="vault-backup">Encrypted backup{isCompanion ? ' (optional)' : ''}</label><input id="vault-backup" type="file" accept=".lacuna-vault,.lacuna-web-vault,application/json" required={!isCompanion} disabled={busy} onchange={e => backup = e.currentTarget.files?.[0] ?? null} /></div>{/if}
+    <p>{restoring ? 'Choose an encrypted backup and enter its original passphrase. An existing journal is backed up first. File restores start with sync off.' : existing ? 'Your passphrase opens your journal and your city.' : 'Choose a passphrase to keep your writing encrypted on this device.'}</p>
+    {#if restoring}<div class="field"><label for="vault-backup">Encrypted backup</label><input id="vault-backup" type="file" accept=".lacuna-web-vault,application/json" required disabled={busy} onchange={e => backup = e.currentTarget.files?.[0] ?? null} /></div>{/if}
     {/if}
     <div class="field"><label for="vault-passphrase">Passphrase</label>
       <input id="vault-passphrase" type="password" bind:value={passphrase} autocomplete={existing || restoring || linking ? 'current-password' : 'new-password'} minlength="12" maxlength="1024" required disabled={busy} aria-describedby="key-help" oninput={() => {error='';mismatch=false;}}/>
@@ -57,10 +55,9 @@
     {#if error}<p class="form-error" role="alert" id="key-error">{error}</p>{/if}
     <button class="atlas-primary" type="submit" disabled={busy} aria-label={submitLabel+(audible&&!busy?' and enter the valley with sound':'')}>{submitLabel}{#if !busy}<SoundCue/>{/if}</button>
     <div class="atlas-links">
-      {#if !isCompanion && !restoring}<button class="atlas-link" type="button" disabled={busy} onclick={()=>{linking=!linking;code='';passphrase='';confirmation='';error='';mismatch=false;}}>{linking?'Return to this device':'Link a synced journal'}</button>{/if}
+      {#if !restoring}<button class="atlas-link" type="button" disabled={busy} onclick={()=>{linking=!linking;code='';passphrase='';confirmation='';error='';mismatch=false;}}>{linking?'Return to this device':'Link a synced journal'}</button>{/if}
     {#if !linking}
     <button class="atlas-link" type="button" disabled={busy} onclick={() => { restoring = !restoring; error = ''; mismatch=false; passphrase = ''; confirmation = ''; backup = null; }}>{restoring ? 'Return to this device' : 'Restore from backup'}</button>
-    {#if isCompanion}<button class="atlas-link" type="button" disabled={busy} onclick={async () => { try { await api.auth.logout(); signOut(); } catch { error = 'Could not sign out. Try again.'; } }}>Sign out</button>{/if}
     {/if}
     </div>
   </form>

@@ -19,4 +19,3 @@ jobs:
       - run: pnpm check
       - run: pnpm test
       - run: pnpm build:frontend
-      - run: pnpm build:companion
