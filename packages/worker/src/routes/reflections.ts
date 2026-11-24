@@ -4,10 +4,12 @@ import { SignJWT, jwtVerify } from 'jose';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import type { Env } from '../types.js';
 import { checkRateLimit, privateRateKey, hashToken } from '../ratelimit.js';
-import { reflectionInstructions, sourceReadings, validEvidenceRequest } from '../ai/book-prompts.js';
+import { reflectionPayload, sourceReadings, validEvidenceRequest } from '../ai/book-prompts.js';
 
+import { reflectionNoticeVersion, termsVersion } from '../../../shared/terms.js';
+import { reflectionsUnavailable } from '../../../shared/reflections-release.js';
 type Account = {id:string; email:string; customer:string|null; paid_until:number; consent:number; billing_revision:number; billing_state:string;billing_checked:number; checkout_key:string|null; checkout_started:number|null; checkout_price:string|null; checkout_session:string|null};
-const route = new Hono<{Bindings:Env;Variables:{account:Account;session:string;authenticatedAt:number}}>();
+const route = new Hono<{Bindings:Env;Variables:{account:Account;session:string;authenticatedAt:number;reflectionsAvailable:boolean}}>();
 const encoder = new TextEncoder();
 const now = () => Math.floor(Date.now()/1000);
 const unavailable = () => new HTTPException(503,{message:'Hosted reflections are unavailable.'});
@@ -39,6 +41,7 @@ route.post('/login',async c=>{
   if (!c.env.RESEND_API_KEY || !c.env.EMAIL_FROM) throw unavailable();
   const ip=await privateRateKey(c.req.header('CF-Connecting-IP')??'local',c.env.JWT_SECRET);
   if (!await checkRateLimit(c.env.DB,'mail:'+ip,10,900) || !await checkRateLimit(c.env.DB,'mail:'+await privateRateKey(email,c.env.JWT_SECRET),3,600) || !await checkRateLimit(c.env.DB,'mail-total',200,86400)) return c.json({error:'Try again later.'},429);
+  if (!c.get('reflectionsAvailable') && !await c.env.DB.prepare('SELECT id FROM reflection_accounts WHERE email=?').bind(email).first()) return c.json({ok:true});
   const code=crypto.randomUUID().replaceAll('-','').slice(0,12);
   const digest=await hashToken(c.env.JWT_SECRET+':'+email+':'+code);
   await c.env.DB.prepare('INSERT OR REPLACE INTO reflection_challenges VALUES(?,?,?)').bind(email,digest,now()+600).run();
@@ -61,8 +64,10 @@ route.post('/verify',async c=>{
   const digest=await hashToken(c.env.JWT_SECRET+':'+email+':'+input.code.toLowerCase());
   const used=await c.env.DB.prepare('DELETE FROM reflection_challenges WHERE email=? AND digest=? AND expires>? RETURNING email').bind(email,digest,now()).first();
   if (!used) return c.json({error:'Code expired or incorrect.'},401);
-  const account=await c.env.DB.prepare('INSERT INTO reflection_accounts(id,email) VALUES(?,?) ON CONFLICT(email) DO UPDATE SET email=excluded.email RETURNING *').bind(crypto.randomUUID(),email).first<Account>();
-  if (!account) throw unavailable();
+  const account = c.get('reflectionsAvailable')
+    ? await c.env.DB.prepare('INSERT INTO reflection_accounts(id,email) VALUES(?,?) ON CONFLICT(email) DO UPDATE SET email=excluded.email RETURNING *').bind(crypto.randomUUID(),email).first<Account>()
+    : await c.env.DB.prepare('SELECT * FROM reflection_accounts WHERE email=?').bind(email).first<Account>();
+  if (!account) return c.json({error:'Code expired or incorrect.'},401);
   const session=crypto.randomUUID();
   await c.env.DB.batch([c.env.DB.prepare('DELETE FROM reflection_sessions WHERE expires<=?').bind(now()),c.env.DB.prepare('INSERT INTO reflection_sessions VALUES(?,?,?)').bind(session,account.id,now()+2592000)]);
   const token=await new SignJWT({device:await hashToken(device)}).setProtectedHeader({alg:'HS256'}).setIssuer('lacuna-book').setAudience('reflections').setSubject(account.id).setJti(session).setIssuedAt().setExpirationTime('30d').sign(encoder.encode(c.env.JWT_SECRET));
@@ -164,20 +169,27 @@ route.post('/logout',async c=>{
   deleteCookie(c,'lacuna_book',{path:'/reflections'});return c.json({ok:true});
 });
 route.post('/consent',async c=>{
-  const {enabled}=await c.req.json(),a=c.get('account');
-  if (enabled === true && c.env.REFLECTIONS_ENABLED !== 'true') return c.json({error:'New reflections are paused.'},503);
+  const {enabled,noticeVersion}=await c.req.json(),a=c.get('account');
+  if (enabled === true && !c.get('reflectionsAvailable')) return reflectionsUnavailable();
+  if (enabled === true && noticeVersion !== reflectionNoticeVersion)
+    return c.json({error:'Review the current reflection privacy notice to allow sharing.'},400);
   if (typeof enabled!=='boolean' || (enabled && !entitled(a))) return c.json({error:'An active subscription is required.'},403);
-  const updated=await c.env.DB.prepare('UPDATE reflection_accounts SET consent=consent+CASE WHEN consent%2=? THEN 0 ELSE 1 END WHERE id=? RETURNING *').bind(Number(enabled),a.id).first<Account>();
+  const updated=await c.env.DB.prepare('UPDATE reflection_accounts SET consent=consent+CASE WHEN consent%2=? THEN 0 ELSE 1 END,consent_notice=CASE WHEN ? THEN ? ELSE consent_notice END,consent_changed_at=? WHERE id=? RETURNING *').bind(Number(enabled),Number(enabled),reflectionNoticeVersion,now(),a.id).first<Account>();
   return c.json(publicStatus(updated!,c.env));
 });
-type CheckoutSession = {id:string; status:'open'|'expired'|'complete'; url:string|null; mode:string; automatic_tax?:{enabled:boolean}; metadata?:{lacuna_price?:string}};
+type CheckoutSession = {id:string; status:'open'|'expired'|'complete'; url:string|null; mode:string; automatic_tax?:{enabled:boolean}; metadata?:{lacuna_price?:string; terms_version?:string}};
 
 function createCheckout(env:Env,customer:string,price:string,key:string) {
   const url=env.FRONTEND_ORIGIN+'/';
   return stripe<CheckoutSession>(env,'checkout/sessions',{
     customer, mode:'subscription', 'line_items[0][price]':price, 'line_items[0][quantity]':'1',
     'automatic_tax[enabled]':'true', billing_address_collection:'required', 'customer_update[address]':'auto',
-    'metadata[lacuna_price]':price, success_url:url+'?billing=returned', cancel_url:url+'?billing=cancelled'
+    'metadata[lacuna_price]':price,
+    ...(key.startsWith('terms.') ? {
+      'metadata[terms_version]':key.split('.')[1],
+      'subscription_data[metadata][terms_version]':key.split('.')[1]
+    } : {}),
+    success_url:url+'?billing=returned', cancel_url:url+'?billing=cancelled'
   },'checkout-'+price+'-'+key);
 }
 
@@ -208,6 +220,8 @@ route.post('/checkout',async c=>{
   const input=body ? JSON.parse(body) : {};
   if (!input || typeof input!=='object' || Array.isArray(input) || ![undefined,'month','year'].includes(input.interval))
     return c.json({error:'Choose monthly or annual billing.'},400);
+  if (input.termsVersion !== termsVersion)
+    return c.json({error:'Review and accept the current Terms of Service and recurring billing.'},400);
   const annual=input.interval==='year';
   const price=annual ? c.env.STRIPE_ANNUAL_PRICE_ID : c.env.STRIPE_PRICE_ID;
   if (!price || (annual && price===c.env.STRIPE_PRICE_ID)) throw unavailable();
@@ -225,13 +239,13 @@ route.post('/checkout',async c=>{
   if(existingPlan)return c.json({error:existingPlan.status==='active'?'Payment received. Check billing status in a moment.':'You already have a subscription. Open Manage billing to review it.'},409);
   const previous=await previousCheckout(c.env,a,customer);
   if (previous?.status==='open') {
-    if (previous.url && previous.automatic_tax?.enabled && previous.metadata?.lacuna_price===price)
+    if (previous.url && previous.automatic_tax?.enabled && previous.metadata?.lacuna_price===price && previous.metadata?.terms_version===termsVersion)
       return c.json({url:previous.url});
     await stripe(c.env,'checkout/sessions/'+encodeURIComponent(previous.id)+'/expire',{});
   }
   if (previous && await existingSubscription(c.env,customer))
     return c.json({error:'You already have a subscription. Open Manage billing to review it.'},409);
-  const key=crypto.randomUUID();
+  const key='terms.'+termsVersion+'.'+crypto.randomUUID();
   const claim=await c.env.DB.prepare(
     'UPDATE reflection_accounts SET checkout_key=?,checkout_price=?,checkout_started=?,checkout_session=NULL WHERE id=? AND checkout_key IS ?'
   ).bind(key,price,now(),a.id,a.checkout_key).run();
@@ -254,9 +268,8 @@ route.post('/generate',async c=>{
   if (typeof input.unit!=='string' || !/^[a-f0-9]{64}$/.test(input.unit) || !validEvidenceRequest(input)) return c.json({error:'Invalid source material.'},400);
   const model=c.env.OPENAI_MODEL;
   const {accountCap,globalCap,inputRate,outputRate}=modelBudget(c.env);
-  const instructions=reflectionInstructions(input.kind), content='Return JSON.\n'+JSON.stringify({primary:input.primary,pages:input.evidence});
-  const maxOutput=input.kind==='observe'?500:1400;
-  const reserve=Math.ceil((encoder.encode(content+instructions).length+256)*inputRate+maxOutput*outputRate);
+  const payload=reflectionPayload(model!,input);
+  const reserve=Math.ceil((encoder.encode(payload.input+payload.instructions).length+256)*inputRate+payload.max_output_tokens*outputRate);
   const month=new Date().toISOString().slice(0,7),id=crypto.randomUUID();
   const reservation=await c.env.DB.prepare(`INSERT INTO reflection_usage(id,account,month,micros,unit,started) SELECT ?,?,?,?,?,?
     WHERE EXISTS (SELECT 1 FROM reflection_accounts a JOIN reflection_sessions s ON s.account=a.id
@@ -283,7 +296,7 @@ route.post('/generate',async c=>{
     if(usage.attempts>=3)return c.json({code:'unit_limit',error:'Lacuna paused after several attempts on these pages.',retryAt},429);
     return c.json({code:'unit_busy',error:'These pages were recently requested. Lacuna will check again shortly.',retryAt:Date.now()+120000},429);
   }
-  const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',signal:AbortSignal.any([c.req.raw.signal,AbortSignal.timeout(90000)]),headers:{Authorization:'Bearer '+c.env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model,store:false,instructions,input:content,max_output_tokens:maxOutput,text:{format:{type:'json_object'}}})});
+  const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',signal:AbortSignal.any([c.req.raw.signal,AbortSignal.timeout(90000)]),headers:{Authorization:'Bearer '+c.env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify(payload)});
   if (!response.ok) {
     if(response.status>=400 && response.status<500)await c.env.DB.prepare('DELETE FROM reflection_usage WHERE id=?').bind(id).run();
     throw unavailable();

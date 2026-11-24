@@ -1,3 +1,4 @@
+import { availability } from './availability.svelte.js';
 import { validPacket, syncLimit, type SyncPacket } from '../../../shared/sync-packet.js';
 import { apiBase } from './api.js';
 import { base64, bytes, browserVault, announceBrowserLock, forgetWebPage, type WebVault, type WebEnvelope, type WebJournal } from './web-vault.js';
@@ -43,6 +44,7 @@ function requireSuccess(response:Response) {
 }
 
 export async function linkDevice(vault:WebVault,code:string,passphrase:string,send:Transport=fetch,passkey=false) {
+  if (vault.unlocked) throw new Error('Lock your journal before linking a device.');
   const generation=vault.sessionGeneration;
   const {key,token}=await credentials(code);
   const response=await request(send,token,'GET');
@@ -63,7 +65,7 @@ export async function removeOnline(vault:WebVault,send:Transport=fetch) {
 }
 
 function journalContent(data:WebJournal) {
-  const {deviceSync,reflectionConsent,revision,...journal}=data;
+  const {deviceSync,reflectionConsent,acceptedTerms,revision,...journal}=data;
   return journal;
 }
 function combineNewPages(local:WebJournal,cloud:WebJournal,baseCount:number) {
@@ -96,7 +98,7 @@ function preserveForgottenPages(journal:WebJournal,local:WebJournal) {
 }
 export async function syncJournal(vault:WebVault,send:Transport=fetch,acceptCloud=false,signal?:AbortSignal) {
   const pairing=vault.pairing;
-  if (!pairing?.enabled) return;
+  if (vault.deviceOnly || !pairing?.enabled) return;
   const generation=vault.sessionGeneration;
   const {token,key}=await credentials(pairing.code);
   const active=()=>!signal?.aborted && generation===vault.sessionGeneration && JSON.stringify(vault.pairing)===JSON.stringify(pairing);
@@ -143,6 +145,7 @@ let controller:AbortController|undefined;
 export let syncMessage='';
 export let hasConflict=false;
 export function runBrowserSync(acceptCloud=false):Promise<void> {
+  if (!availability.confirmedOnline) return Promise.resolve();
   if (pending) return acceptCloud?pending.then(()=>runBrowserSync(true)):pending;
   controller=new AbortController();
   pending=syncJournal(browserVault(),fetch,acceptCloud,controller.signal).then(()=>{

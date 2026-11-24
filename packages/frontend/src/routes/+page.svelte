@@ -50,7 +50,7 @@
   <JournalCity bind:busy bind:draft bind:draftId {navigation}/>
 {:else}
   <div class="application">
-    <Masthead>{@render navigation()}</Masthead>
+    <Masthead journalMenu>{@render navigation()}</Masthead>
     <div class="page" use:swipeDetector={{onSwipeDown:journal,onSwipeUp:town}}>
       {#if view==='quiet'}<Void onSwipeDown={journal}/>{:else}{#key archiveRevision}<DownSpace active initial={section}/>{/key}{/if}
     </div>

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import './living-book.test.mjs';
+import './region.test.mjs';
 import './city-details.test.mjs';
 import './city-clock.test.mjs';
 import './valley-sound.test.mjs';
@@ -258,6 +259,67 @@ test('ambient colors initialize without network calls or a location request', t 
   initWeather(); assert.equal(weather.status, 'ready'); assert.equal(calls, 0);
 });
 
+test('legacy device-only journals retain their choice through writes and restore until explicit sync opt-in', async () => {
+  const vault = new WebVault(webStorage());
+  const passphrase = 'synthetic teen vault passphrase';
+  await vault.unlock(passphrase,true);
+  await vault.update(data => { data.deviceOnly = true; });
+  assert.equal(vault.deviceOnly,true);
+  await vault.update(data => {
+    delete data.deviceOnly;
+    data.reflectionConsent = { account:'test',epoch:1,noticeVersion:'2026-11-24' };
+  });
+  assert.equal(vault.deviceOnly,true);
+  assert.equal(vault.sharingAllowed,false);
+  assert.equal(vault.read().reflectionConsent,undefined);
+  const pairing={code:'synthetic',enabled:true,version:0,syncedRevision:-1,syncedPages:0};
+  await assert.rejects(vault.setPairing(undefined,pairing),/stays on this device/);
+  const backup = await vault.backup();
+  vault.lock();
+  await vault.unlock(passphrase);
+  assert.equal(vault.deviceOnly,true);
+  const other = new WebVault(webStorage());
+  await other.restore(backup,passphrase);
+  assert.equal(other.deviceOnly,true);
+  assert.equal(other.pairing,undefined);
+  await assert.rejects(other.restore(backup,passphrase,pairing),/stays on this device/);
+  const adult = new WebVault(webStorage());
+  await adult.unlock(passphrase,true);
+  await other.restore(await adult.backup(),passphrase);
+  assert.equal(other.deviceOnly,true);
+  await other.setPairing(undefined,pairing,'opt-in');
+  other.lock();
+  await other.unlock(passphrase);
+  assert.equal(other.deviceOnly,false);
+  assert.equal(other.pairing.enabled,true);
+});
+
+test('accepting revised terms preserves a legacy journal’s local-only choice and ability to delete its online copy', async () => {
+  const vault=new WebVault(webStorage()),secret='synthetic legacy passphrase';
+  await vault.unlock(secret,true);
+  const pairing={code:newPairingCode(),enabled:true,version:1,syncedRevision:0,syncedPages:0};
+  await vault.setPairing(undefined,pairing);
+  await vault.update(data=>{data.deviceOnly=true;data.acceptedTerms='2026-11-24';});
+  vault.lock();
+  await assert.rejects(vault.unlock(secret),{code:'TERMS_REVIEW_REQUIRED'});
+  await vault.unlock(secret,false,true);
+  await vault.update(data=>{data.deviceSync={...pairing,enabled:true};});
+  vault.lock();
+  await vault.unlock(secret);
+  assert.equal(vault.pairing.enabled,false);
+  assert.equal(vault.pairing.code,pairing.code);
+  let requests=0;
+  await syncJournal(vault,()=>{requests++;});
+  assert.equal(requests,0);
+  await assert.rejects(vault.setPairing(vault.pairing,pairing),/stays on this device/);
+  await removeOnline(vault,async (_url,options)=>{
+    assert.equal(options.method,'DELETE');
+    return new Response(null,{status:204});
+  });
+  assert.equal(vault.pairing,undefined);
+  assert.equal(vault.deviceOnly,true);
+});
+
 function webStorage() {
   return { current: null, backups: [], failed: false,
     async read() { return structuredClone(this.current); },
@@ -349,6 +411,7 @@ test('browser devices pair privately, converge offline additions and preserve bo
   const portable=new WebVault(portableStorage);
   await portable.unlock(samplePassphrase);
   assert.equal(portable.pairing,undefined);
+  await first.update(data=>{data.acceptedTerms='2026-11-24';});
   await webRequest('/entries','POST',{...thought(2,'on the train'),city:true},first);
   await webRequest('/entries','POST',{...thought(3,'at the station'),city:true},second);
   await syncJournal(first,send);

@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 import { mediaTypes, serveMedia } from './serve-media.mjs';
+import { journalAvailable } from '../packages/shared/region.ts';
 await build({ entryPoints: ['tests/web-fixture.ts'], outfile: '.test-output/web-fixture.js', bundle: true, platform: 'browser', target: 'es2022', format: 'esm' });
 const directory = resolve('packages/frontend/build');
 const server = createServer(async (req, res) => {
@@ -14,6 +15,11 @@ const server = createServer(async (req, res) => {
     if (csp) res.setHeader('Content-Security-Policy', csp);
     if (req.headers.host !== '127.0.0.1:1457' || !['GET', 'HEAD'].includes(req.method)) { res.writeHead(403); res.end(); return; }
     const url = new URL(req.url, 'http://127.0.0.1:1457');
+    if (url.pathname === '/availability') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ available: journalAvailable(process.env.LACUNA_PREVIEW_COUNTRY ?? 'CA', process.env.LACUNA_PREVIEW_REGION ?? 'BC') }));
+      return;
+    }
     if (url.pathname === '/fixture-setup') { res.setHeader('Content-Type', 'text/html'); res.end('<!doctype html><meta charset="utf-8"><p>Preparing disposable encrypted sample…</p><script type="module" src="/fixture.js"></script>'); return; }
     if (url.pathname === '/fixture.js') { res.setHeader('Content-Type', 'text/javascript'); res.end(await readFile('.test-output/web-fixture.js')); return; }
     let path = resolve(directory, '.' + decodeURIComponent(url.pathname));

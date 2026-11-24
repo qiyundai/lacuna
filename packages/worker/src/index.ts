@@ -6,10 +6,9 @@ import type { Env } from './types.js';
 import reflections from './routes/reflections.js';
 import browserSync, { syncOrigins } from './routes/browser-sync.js';
 import { syncLimit } from '../../shared/sync-packet.js';
+import { aiAvailable, reflectionsUnavailable } from '../../shared/reflections-release.js';
 
-const app = new Hono<{ Bindings: Env }>();
-
-app.use('*', async (c, next) => bodyLimit({ maxSize: c.req.path === '/journal-sync' ? syncLimit+256 : 262144, onError: (ctx) => ctx.json({ error: { code: 'TOO_LARGE', message: 'Request too large' } }, 413) })(c, next));
+const app = new Hono<{ Bindings: Env; Variables: { reflectionsAvailable: boolean } }>();
 
 app.use('*', async (c, next) => {
   const origin = c.env.FRONTEND_ORIGIN ?? 'http://localhost:5173';
@@ -32,6 +31,10 @@ app.use('*', async (c, next) => {
   c.header('Cache-Control', 'no-store');
 });
 
+if (!aiAvailable) app.on('POST', ['/reflections/generate', '/reflections/checkout'], reflectionsUnavailable);
+
+app.use('*', async (c, next) => bodyLimit({ maxSize: c.req.path === '/journal-sync' ? syncLimit+256 : 262144, onError: (ctx) => ctx.json({ error: { code: 'TOO_LARGE', message: 'Request too large' } }, 413) })(c, next));
+
 app.get('/health', (c) => c.json({ ok: true, version: '0.4.0' }));
 
 app.get('/health/maintenance', async c => {
@@ -41,9 +44,10 @@ app.get('/health/maintenance', async c => {
 });
 
 app.route('/journal-sync', browserSync);
-app.use('/reflections/*', async (c, next) => !['/reflections/generate','/reflections/checkout'].includes(c.req.path) || c.env.REFLECTIONS_ENABLED === 'true'
-  ? next()
-  : c.json({code:'COMING_SOON',error:'AI reflections are coming soon.'},503));
+app.use('/reflections/*', async (c, next) => {
+  c.set('reflectionsAvailable', aiAvailable);
+  await next();
+});
 app.route('/reflections', reflections);
 
 app.onError((err, c) => {

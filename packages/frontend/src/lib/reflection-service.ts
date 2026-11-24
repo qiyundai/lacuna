@@ -1,3 +1,6 @@
+import { availability } from './availability.svelte.js';
+import { aiAvailable } from './ai-release.js';
+import { reflectionNoticeVersion } from '../../../shared/terms.js';
 import { emptyBook, nextBookTask, acceptBookResult } from '../../../shared/living-book.js';
 import { browserVault, type WebVault } from './web-vault.js';
 
@@ -9,6 +12,13 @@ function report(message:string){
   backgroundMessage=message;window.dispatchEvent(new Event('lacuna:reflection-status'));
 }
 export async function hosted<T>(action:string,body?:unknown,signal?:AbortSignal):Promise<T> {
+  const requiresAdultJournal = action==='generate' || action==='checkout' ||
+    (action==='consent' && (body as {enabled?:boolean})?.enabled === true);
+  if (requiresAdultJournal) {
+    if (!aiAvailable) throw new Error('Reflections is coming soon. Checkout is closed.');
+    if (browserVault().deviceOnly) throw new Error('This journal stays on this device.');
+    if (!availability.confirmedOnline) throw new Error('Online journal features require a verified connection in the United States or Canada outside Québec.');
+  }
   const response=await fetch('/reflections/'+action,{method:body===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',signal,
     headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
   if (!response.ok) {
@@ -18,9 +28,9 @@ export async function hosted<T>(action:string,body?:unknown,signal?:AbortSignal)
   return response.json();
 }
 export async function processBookUnit(vault: WebVault, signal:AbortSignal,call:typeof hosted=hosted,update:(message:string)=>void=()=>{}) {
-  if (!vault.unlocked) return false;
+  if (!vault.unlocked || vault.deviceOnly) return false;
   const journal=vault.read(), consent=journal.reflectionConsent, generation=vault.sessionGeneration;
-  if (!consent || !await vault.current()) return false;
+  if (consent?.noticeVersion!==reflectionNoticeVersion || !await vault.current()) return false;
   const task=nextBookTask(journal.book??emptyBook(),journal.entries);
   if(!task){
     const hasPassage=journal.book?.chapters.some(chapter=>chapter.passages.some(p=>p.prose));
@@ -54,7 +64,7 @@ export function backgroundBook() {
     if(disposed || controller)return;
     if(!vault.unlocked){report('Unlock this journal to resume reflections.');return;}
     if(!navigator.onLine){report('Offline. Reflections resume when you reconnect.');return;}
-    if(!vault.read().reflectionConsent){report('');return;}
+    if(!vault.sharingAllowed){report('');return;}
     controller=new AbortController();
     let delay=0;
     try {
@@ -81,7 +91,7 @@ export function backgroundBook() {
     finally{controller=undefined;if(!disposed && (delay || dirty)){dirty=false;clearTimeout(timer);timer=setTimeout(run,Math.min(delay||300,2147483647));}}
   }
   function wake(){
-    if(!vault.unlocked || !navigator.onLine || !vault.read().reflectionConsent)controller?.abort();
+    if(!vault.unlocked || !navigator.onLine || !vault.sharingAllowed)controller?.abort();
     if(controller){dirty=true;return;}
     clearTimeout(timer);timer=setTimeout(run,300);
   }

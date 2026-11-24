@@ -1,5 +1,4 @@
 <script lang="ts">
-  import IconAction from './IconAction.svelte';
   import { onMount, tick, untrack, type Snippet } from 'svelte';
   import { enterValley, readSoundPreferences, willPlaySound } from '$lib/valley-playback.svelte.js';
   import SoundCue from './SoundCue.svelte';
@@ -7,7 +6,7 @@
   import JournalCity from './JournalCity.svelte';
   import CorridorFlight from './CorridorFlight.svelte';
   import { musicWindow } from '$lib/music-window.svelte.js';
-  let {action,children}:{action:string;children:Snippet}=$props();
+  let {action,children,limited=false,canOpen=true}:{action:string;children:Snippet;limited?:boolean;canOpen?:boolean}=$props();
   let opened=$state(false),walking=$state(false);
   let controls=$state<HTMLElement>(),start=$state<HTMLButtonElement>(),walkButton=$state<HTMLButtonElement>();
   async function open(){
@@ -28,23 +27,23 @@
 <!-- While the listening room is open the flight is its backdrop: everything laid over the video steps aside -->
 <div class="welcome" class:menu={!walking} class:listening={!walking&&musicWindow.mode==='room'}>
 
-  {#if walking}<JournalCity guest onExit={leave}/>
+  {#if walking}<JournalCity guest readOnly onExit={leave}/>
   {:else}
-    <Masthead floating><IconAction href="/privacy" icon="privacy" label="Privacy"/></Masthead>
+    <Masthead floating journalMenu showSignature={opened}/>
     <main class="arrival">
-      <section class="river-view" aria-label="The valley city">
+      <div class="river-view">
       <CorridorFlight/>
-      {#if opened}
+      {#if opened && canOpen}
         <div class="leaf" bind:this={controls}><button class="atlas-link subtle back" onclick={back}>← Back to the valley</button>{@render children()}</div>
       {:else}
         <div class="intro">
-          <h1>The valley city</h1>
-          <p>A private journal that grows a city, one page at a time.</p>
-          <div class="links"><button class="begin" bind:this={start} onclick={open}>{action}</button>
-          <button class="visit" bind:this={walkButton} aria-label={'Visit the example city'+(audible?' with sound':'')} onclick={()=>{enterValley();walking=true;}}>Visit the example city<SoundCue/></button></div>
+          <h1>Lacuna</h1>
+          <p>{limited?'Coming soon in your region. You can visit the example city.':'A private journal that grows a city, one page at a time.'}</p>
+          <div class="links">{#if canOpen}<button class="begin" bind:this={start} onclick={open}>{action}</button>{/if}
+          <button class="visit" bind:this={walkButton} aria-label={'Visit the example city'+(audible?' with sound':'')} onclick={()=>{enterValley();walking=true;}}>Visit the example city<SoundCue/></button>{#if limited}<a href="/billing">Manage billing</a>{/if}</div>
         </div>
       {/if}
-      </section>
+      </div>
     </main>
   {/if}
 </div>

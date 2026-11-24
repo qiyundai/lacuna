@@ -1,6 +1,6 @@
 import { resetData } from './session.svelte.js';
 import { sessionVersion } from '../session-version.js';
-export interface VaultStatus { exists: boolean; locked: boolean; aiAllowed: boolean; automaticAI: boolean; sync: { enabled: boolean; version: number; error: string; lastSync?: number } }
+export interface VaultStatus { deviceOnly: boolean; exists: boolean; locked: boolean; aiAllowed: boolean; automaticAI: boolean; sync: { enabled: boolean; version: number; error: string; lastSync?: number } }
 export const vaultStore = $state<{ status: VaultStatus | null }>({ status: null });
 let load = 0;
 /** Vault controls (unlock, lock, backup, restore) handled by the browser vault. */
