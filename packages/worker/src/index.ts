@@ -34,6 +34,12 @@ app.use('*', async (c, next) => {
 
 app.get('/health', (c) => c.json({ ok: true, version: '0.4.0' }));
 
+app.get('/health/maintenance', async c => {
+  const last = await c.env.DB.prepare('SELECT checked,healthy FROM maintenance_status WHERE id=1').first<{checked:number;healthy:number}>();
+  const ok = last?.healthy===1 && last.checked>=Math.floor(Date.now()/1000)-3600;
+  return c.json({ok},ok ? 200 : 503);
+});
+
 app.route('/journal-sync', browserSync);
 app.use('/reflections/*', async (c, next) => !['/reflections/generate','/reflections/checkout'].includes(c.req.path) || c.env.REFLECTIONS_ENABLED === 'true'
   ? next()

@@ -43,7 +43,11 @@ route.post('/login',async c=>{
   const digest=await hashToken(c.env.JWT_SECRET+':'+email+':'+code);
   await c.env.DB.prepare('INSERT OR REPLACE INTO reflection_challenges VALUES(?,?,?)').bind(email,digest,now()+600).run();
   const sent=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+c.env.RESEND_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:c.env.EMAIL_FROM,to:[email],subject:'Your Lacuna sign-in code',text:'Your sign-in code is '+code+'. It expires in ten minutes.'})});
-  if (!sent.ok) { console.warn('mail_delivery_failed'); throw unavailable(); }
+  if (!sent.ok) {
+    console.warn('mail_delivery_failed');
+    await checkRateLimit(c.env.DB,'mail-failed',3,3600);
+    throw unavailable();
+  }
   return c.json({ok:true});
 });
 route.post('/verify',async c=>{
@@ -102,7 +106,15 @@ export async function maintainAccounts(env:Env) {
       throw error;
     }
   }));
-  if(outcomes.some(result=>result.status==='rejected')) throw new Error('billing_reconciliation_failed');
+  const reconciled=outcomes.every(result=>result.status==='fulfilled');
+  const bucket=Math.floor(time/86400);
+  const pressure=await env.DB.prepare(
+    'SELECT used_bytes>=? OR EXISTS (SELECT 1 FROM rate_limits WHERE (key=? AND count>=160) OR (key=? AND count>=16000) OR (key=? AND count>=3)) '+
+    'OR EXISTS (SELECT 1 FROM reflection_accounts WHERE customer IS NOT NULL AND billing_checked<?) AS elevated FROM sync_capacity WHERE id=1'
+  ).bind(Number(env.SYNC_CAPACITY_BYTES??134217728)*0.8,'mail-total:'+bucket,'sync-writes:'+bucket,'mail-failed:'+Math.floor(time/3600),time-2*86400).first<{elevated:number}>();
+  await env.DB.prepare('INSERT OR REPLACE INTO maintenance_status(id,checked,healthy) VALUES(1,?,?)')
+    .bind(time,Number(reconciled && pressure?.elevated===0)).run();
+  if (!reconciled) throw new Error('billing_reconciliation_failed');
 }
 
 async function signedEvent(raw:string,header:string,secret:string) {

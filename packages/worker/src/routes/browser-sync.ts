@@ -42,6 +42,7 @@ route.put('/',async c => {
   if (!validPacket(packet)) return c.body(null,400);
   const slot=c.get('slot'), db=c.env.DB, marker=crypto.randomUUID();
   if (packet.version===1 && (!await checkRateLimit(db,'browser-create:'+c.get('peer'),8,86400) || !await checkRateLimit(db,'sync-new-slots',256,86400))) return c.body(null,429);
+  if (!await checkRateLimit(db,'sync-writes',20000,86400)) return c.body(null,429);
   const size = packet.ciphertext.length;
   const capacity = Number(c.env.SYNC_CAPACITY_BYTES ?? 134217728);
   if (!Number.isSafeInteger(capacity) || capacity < 1) return c.body(null,503);

@@ -29,3 +29,9 @@ CREATE TRIGGER erase_reflection_account BEFORE DELETE ON reflection_accounts BEG
   DELETE FROM reflection_sessions WHERE account=OLD.id;
   DELETE FROM reflection_challenges WHERE email=OLD.email;
 END;
+
+CREATE TABLE maintenance_status (
+  id INTEGER PRIMARY KEY CHECK(id=1),
+  checked INTEGER NOT NULL,
+  healthy INTEGER NOT NULL
+);

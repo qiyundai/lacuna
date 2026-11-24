@@ -186,7 +186,9 @@ test('scheduled retention removes expired records and preserves recent metering 
     await DB.prepare('INSERT INTO reflection_sessions VALUES(?,?,?)').bind(id,'owner',expires).run();
     await DB.prepare('INSERT INTO reflection_usage(id,account,month,micros,unit,started) VALUES(?,?,?,?,?,?)').bind(id,'owner',new Date().toISOString().slice(0,7),100,id,started).run();
   }
+  assert.equal((await app.request('https://lacuna.example/health/maintenance',{}, {DB})).status,503);
   await maintainAccounts({DB});
+  assert.equal((await app.request('https://lacuna.example/health/maintenance',{}, {DB})).status,200);
   for(const [table,key] of [['reflection_challenges','email'],['reflection_sessions','id'],['reflection_usage','id']]){
     assert.deepEqual(DB.sqlite.prepare('SELECT '+key+' AS id FROM '+table).all().map(row=>row.id),['current']);
   }
