@@ -3,10 +3,9 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { emptyBook, nextBookTask, acceptBookResult, forgetFromBook, validBook } from '../packages/shared/living-book.ts';
 import { processBookUnit } from '../packages/frontend/src/lib/reflection-service.ts';
+import { sourceReadings } from '../packages/worker/src/ai/book-prompts.ts';
 import { createTestDatabase } from './database.mjs';
 import app from '../packages/worker/src/index.ts';
-import reflections from '../packages/worker/src/routes/reflections.ts';
-import { Hono } from 'hono';
 
 test('published reflection endpoints are coming soon before auth, billing or provider work',async()=>{
   for(const path of ['login','checkout','consent','generate']){
@@ -90,23 +89,38 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
   const DB=await createTestDatabase();t.after(()=>DB.sqlite.close());
   const env={DB,FRONTEND_ORIGIN:'https://lacuna.example',JWT_SECRET:'synthetic-test-secret',RESEND_API_KEY:'mail',EMAIL_FROM:'test@example.com',STRIPE_SECRET_KEY:'stripe',STRIPE_PRICE_ID:'price_1',STRIPE_WEBHOOK_SECRET:'hook',OPENAI_API_KEY:'model-key',OPENAI_MODEL:'test-model',MODEL_INPUT_MICROS_PER_TOKEN:'1',MODEL_OUTPUT_MICROS_PER_TOKEN:'2',REFLECTION_ACCOUNT_MICROS:'20000',REFLECTION_GLOBAL_MICROS:'50000'};
   let code,cookie='',modelCalls=0,paid=false;
+  const offer={active:true,currency:'cad',unit_amount:500,recurring:{interval:'month',interval_count:1,usage_type:'licensed'}};
   t.mock.method(globalThis,'fetch',async(url,options)=>{
     if(String(url).includes('resend.com')){code=JSON.parse(options.body).text.match(/[a-f0-9]{12}/)[0];return Response.json({id:'sent'});}
     if(String(url).endsWith('/customers'))return Response.json({id:'cus_test'});
-    if(String(url).endsWith('/checkout/sessions'))return Response.json({url:'https://checkout.stripe.com/test'});
+    if(String(url).endsWith('/prices/price_1'))return Response.json(offer);
+    if(String(url).endsWith('/checkout/sessions')){
+      assert.equal(options.body.get('automatic_tax[enabled]'),'true');
+      assert.equal(options.body.get('customer_update[address]'),'auto');
+      assert.equal(options.body.get('billing_address_collection'),'required');
+      assert.equal(options.body.get('metadata[lacuna_price]'),env.STRIPE_PRICE_ID);
+      return Response.json({url:'https://checkout.stripe.com/test'});
+    }
     if(String(url).includes('/checkout/sessions?'))return Response.json({data:[]});
     if(String(url).includes('/subscriptions?'))return Response.json({data:paid?[{status:'active',current_period_end:2000000000,items:{data:[{price:{id:'price_1'}}]}}]:[]});
     assert.equal(String(url),'https://api.openai.com/v1/responses');
-    const payload=JSON.parse(options.body);assert.equal(payload.store,false);modelCalls++;
+    const payload=JSON.parse(options.body);assert.equal(payload.store,false);assert.match(payload.input,/\bJSON\b/i);modelCalls++;
     return Response.json({status:'completed',output:[{content:[{type:'output_text',text:'{"notes":[]}'}]}],usage:{input_tokens:300,output_tokens:15}});
   });
-  const enabled=new Hono().route('/reflections',reflections);
-  const send=(path,body,headers={})=>enabled.request('https://lacuna.example/reflections/'+path,{method:body===undefined?'GET':'POST',headers:{Cookie:cookie,Origin:env.FRONTEND_ORIGIN,'Content-Type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body)},env);
+  env.REFLECTIONS_ENABLED='true';
+  const send=(path,body,headers={})=>app.request('https://lacuna.example/reflections/'+path,{method:body===undefined?'GET':'POST',headers:{Cookie:cookie,Origin:env.FRONTEND_ORIGIN,'Content-Type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body)},env);
   assert.equal((await send('login',{email:'me@example.com'})).status,200);
   const verify=await send('verify',{email:'me@example.com',code});
   cookie=verify.headers.get('set-cookie').split(';')[0];
   const account=await verify.json();
   assert.equal(account.paid,false);
+  const modelKey=env.OPENAI_API_KEY;
+  delete env.OPENAI_API_KEY;
+  assert.equal((await send('checkout',{})).status,503);
+  env.OPENAI_API_KEY=modelKey;
+  offer.currency='usd';
+  assert.equal((await send('checkout',{})).status,503);
+  offer.currency='cad';
   assert.equal((await send('checkout',{})).status,200);
   const data={...nextBookTask(emptyBook(),pages),account:account.id,consent:1,unit:'a'.repeat(64)};
   assert.equal((await send('generate',data)).status,403);
@@ -121,13 +135,29 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
   assert.equal((await send('generate',data,{Origin:'https://elsewhere.example'})).status,403);
   assert.equal((await send('generate',data)).status,200);
   assert.equal(modelCalls,1);
-  assert.equal((await send('generate',data)).status,429);
+  assert.equal((await (await send('generate',data)).json()).code,'unit_busy');
   const usage=await DB.prepare('SELECT * FROM reflection_usage').first();
   assert.equal(usage.micros,330);assert.ok(!JSON.stringify(usage).includes(pages[0].body));
   env.REFLECTION_ACCOUNT_MICROS='1';
-  assert.equal((await send('generate',{...data,unit:'b'.repeat(64)})).status,429);
+  const capped=await (await send('generate',{...data,unit:'b'.repeat(64)})).json();
+  assert.equal(capped.code,'subscriber_limit');
+  assert.equal(new Date(capped.retryAt).getUTCDate(),1);
+  env.REFLECTION_ACCOUNT_MICROS='20000';env.REFLECTION_GLOBAL_MICROS='1';
+  assert.equal((await (await send('generate',{...data,unit:'b'.repeat(64)})).json()).code,'service_limit');
   paid=false;await hook();assert.equal((await send('generate',data)).status,403);
   assert.equal(modelCalls,1);
   await send('logout',{});
   assert.equal((await send('account')).status,401);
+});
+
+test('published Soul Map excerpts retain the original actor, direction and negation',()=>{
+  const evidence=[page(1,1,'Dad and I walked home.'),page(2,2,'We did not stop.')];
+  const task={kind:'write',primary:evidence.map(p=>p.id),evidence};
+  const excerpts=evidence.map(p=>({id:p.id,sentence:p.body}));
+  const render=(pair)=>sourceReadings(task,{readings:[{lens:'story_thread',text:'unverified gloss',excerpts:pair}]}).readings;
+  assert.deepEqual(render([...excerpts].reverse()),[{lens:'story_thread',text:'Dad and I walked home.\n\nWe did not stop.',support:task.primary}]);
+  assert.deepEqual(render([excerpts[0],{...excerpts[1],sentence:'We stopped.'}]),[]);
+  assert.deepEqual(render([excerpts[0],excerpts[0]]),[]);
+  const passage=sourceReadings(task,{prose:'Dad and I walked home. Dad and I walked home. You was walking.',readings:[]});
+  assert.equal(passage.prose,'“Dad and I walked home.” You were walking.');
 });

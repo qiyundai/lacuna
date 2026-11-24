@@ -3,7 +3,7 @@ import { randomInt } from 'node:crypto';
 import { mkdir, writeFile, mkdtemp } from 'node:fs/promises';
 import { resolve } from 'node:path';
 const compiled=await build({stdin:{contents:`export * from './packages/shared/living-book.ts';export * from './packages/worker/src/ai/book-prompts.ts';export * from './packages/worker/src/ai/pipeline.ts';`,resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'node'});
-const {emptyBook,nextBookTask,acceptBookResult,reflectionInstructions,analyzeSnapshot}=await import('data:text/javascript;base64,'+Buffer.from(compiled.outputFiles[0].text).toString('base64'));
+const {emptyBook,nextBookTask,acceptBookResult,reflectionInstructions,sourceReadings,analyzeSnapshot}=await import('data:text/javascript;base64,'+Buffer.from(compiled.outputFiles[0].text).toString('base64'));
 const garden=['The beans have two leaves.','I moved the tray to the lower shelf.','I watered the same row again.','The string around the pots came loose.','I picked one bean and left the rest.'];
 const walks=['Dad and I took the long way home.','At the crossing Dad stopped to tie a lace.','I was sure he liked this walk for the view.','Today he said he walks this way for the quiet.','I wanted to ask more and also wanted to stay quiet.'];
 const letters=['I folded the letter twice.','I wrote the greeting and left the rest blank.','I used to think I always left letters unfinished.','I sent the blue envelope today.','I never wrote about the letter because I was waiting for an answer.'];
@@ -28,12 +28,14 @@ if(!process.argv.includes('--live')){
   await mkdir('.test-output',{recursive:true});
   const dir=await mkdtemp(resolve('.test-output','memoir-review-')),costs=[],key={};let spent=0;
   async function ask(system,user,max,json){
+    if(json)user='Return JSON.\n'+user;
     const reserve=(Buffer.byteLength(system+user)+256)*inputRate+max*outputRate;
     if(spent+reserve>cap*1e6)throw new Error('Evaluation budget reached.');
     const res=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model,store:false,instructions:system,input:user,max_output_tokens:max,...(json?{text:{format:{type:'json_object'}}}:{})})});
     if(!res.ok)throw new Error('Provider returned '+res.status);
     const data=await res.json();
     spent+=data.usage.input_tokens*inputRate+data.usage.output_tokens*outputRate;
+    await writeFile(resolve(dir,'usage.json'),JSON.stringify({model,estimatedUSD:spent/1e6}));
     if(data.status!=='completed')throw new Error('Incomplete evaluation response');
     return data.output.flatMap(o=>o.content??[]).find(c=>c.type==='output_text').text;
   }
@@ -42,7 +44,12 @@ if(!process.argv.includes('--live')){
     while((task=nextBookTask(book,entries))){
       const user=JSON.stringify({primary:task.primary,pages:task.evidence});
       const response=await ask(reflectionInstructions(task.kind),user,task.kind==='observe'?500:1400,true);
-      acceptBookResult(book,entries,task,JSON.parse(response));
+      try {
+        acceptBookResult(book,entries,task,sourceReadings(task,JSON.parse(response)));
+      } catch (error) {
+        await writeFile(resolve(dir,'rejected.json'),JSON.stringify({name,task,response,reason:error.message},null,2));
+        throw new Error(name+' '+task.kind+': '+error.message);
+      }
     }
     const newCost=spent-start;
     let snapshot={entries,version:0,weights:{},graph:{nodes:[],processed_count:0},extracted:0,summaries:[],memoir:null,memoirCount:0};

@@ -37,7 +37,7 @@
 </script>
 <section aria-labelledby="sync-title">
   <h3 id="sync-title">Sync across devices</h3>
-  <p>Your journal stays on this device until you enable sync. Only an encrypted copy goes online. Pair another device with your private code and journal passphrase.</p>
+  <p>Sync sends an encrypted copy of your journal. Pair another device with your private code and journal passphrase.</p>
   <button class="atlas-link" disabled={busy} onclick={()=>run(toggle)}>{pairing?.enabled?'Pause sync on this device':pairing?'Resume sync':'Enable encrypted sync'}</button>
   {#if pairing}
     <p role="status">{pairing.enabled?(dirty?'Local changes waiting to sync.':'This device is synced.'):'Sync paused on this device.'}</p>

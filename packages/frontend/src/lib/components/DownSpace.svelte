@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { aiAvailable } from '../../../../shared/ai-release.js';
+  import { aiAvailable } from '$lib/ai-release.js';
   import { onMount, untrack } from 'svelte';
   import { loadEntries } from '$lib/stores/entries.svelte.js';
   import { loadPatterns } from '$lib/stores/patterns.svelte.js';
