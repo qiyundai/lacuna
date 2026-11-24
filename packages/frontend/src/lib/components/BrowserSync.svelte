@@ -2,8 +2,9 @@
   import { onMount } from 'svelte';
   import { browserVault, type DeviceSync } from '$lib/web-vault.js';
   import { newPairingCode, runBrowserSync, pauseSyncWork, removeOnline, syncMessage, hasConflict } from '$lib/browser-sync.js';
+  import { passkeysSupported, saveRecoveryPasskey } from '$lib/sync-passkey.js';
   let pairing=$state<DeviceSync>(), dirty=$state(false), busy=$state(false), reveal=$state(false), confirming=$state(false);
-  let message=$state(''), conflict=$state(false);
+  let message=$state(''), notice=$state(''), conflict=$state(false), passkeys=$state(false);
   function refresh() {
     const vault=browserVault();
     pairing=vault.pairing; dirty=!!pairing && pairing.syncedRevision!==vault.syncRevision;
@@ -11,6 +12,7 @@
     if (!pairing) reveal=false;
   }
   onMount(()=>{
+    passkeys=passkeysSupported();
     refresh();
     window.addEventListener('lacuna:journal-changed',refresh);
     window.addEventListener('lacuna:sync-status',refresh);
@@ -21,7 +23,7 @@
   });
   async function run(action:()=>Promise<void>) {
     if (busy) return;
-    busy=true;
+    busy=true;notice='';
     try {await action();refresh();}
     catch (e) {refresh();message=e instanceof Error?e.message:'Could not change sync.';}
     finally {busy=false;}
@@ -31,8 +33,19 @@
     const vault=browserVault(),previous=vault.pairing;
     const next=previous?{...previous,enabled:!previous.enabled}:{code:newPairingCode(),version:0,syncedRevision:-1,syncedPages:0,enabled:true};
     await vault.setPairing(previous,next);
-    if (!previous) reveal=true;
+    if (!previous && !passkeys) reveal=true;
     if (next.enabled) await runBrowserSync();
+  }
+  async function savePasskey() {
+    const code=browserVault().pairing?.code;
+    if (!code) return;
+    // The passkey prompt must start from this click, before any other await.
+    await saveRecoveryPasskey(code);
+    await pauseSyncWork();
+    const vault=browserVault(),current=vault.pairing;
+    if (current?.code===code && !current.passkey) await vault.setPairing(current,{...current,passkey:true});
+    if (current?.enabled) void runBrowserSync();
+    notice='Recovery passkey saved. Keep your passphrase too: the passkey finds your journal, and the passphrase opens it.';
   }
 </script>
 <section aria-labelledby="sync-title">
@@ -41,6 +54,12 @@
   <button class="atlas-link" disabled={busy} onclick={()=>run(toggle)}>{pairing?.enabled?'Pause sync on this device':pairing?'Resume sync':'Enable encrypted sync'}</button>
   {#if pairing}
     <p role="status">{pairing.enabled?(dirty?'Local changes waiting to sync.':'This device is synced.'):'Sync paused on this device.'}</p>
+    <p>{pairing.passkey
+      ?'If this browser’s data is cleared, restore the journal with your recovery passkey and passphrase.'
+      :passkeys
+        ?'If this browser’s data is cleared, you will need this journal’s pairing code to restore it. Save a recovery passkey so you don’t have to keep the code.'
+        :'If this browser’s data is cleared, you will need this journal’s pairing code to restore it. Keep the code in your password manager.'}</p>
+    {#if passkeys}<button class="atlas-link" disabled={busy} onclick={()=>run(savePasskey)}>{pairing.passkey?'Save another recovery passkey':'Save a recovery passkey'}</button>{/if}
     <button class="atlas-link" disabled={busy} aria-expanded={reveal} onclick={()=>reveal=!reveal}>{reveal?'Hide pairing code':'Show pairing code'}</button>
     {#if reveal}
       <label class="field"><span>Private pairing code</span><input readonly value={pairing.code} onclick={e=>e.currentTarget.select()} /></label>
@@ -51,8 +70,9 @@
       {#if conflict}<button class="atlas-link" disabled={busy} onclick={()=>run(()=>runBrowserSync(true))}>Back up this device and use online copy</button>{/if}
     {/if}
     <button class="atlas-link danger" disabled={busy} onclick={()=>{if(!confirming){confirming=true;return;}void run(async()=>{await pauseSyncWork();await removeOnline(browserVault());confirming=false;});}}>{confirming?'Confirm deletion of online copy':'Delete online copy'}</button>
-    {#if confirming}<p>This removes the active online copy for all paired devices. Their local journals stay intact. Encrypted database backups expire separately.</p><button class="atlas-link" disabled={busy} onclick={()=>confirming=false}>Cancel</button>{/if}
+    {#if confirming}<p>This removes the active online copy for all paired devices. Their local journals stay intact, and its pairing code and recovery passkeys stop working. Encrypted database backups expire separately.</p><button class="atlas-link" disabled={busy} onclick={()=>confirming=false}>Cancel</button>{/if}
   {/if}
+  {#if notice}<p role="status">{notice}</p>{/if}
   {#if message}<p role="status">{message}</p>{/if}
 </section>
 <style>

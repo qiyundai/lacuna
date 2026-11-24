@@ -3,10 +3,12 @@
   import { vaultStore, vaultRequest, loadVault } from '$lib/stores/vault.svelte.js';
   import { setAuthed } from '$lib/stores/session.svelte.js';
   import { linkDevice } from '$lib/browser-sync.js';
+  import { passkeysSupported, readRecoveryPasskey } from '$lib/sync-passkey.js';
   import { browserVault } from '$lib/web-vault.js';
   import { prepareValleyAudio, leaveValley, willPlaySound } from '$lib/valley-playback.svelte.js';
   import SoundCue from './SoundCue.svelte';
-  let linking=$state(false),code=$state('');
+  let linking=$state(false),code=$state(''),fromPasskey=$state(false);
+  const passkeys=passkeysSupported();
   let passphrase = $state(''), confirmation = $state(''), error = $state(''), busy = $state(false), restoring = $state(false);
   let backup = $state<File | null>(null);
   let mismatch = $state(false);
@@ -23,13 +25,20 @@
     try {
       if (backup && backup.size > 23 * 1024 * 1024) throw new Error('This backup is too large.');
       const envelope = restoring && backup ? JSON.parse(await backup.text()) : undefined;
-      if (linking) await linkDevice(browserVault(),code.trim(),passphrase);
+      if (linking) await linkDevice(browserVault(),code.trim(),passphrase,fetch,fromPasskey);
       else await vaultRequest(restoring ? 'vault/restore' : 'vault/unlock', 'POST', { passphrase, create: !vaultStore.status?.exists, ...(envelope ? { envelope } : {}) });
-      code='';
+      code=''; fromPasskey=false;
       passphrase = ''; confirmation = '';
       setAuthed({ id: 'this-browser', email: 'on this device' });
       await loadVault();
     } catch (e) { leaveValley(); error = e instanceof Error ? e.message : 'Could not unlock the vault.'; }
+    finally { busy = false; }
+  }
+  async function usePasskey() {
+    if (busy) return;
+    busy = true; error = '';
+    try { code = await readRecoveryPasskey(); fromPasskey = true; }
+    catch (e) { error = e instanceof Error ? e.message : 'The passkey could not be read.'; }
     finally { busy = false; }
   }
 </script>
@@ -37,8 +46,13 @@
   <form class="atlas-form" aria-labelledby="vault-title" method="post" onsubmit={e => { e.preventDefault(); unlock(); }}>
     <h1 id="vault-title" tabindex="-1">{linking?'Link a synced journal':restoring ? 'Restore your journal' : existing ? 'Open your journal' : 'Start your journal'}</h1>
     {#if linking}
-      <p>Enter the private code from the other device’s Privacy &amp; storage settings and the original journal passphrase.{existing?' Your current journal will be kept as an encrypted recovery copy.':''}</p>
-      <div class="field"><label for="sync-code">Pairing code</label><input id="sync-code" type="password" bind:value={code} autocomplete="off" spellcheck="false" required disabled={busy}/></div>
+      {#if fromPasskey}
+        <p role="status">Your recovery passkey found this journal. Enter its original passphrase to open it here.{existing?' Your current journal will be kept as an encrypted recovery copy.':''}</p>
+      {:else}
+        <p>{passkeys?'Use the recovery passkey you saved, or enter':'Enter'} the private code from another device’s Privacy &amp; storage settings, and the original journal passphrase.{existing?' Your current journal will be kept as an encrypted recovery copy.':''}</p>
+        {#if passkeys}<button class="atlas-link" type="button" disabled={busy} onclick={usePasskey}>Use my recovery passkey</button>{/if}
+        <div class="field"><label for="sync-code">Pairing code</label><input id="sync-code" type="password" bind:value={code} autocomplete="off" spellcheck="false" required disabled={busy}/></div>
+      {/if}
     {:else}
     <p>{restoring ? 'Choose an encrypted backup and enter its original passphrase. An existing journal is backed up first. File restores start with sync off.' : existing ? 'Your passphrase opens your journal and your city.' : 'Choose a passphrase to keep your writing encrypted on this device.'}</p>
     {#if restoring}<div class="field"><label for="vault-backup">Encrypted backup</label><input id="vault-backup" type="file" accept=".lacuna-web-vault,application/json" required disabled={busy} onchange={e => backup = e.currentTarget.files?.[0] ?? null} /></div>{/if}
@@ -55,7 +69,7 @@
     {#if error}<p class="form-error" role="alert" id="key-error">{error}</p>{/if}
     <button class="atlas-primary" type="submit" disabled={busy} aria-label={submitLabel+(audible&&!busy?' and enter the valley with sound':'')}>{submitLabel}{#if !busy}<SoundCue/>{/if}</button>
     <div class="atlas-links">
-      {#if !restoring}<button class="atlas-link" type="button" disabled={busy} onclick={()=>{linking=!linking;code='';passphrase='';confirmation='';error='';mismatch=false;}}>{linking?'Return to this device':'Link a synced journal'}</button>{/if}
+      {#if !restoring}<button class="atlas-link" type="button" disabled={busy} onclick={()=>{linking=!linking;code='';fromPasskey=false;passphrase='';confirmation='';error='';mismatch=false;}}>{linking?'Return to this device':'Link a synced journal'}</button>{/if}
     {#if !linking}
     <button class="atlas-link" type="button" disabled={busy} onclick={() => { restoring = !restoring; error = ''; mismatch=false; passphrase = ''; confirmation = ''; backup = null; }}>{restoring ? 'Return to this device' : 'Restore from backup'}</button>
     {/if}

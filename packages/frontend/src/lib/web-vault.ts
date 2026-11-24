@@ -19,6 +19,8 @@ export interface DeviceSync {
   version:number;
   syncedRevision:number;
   syncedPages:number;
+  /** A recovery passkey holds this pairing code. */
+  passkey?:boolean;
 }
 export function forgetWebPage(journal:WebJournal,index:number) {
   const address=forgetPageAt(journal,index);
@@ -270,7 +272,7 @@ export class WebVault {
     if (!/^backup:[0-9]{13}:[a-f0-9-]{36}$/.test(id)) throw new WebVaultError('INVALID_BACKUP', 'Choose a saved restore copy.');
     const envelope = await this.storage.readBackup?.(id); validateEnvelope(envelope); return envelope;
   }
-  async restore(value: unknown, passphrase: string, pairing?:{code:string;version:number}) {
+  async restore(value: unknown, passphrase: string, pairing?:{code:string;version:number;passkey?:boolean}) {
     const generation = this.generation;
     return this.serial(async () => {
       validateEnvelope(value);

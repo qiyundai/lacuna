@@ -10,6 +10,10 @@
   let busy = $state(false), error = $state(''), message = $state('');
   let confirmCopy = $state('');
   let recoveryCopies = $state<string[]>([]);
+  // Safari can clear a website's storage after seven days without a visit. Home Screen apps keep theirs.
+  const appleBrowser = typeof navigator !== 'undefined' && (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+  const installed = typeof window !== 'undefined' && (window.matchMedia?.('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true);
+  const suggestHomeScreen = appleBrowser && !installed;
   async function run(action: () => Promise<unknown>) {
     if (busy) return;
     busy = true; error = ''; message = '';
@@ -34,6 +38,7 @@
         <h3>Your encrypted journal</h3>
         <p>An encrypted backup opens with your original passphrase. A browser file restore starts with sync off.</p>
         <p>Clearing site data, using a private tab, losing your device, or browser storage cleanup can erase the only copy. Keep an encrypted backup somewhere safe. You can restore a browser backup on another phone or computer using its original passphrase.</p>
+        {#if suggestHomeScreen}<p>On iPhone and iPad, Safari can clear this journal after seven days without a visit. To keep it, add Lacuna to your Home Screen from the Share menu. The Home Screen app starts with its own empty storage, so turn on sync here first, then open the app and choose “Link a synced journal”.</p>{/if}
         {#if recoveryCopies.length}<h3>Copies kept before a restore.</h3><p>Each copy may contain forgotten pages and old pairing credentials, encrypted with its original passphrase.</p>{/if}
         {#each recoveryCopies as id}
           <button class="atlas-link" disabled={busy} onclick={() => run(async () => { const { browserVault } = await import('$lib/web-vault.js'); const encrypted = await browserVault().recoveryCopy(id); downloadFile(JSON.stringify(encrypted), `lacuna-restore-copy-${id.split(':')[1]}.lacuna-web-vault`, 'application/json'); })}>Download copy from {new Date(Number(id.split(':')[1])).toLocaleString()}</button>

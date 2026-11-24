@@ -3,11 +3,15 @@ import { apiBase } from './api.js';
 import { base64, bytes, browserVault, announceBrowserLock, forgetWebPage, type WebVault, type WebEnvelope, type WebJournal } from './web-vault.js';
 
 const utf8=new TextEncoder();
-export const newPairingCode=()=>base64(crypto.getRandomValues(new Uint8Array(32))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
+export const pairingCode=(secret:Uint8Array)=>base64(secret).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
+export const newPairingCode=()=>pairingCode(crypto.getRandomValues(new Uint8Array(32)));
+export function pairingSecret(code:string) {
+  if (!/^[A-Za-z0-9_-]{43}$/.test(code)) throw new Error('Paste the full pairing code from your other device.');
+  return bytes(code.replaceAll('-','+').replaceAll('_','/'));
+}
 
 async function credentials(code:string) {
-  if (!/^[A-Za-z0-9_-]{43}$/.test(code)) throw new Error('Paste the full pairing code from your other device.');
-  const root=await crypto.subtle.importKey('raw',bytes(code.replaceAll('-','+').replaceAll('_','/')),'HKDF',false,['deriveKey','deriveBits']);
+  const root=await crypto.subtle.importKey('raw',pairingSecret(code),'HKDF',false,['deriveKey','deriveBits']);
   const derive=(purpose:string)=>({name:'HKDF',hash:'SHA-256',salt:utf8.encode('lacuna.browser-sync.v1'),info:utf8.encode(purpose)});
   const key=await crypto.subtle.deriveKey(derive('encrypted snapshot'),root,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
   const auth=new Uint8Array(await crypto.subtle.deriveBits(derive('storage access'),root,256));
@@ -38,7 +42,7 @@ function requireSuccess(response:Response) {
   throw new Error('Could not reach encrypted storage. Your local journal is safe.');
 }
 
-export async function linkDevice(vault:WebVault,code:string,passphrase:string,send:Transport=fetch) {
+export async function linkDevice(vault:WebVault,code:string,passphrase:string,send:Transport=fetch,passkey=false) {
   const generation=vault.sessionGeneration;
   const {key,token}=await credentials(code);
   const response=await request(send,token,'GET');
@@ -46,7 +50,7 @@ export async function linkDevice(vault:WebVault,code:string,passphrase:string,se
   const packet:SyncPacket=await response.json();
   const envelope=await decrypt(packet,key);
   if (vault.sessionGeneration!==generation || vault.unlocked) throw new Error('Lock your journal before linking a device.');
-  await vault.restore(envelope,passphrase,{code,version:packet.version});
+  await vault.restore(envelope,passphrase,{code,version:packet.version,...(passkey?{passkey:true}:{})});
   announceBrowserLock();
 }
 
@@ -162,11 +166,18 @@ export function watchBrowserSync() {
   let timer:ReturnType<typeof setTimeout>;
   function wake() {
     clearTimeout(timer);
-    if (!vault.pairing?.enabled) {
+    const pairing=vault.pairing;
+    if (!pairing?.enabled) {
       controller?.abort();
       return;
     }
-    if (!document.hidden && navigator.onLine) timer=setTimeout(()=>void runBrowserSync(),600);
+    if (!navigator.onLine) return;
+    // A hidden tab may be closed or its storage cleared before it is shown again.
+    if (document.hidden) {
+      if (pairing.syncedRevision!==vault.syncRevision) void runBrowserSync();
+      return;
+    }
+    timer=setTimeout(()=>void runBrowserSync(),600);
   }
   const interval=setInterval(wake,30000);
   window.addEventListener('lacuna:journal-changed',wake);
