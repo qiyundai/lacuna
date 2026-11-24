@@ -46,7 +46,10 @@
       created_at:1609459200+i*49171,solidified_at:1609459200+i*49171,kept_at:null}));
   }
   let canvas:HTMLCanvasElement,dialog:HTMLDialogElement;
-  let pageOpen=$state(false);
+  let pageOpen=$state(false),closing=$state(false);
+  let dialogRevision=0;
+  let opener:HTMLElement|null=null;
+  let pageTurn:Animation|undefined;
   function syncSound(){
     scene?.setSound(valleyAudioContext(),valleyPlayback.ambience&&!valleyPlayback.muted,pageOpen);
   }
@@ -56,7 +59,8 @@
   let readId=$state('');
   let markers=$state.raw<PageMarker[]>([]),writingDate=$state(new Date());
   const valleyViews=['City','Overlook'] as const;
-  let panel=$state<'write'|'pages'|'read'|'forget'>('write'),alive=false,reveal=false;
+  let panel=$state<'write'|'pages'|'read'|'forget'>('write'),alive=false;
+  let savedPage:string|undefined;
   const ordered=$derived([...entries].sort((a,b)=>b.created_at-a.created_at||b.id.localeCompare(a.id)));
   const seen = new WeakMap<EntryData, SceneCues>();
   const plan=$derived.by(()=>{
@@ -125,43 +129,83 @@
     untrack(()=>musicWindow.scenes++);
     return ()=>untrack(()=>{musicWindow.scenes--;});
   });
-  $effect(()=>{const current=scene;if(current){current.update(plan,reveal);reveal=false;}});
-  async function open(which:typeof panel){
+  $effect(()=>{
+    if(scene){scene.update(plan,savedPage);savedPage=undefined;}
+  });
+
+  async function dismiss(){
+    if(!dialog.open || closing)return;
+    const revision=++dialogRevision;
+    closing=true;
+    await tick();
+    await Promise.allSettled(dialog.getAnimations().map(animation=>animation.finished));
+    if(alive && revision===dialogRevision && dialog.open){
+      dialog.close();
+      pageOpen=false;
+      closing=false;
+    }
+  }
+
+  function restoreFocus(){
+    if(dialog.open)return;
+    pageOpen=false;
+    closing=false;
+    if(opener?.isConnected && opener.getClientRects().length && !opener.matches(':disabled'))opener.focus({preventScroll:true});
+    if(document.activeElement===document.body)canvas.focus({preventScroll:true});
+  }
+  async function open(which:typeof panel, direction=which==='pages'?-1:1){
     if(busy)return;
+    const revision=++dialogRevision;
+    const turn=dialog.open && !closing;
+    if(!dialog.open)opener=document.activeElement instanceof HTMLElement?document.activeElement:null;
+    closing=false;
+    pageTurn?.cancel();
     panel=which;error='';if(which==='write')writingDate=new Date();
-    await tick();if(!alive)return;
+    await tick();if(!alive || revision!==dialogRevision)return;
     if(!dialog.open)dialog.showModal();
+    if(turn && !matchMedia('(prefers-reduced-motion: reduce)').matches){
+      pageTurn=dialog.querySelector('.page-copy')?.animate([
+        {opacity:.3,transform:'perspective(500px) translateX('+direction*8+'px) rotateY('+direction*5+'deg)'},
+        {opacity:1,transform:'none'}
+      ],{duration:180,easing:'ease-out'});
+    }
     pageOpen=true;
     dialog.scrollTop=0;
     dialog.querySelector<HTMLElement>(which==='write'?'textarea':which==='forget'?'[data-keep-page]':'#journal-heading')?.focus({preventScroll:true});
   }
-  function readPage(id:string){
-    readId=id;scene?.visit('Page',id);void open('read');
+  function readPage(id:string,direction=1){
+    if(busy)return;
+    readId=id;scene?.visit('Page',id);void open('read',direction);
   }
   async function forgetPage(){
-    if(busy || panel!=='forget' || !openedPage)return;
+    if(busy || closing || panel!=='forget' || !openedPage)return;
     const id=openedPage.id,version=sessionVersion.value;
     busy=true;error='';
     try{
       const address=guest?forgetAddress(entries,forgotten,entries.findIndex(e=>e.id===id)):(await api.entries.forget(id)).address;
       if(!alive||version!==sessionVersion.value)return;
       if(!guest)resetJournalData();
+      await dismiss();
+      if(!alive||version!==sessionVersion.value)return;
       forgotten=[...forgotten.filter(a=>a.id!==id),address].sort((a,b)=>a.position-b.position);
       entries=entries.filter(e=>e.id!==id);
-      readId='';dialog.close();notice='Page forgotten. Its address remains.';
+      readId='';notice='Page forgotten. Its address remains.';
     }catch{error='Could not forget this page. Try again.';}
     finally{if(alive)busy=false;}
   }
   async function save(){
-    const body=draft.trim();if(!body||busy||!ready)return;
+    const body=draft.trim();if(!body||busy||closing||!ready)return;
     draftId ||= crypto.randomUUID().replaceAll('-','');
     const version=sessionVersion.value;busy=true;error='';
     try{
       const now=Math.floor(Date.now()/1000);
-      const entry=guest?{id:draftId,riverEdition:3 as const,body,user_id:'guest',created_at:now,solidified_at:now,kept_at:null}:(await api.city.write(body,now,draftId)).entry;
+      const {entry,created}=guest?{created:true,entry:{id:draftId,riverEdition:3 as const,body,user_id:'guest',created_at:now,solidified_at:now,kept_at:null}}:await api.city.write(body,now,draftId);
       if(!alive||version!==sessionVersion.value)return;
       if(!guest)prependEntry(entry);
-      reveal=true;entries=[...entries.filter(e=>e.id!==entry.id),entry];draft='';draftId='';dialog.close();
+      await dismiss();
+      if(!alive||version!==sessionVersion.value)return;
+      savedPage=created && !entries.some(page=>page.id===entry.id)?entry.id:undefined;
+      entries=[...entries.filter(e=>e.id!==entry.id),entry];draft='';draftId='';
       await tick();
       const home=plan.addresses.get(entry.id);
       notice=home?'Page saved at '+buildings[home.kind].replace(/^The /,'the ')+'.':'Page saved.';
@@ -216,8 +260,8 @@
       </div>
     </div>
   {/if}
-  <dialog bind:this={dialog} aria-labelledby="journal-heading" oncancel={e=>{if(busy)e.preventDefault();}}
-    onclose={()=>{pageOpen=dialog.open;if(document.activeElement===document.body)canvas.focus({preventScroll:true});}}>
+  <dialog bind:this={dialog} class:closing class:browsing={panel==='pages'||panel==='read'} aria-labelledby="journal-heading" oncancel={e=>{e.preventDefault();if(!busy)void dismiss();}}
+    onclose={restoreFocus}>
     <div class="folio" class:reading={panel==='read'||panel==='forget'}>
       <aside class="cover" aria-label={site && (panel==='read'||panel==='forget')?'Page location':'Journal cover'}>
         {#if (panel==='read'||panel==='forget') && site}
@@ -232,7 +276,7 @@
           <span>{panel==='write'?'Page '+(folios.size+1):panel==='pages'?'Journal index':'Page '+(folios.get(readId)??'')}</span>
           <div class="leaf-tools">
             <SoundToggle surface="paper"/>
-            <button class="paper-control" aria-label="Close" disabled={busy} onclick={()=>dialog.close()}><Icon name="close"/></button>
+            <button class="paper-control" aria-label="Close" disabled={busy} onclick={dismiss}><Icon name="close"/></button>
           </div>
         </header>
         {#if panel==='write'}
@@ -254,13 +298,15 @@
             <button class="atlas-primary danger" disabled={busy} onclick={forgetPage}>{busy?'Forgetting…':'Forget page'}</button>
           </div>
         {:else if panel==='read' && openedPage}
-          <h2 id="journal-heading" tabindex="-1">{weekday.format(openedPage.created_at*1000)}</h2>
-          <time datetime={new Date(openedPage.created_at*1000).toISOString()}>{fullDate.format(openedPage.created_at*1000)}</time>
-          <p class="entry-body">{openedPage.body}</p>
+          <div class="page-copy">
+            <h2 id="journal-heading" tabindex="-1">{weekday.format(openedPage.created_at*1000)}</h2>
+            <time datetime={new Date(openedPage.created_at*1000).toISOString()}>{fullDate.format(openedPage.created_at*1000)}</time>
+            <p class="entry-body">{openedPage.body}</p>
+          </div>
           <div class="leaf-foot">
             {#if neighbors.length>1}
               <nav class="turns" aria-label="Pages at this building">
-                <button class="paper-control" aria-label="Previous page at this building" disabled={room<=0} onclick={()=>readPage(neighbors[room-1]!.id)}><Icon name="chevron-left"/></button>
+                <button class="paper-control" aria-label="Previous page at this building" disabled={room<=0} onclick={()=>readPage(neighbors[room-1]!.id,-1)}><Icon name="chevron-left"/></button>
                 <span>{room+1} of {neighbors.length} here</span>
                 <button class="paper-control" aria-label="Next page at this building" disabled={room>=neighbors.length-1} onclick={()=>readPage(neighbors[room+1]!.id)}><Icon name="chevron-right"/></button>
               </nav>
@@ -269,17 +315,19 @@
           </div>
           <button class="atlas-link subtle forget" onclick={()=>open('forget')}>Forget this page</button>
         {:else}
-          <h2 id="journal-heading" tabindex="-1">Your pages</h2>
-          <div class="index">
-            {#each ordered as page (page.id)}
-              <article>
-                <button class="index-entry" onclick={()=>readPage(page.id)}>
-                  <time datetime={new Date(page.created_at*1000).toISOString()}>{date.format(page.created_at*1000)}</time>
-                  <span>{page.body}</span>
-                </button>
-                {#if scene && plan.addresses.has(page.id)}<button class="atlas-link subtle visit-site" onclick={()=>{dialog.close();scene?.visit('Page',page.id);}}>Visit in city ↗</button>{/if}
-              </article>
-            {:else}<p>Your saved pages will appear here.</p>{/each}
+          <div class="page-copy">
+            <h2 id="journal-heading" tabindex="-1">Your pages</h2>
+            <div class="index">
+              {#each ordered as page (page.id)}
+                <article>
+                  <button class="index-entry" onclick={()=>readPage(page.id)}>
+                    <time datetime={new Date(page.created_at*1000).toISOString()}>{date.format(page.created_at*1000)}</time>
+                    <span>{page.body}</span>
+                  </button>
+                  {#if scene && plan.addresses.has(page.id)}<button class="atlas-link subtle visit-site" onclick={()=>{void dismiss();scene?.visit('Page',page.id);}}>Visit in city ↗</button>{/if}
+                </article>
+              {:else}<p>Your saved pages will appear here.</p>{/each}
+            </div>
           </div>
         {/if}
         {#if guest}<p class="note">{panel==='read'?'Example journal. ':''}Changes last for this visit.</p>{/if}
@@ -313,6 +361,8 @@
 
   /* The journal: a two-leaf book on paper */
   dialog{position:fixed;inset:0;margin:auto;width:min(50rem,calc(100% - 2rem));max-height:88dvh;padding:0;border:0;border-radius:var(--radius-s);color:var(--ink);background:var(--paper);overflow:auto;overscroll-behavior:contain;box-shadow:var(--shadow-sheet)}
+  dialog.browsing{height:min(36rem,88dvh)}
+  .browsing .folio{min-height:100%}
   dialog::backdrop{background:var(--scene-backdrop)}
   .folio{display:grid;grid-template-columns:minmax(10rem,.52fr) minmax(0,1fr);min-height:26rem}
   .cover{display:flex;flex-direction:column;justify-content:flex-end;position:relative;isolation:isolate;background:var(--scene-shade) url('/city/valley-print.webp') 56% center/cover;color:var(--scene-ink)}
@@ -353,12 +403,19 @@
   .leaf h2:focus-visible{outline:0;text-decoration:underline;text-decoration-color:var(--line-strong);text-decoration-thickness:1px;text-underline-offset:.12em}
   textarea:focus-visible{outline:0;box-shadow:inset 2px 0 var(--line-strong);padding-left:.65rem}
   @media(prefers-reduced-motion:no-preference){dialog[open]{animation:unfold .22s var(--ease-out)}@keyframes unfold{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}}
+  .page-copy{transform-origin:left center}
+  @media(prefers-reduced-motion:no-preference){
+    dialog[open].closing,dialog.closing::backdrop{animation:journal-close 150ms ease-in both}
+    @keyframes journal-close{to{opacity:0}}
+  }
   /* Phones: a notice or the song takes its own line above the write action, so neither is cut short */
   @media(max-width:600px){.bottom .lead:has(.status:not(:empty),:global(.now-playing)){flex-basis:100%;max-width:none}}
   @media(max-width:600px){
     .bottom{flex-wrap:wrap}
     dialog{max-height:92dvh}.folio{display:flex;flex-direction:column;min-height:0}.cover{min-height:5rem;background-position:center 55%}
     .imprint,.reading .imprint{padding:.65rem 1.3rem}.imprint strong{font-size:var(--display-3)}
+    .browsing .cover{height:5.75rem;flex:none}
+    .browsing .leaf{flex:1}
     .reading .cover{flex-direction:row-reverse;justify-content:space-between;align-items:center}
     .plate{margin:.2rem 1rem;width:5.75rem}.plate img{max-height:4.65rem}
     .leaf{padding:var(--space-3) var(--sheet-inset) var(--space-5)}.leaf-head{margin-bottom:var(--space-4)}.leaf-foot{gap:var(--space-1)}

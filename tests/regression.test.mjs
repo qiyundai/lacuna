@@ -593,11 +593,12 @@ test('city saves preserve words and skip the story classifier',async t=>{
   {
     const send=value=>webRequest('/entries','POST',value,browser);
     const value={...thought(948,'A page with no particular theme.'),city:true};
-    const {entry}=await send(value);
+    const {entry,created}=await send(value);
+    assert.equal(created,true);
     assert.equal(entry.body,value.body);
     assert.equal(entry.riverEdition,3);
     assert.equal(entry.presence,undefined);
-    assert.deepEqual((await send(value)).entry,entry);
+    assert.deepEqual(await send(value),{entry,created:false});
   }
 });
 

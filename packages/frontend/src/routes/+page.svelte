@@ -20,15 +20,23 @@
   let view=$state<'town'|'journal'|'quiet'>('town');
   let section=$state<0|1|2>(0);
   const destinations=[['town','City'],['journal','Journal'],['quiet','Quiet writing']] as const;
-  function archive(next:0|1|2){section=next;view='journal';}
-  const journal=()=>archive(0);
+  let surface:HTMLDivElement;
+  let entrance:Animation|undefined;
+  const journal=()=>navigate('journal');
   async function navigate(next:typeof view){
-    if(next==='journal')journal();else view=next;
+    if(next===view)return;
+    if(next==='journal')section=0;
+    view=next;
     await tick();
+    if(view!==next)return;
+    entrance?.cancel();
+    if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
+      entrance=surface.animate([{opacity:.2},{opacity:1}],{duration:160,easing:'ease-out'});
+    }
     const destination=next==='town'?'.coast h1':'.masthead .trigger';
     document.querySelector<HTMLElement>(destination)?.focus({preventScroll:true});
   }
-  const town=()=>{view='town';};
+  const town=()=>navigate('town');
 </script>
 {#snippet navigation()}
   {#each destinations as item}
@@ -37,6 +45,7 @@
   <IconAction icon="settings" label="Journal settings" onclick={()=>settings.showSettings()}/>
 {/snippet}
 <UserMenu bind:this={settings}/>
+<div class="surface" bind:this={surface}>
 {#if view==='town'}
   <JournalCity bind:busy bind:draft bind:draftId {navigation}/>
 {:else}
@@ -47,7 +56,9 @@
     </div>
   </div>
 {/if}
+</div>
 <style>
+  .surface{height:100%}
   .application{height:100%;display:grid;grid-template-rows:var(--mast-height) minmax(0,1fr)}
   .page{position:relative;height:100%;min-height:0}
 </style>
