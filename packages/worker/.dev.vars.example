@@ -1,5 +1,4 @@
 FRONTEND_ORIGIN=http://localhost:5173
-REFLECTIONS_ENABLED=false
 JWT_SECRET=replace-with-any-strong-random-string
 RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 EMAIL_FROM=

@@ -7,6 +7,9 @@
   import { browserVault } from '$lib/web-vault.js';
   import { prepareValleyAudio, leaveValley, willPlaySound } from '$lib/valley-playback.svelte.js';
   import SoundCue from './SoundCue.svelte';
+  let { limited = false }: { limited?: boolean } = $props();
+  let agreed = $state(false);
+  let legacyReview = $state(false);
   let linking=$state(false),code=$state(''),fromPasskey=$state(false);
   const passkeys=passkeysSupported();
   let passphrase = $state(''), confirmation = $state(''), error = $state(''), busy = $state(false), restoring = $state(false);
@@ -14,11 +17,12 @@
   let mismatch = $state(false);
   let repeatField = $state<HTMLInputElement>();
   const existing = $derived(vaultStore.status?.exists === true);
+  const needsAgreement = $derived(!existing || restoring || linking || legacyReview);
   const action = $derived(existing ? 'Unlock journal' : 'Create journal');
   const submitLabel=$derived(busy?'Opening…':linking?'Link this device':restoring?'Restore journal':action);
   const audible=$derived(willPlaySound());
   async function unlock() {
-    if (busy) return;
+    if (busy || (limited && (!existing || restoring || linking)) || (needsAgreement && !agreed)) return;
     if (!restoring && !linking && !vaultStore.status?.exists && passphrase !== confirmation) { mismatch = true; error = 'Enter the same passphrase in both fields.'; repeatField?.focus(); return; }
     busy = true; error = ''; mismatch = false;
     prepareValleyAudio();
@@ -26,25 +30,26 @@
       if (backup && backup.size > 23 * 1024 * 1024) throw new Error('This backup is too large.');
       const envelope = restoring && backup ? JSON.parse(await backup.text()) : undefined;
       if (linking) await linkDevice(browserVault(),code.trim(),passphrase,fetch,fromPasskey);
-      else await vaultRequest(restoring ? 'vault/restore' : 'vault/unlock', 'POST', { passphrase, create: !vaultStore.status?.exists, ...(envelope ? { envelope } : {}) });
+      else await vaultRequest(restoring ? 'vault/restore' : 'vault/unlock', 'POST', { passphrase, acceptedTerms: agreed, create: !vaultStore.status?.exists, ...(envelope ? { envelope } : {}) });
       code=''; fromPasskey=false;
       passphrase = ''; confirmation = '';
       setAuthed({ id: 'this-browser', email: 'on this device' });
       await loadVault();
-    } catch (e) { leaveValley(); error = e instanceof Error ? e.message : 'Could not unlock the vault.'; }
+    } catch (e) { if ((e as {code?:string})?.code==='TERMS_REVIEW_REQUIRED') legacyReview=true; leaveValley(); error = e instanceof Error ? e.message : 'Could not unlock the vault.'; }
     finally { busy = false; }
   }
   async function usePasskey() {
-    if (busy) return;
+    if (busy || limited) return;
     busy = true; error = '';
     try { code = await readRecoveryPasskey(); fromPasskey = true; }
     catch (e) { error = e instanceof Error ? e.message : 'The passkey could not be read.'; }
     finally { busy = false; }
   }
 </script>
-<TownWelcome {action}>
+<TownWelcome {action} {limited} canOpen={!limited || existing}>
   <form class="atlas-form" aria-labelledby="vault-title" method="post" onsubmit={e => { e.preventDefault(); unlock(); }}>
     <h1 id="vault-title" tabindex="-1">{linking?'Link a synced journal':restoring ? 'Restore your journal' : existing ? 'Open your journal' : 'Start your journal'}</h1>
+    {#if needsAgreement}<p>Lacuna is for writers aged 13 and older. Your journal stays on this device unless you turn on encrypted sync.</p>{/if}
     {#if linking}
       {#if fromPasskey}
         <p role="status">Your recovery passkey found this journal. Enter its original passphrase to open it here.{existing?' Your current journal will be kept as an encrypted recovery copy.':''}</p>
@@ -65,15 +70,17 @@
         <input bind:this={repeatField} id="vault-confirmation" type="password" bind:value={confirmation} autocomplete="new-password" minlength="12" maxlength="1024" required disabled={busy} aria-invalid={mismatch} aria-describedby={mismatch?'key-error':undefined} oninput={()=>{error='';mismatch=false;}}/>
       </div>
     {/if}
+    {#if needsAgreement}<label><input type="checkbox" required bind:checked={agreed}/> I agree to the <a href="/terms">Terms of Service</a>.</label>{/if}
     <p class="field-note" id="key-help">{restoring || existing || linking ? 'Use the passphrase you originally chose.' : 'Use at least 12 characters. Keep your passphrase and an encrypted backup somewhere safe. A lost passphrase cannot be reset.'}</p>
     {#if error}<p class="form-error" role="alert" id="key-error">{error}</p>{/if}
     <button class="atlas-primary" type="submit" disabled={busy} aria-label={submitLabel+(audible&&!busy?' and enter the valley with sound':'')}>{submitLabel}{#if !busy}<SoundCue/>{/if}</button>
-    <div class="atlas-links">
+    {#if !limited}<div class="atlas-links">
       {#if !restoring}<button class="atlas-link" type="button" disabled={busy} onclick={()=>{linking=!linking;code='';fromPasskey=false;passphrase='';confirmation='';error='';mismatch=false;}}>{linking?'Return to this device':'Link a synced journal'}</button>{/if}
     {#if !linking}
     <button class="atlas-link" type="button" disabled={busy} onclick={() => { restoring = !restoring; error = ''; mismatch=false; passphrase = ''; confirmation = ''; backup = null; }}>{restoring ? 'Return to this device' : 'Restore from backup'}</button>
     {/if}
     </div>
-    <a class="atlas-link" href="/billing">Manage billing</a>
+    {/if}
+    <a class="atlas-link" href="/billing">Manage existing billing</a>
   </form>
 </TownWelcome>

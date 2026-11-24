@@ -27,7 +27,7 @@
     pines:'The pine grove',glasshouse:'The glasshouse',station:'The station',civic:'The town hall',
     belfry:'The belfry',towers:'The towers',arches:'The arches',wharf:'The wharf',beacon:'The beacon'
   };
-  let {guest=false,afterglow=false,fixedHour,onExit,navigation,draft=$bindable(''),draftId=$bindable(''),busy=$bindable(false)}:{guest?:boolean;afterglow?:boolean;fixedHour?:number;onExit?:()=>void;navigation?:Snippet;draft?:string;draftId?:string;busy?:boolean}=$props();
+  let {guest=false,readOnly=false,afterglow=false,fixedHour,onExit,navigation,draft=$bindable(''),draftId=$bindable(''),busy=$bindable(false)}:{guest?:boolean;readOnly?:boolean;afterglow?:boolean;fixedHour?:number;onExit?:()=>void;navigation?:Snippet;draft?:string;draftId?:string;busy?:boolean}=$props();
   const notes = [
     'The light was still on across the street.', 'Made tea before the alarm.', 'The morning train was nearly empty.',
     'I borrowed a blue bowl and forgot to give it back.', 'We walked home slowly.', 'There was a postcard in the mail.',
@@ -154,7 +154,7 @@
     if(document.activeElement===document.body)canvas.focus({preventScroll:true});
   }
   async function open(which:typeof panel, direction=which==='pages'?-1:1){
-    if(busy)return;
+    if(busy || (readOnly && (which==='write' || which==='forget')))return;
     const revision=++dialogRevision;
     const turn=dialog.open && !closing;
     if(!dialog.open)opener=document.activeElement instanceof HTMLElement?document.activeElement:null;
@@ -236,7 +236,7 @@
   {#if opening}<ValleyLoading audio label={ready?'Opening the valley…':'Opening your journal…'} onExit={guest?onExit:undefined}/>{/if}
   <h1 class="visually-hidden" tabindex="-1">{guest?'Example city':'Your city'}</h1>
   {#if !opening}
-    <Masthead floating audio sound={soundToggles} disabled={busy} world={guest?'Example city':'The valley city'} pageCount={entries.length}>
+    <Masthead floating audio journalMenu sound={soundToggles} disabled={busy} world={guest?'Example city':'Your city'} pageCount={entries.length}>
       <IconAction icon="pages" label="Pages" onclick={()=>open('pages')} disabled={!ready}/>
       {#if scene}
         {#each valleyViews as view}
@@ -246,7 +246,6 @@
       {/if}
       {@render navigation?.()}
       {#if guest}
-        <IconAction icon="privacy" label="Privacy" href="/privacy"/>
         <IconAction icon="leave" label="Leave visit" onclick={onExit}/>
       {/if}
     </Masthead>
@@ -256,7 +255,7 @@
       <div class="actions">
         {#if graphicsError}<IconAction icon="retry" label="Retry city" onclick={graphics}/>{/if}
         {#if !ready&&error}<IconAction icon="retry" label="Retry journal" onclick={read}/>{/if}
-        <IconAction tone="raised" icon="write" label={draft?'Return to draft':'Write a page'} disabled={!ready||busy} onclick={()=>open('write')}/>
+        {#if !readOnly}<IconAction tone="raised" icon="write" label={draft?'Return to draft':'Write a page'} disabled={!ready||busy} onclick={()=>open('write')}/>{/if}
       </div>
     </div>
   {/if}
@@ -313,7 +312,7 @@
             {/if}
             <button class="atlas-link push" onclick={()=>open('pages')}>All pages</button>
           </div>
-          <button class="atlas-link subtle forget" onclick={()=>open('forget')}>Forget this page</button>
+          {#if !readOnly}<button class="atlas-link subtle forget" onclick={()=>open('forget')}>Forget this page</button>{/if}
         {:else}
           <div class="page-copy">
             <h2 id="journal-heading" tabindex="-1">Your pages</h2>
@@ -330,7 +329,7 @@
             </div>
           </div>
         {/if}
-        {#if guest}<p class="note">{panel==='read'?'Example journal. ':''}Changes last for this visit.</p>{/if}
+        {#if guest && !readOnly}<p class="note">{panel==='read'?'Example journal. ':''}Changes last for this visit.</p>{/if}
         {#if error}<p role="alert">{error}</p>{/if}
       </div>
     </div>

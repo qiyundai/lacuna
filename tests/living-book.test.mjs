@@ -1,13 +1,17 @@
+import { termsVersion } from '../packages/shared/terms.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { emptyBook, nextBookTask, acceptBookResult, forgetFromBook, validBook } from '../packages/shared/living-book.ts';
 import { processBookUnit } from '../packages/frontend/src/lib/reflection-service.ts';
-import { sourceReadings } from '../packages/worker/src/ai/book-prompts.ts';
+import { reflectionPayload, sourceReadings } from '../packages/worker/src/ai/book-prompts.ts';
 import { createTestDatabase } from './database.mjs';
 import { maintainAccounts } from '../packages/worker/src/routes/reflections.ts';
+import { hashToken } from '../packages/worker/src/ratelimit.ts';
 import { operationsSummary } from '../packages/worker/src/operations.ts';
 import app from '../packages/worker/src/index.ts';
+import { Hono } from 'hono';
+import reflectionRoutes from '../packages/worker/src/routes/reflections.ts';
 
 test('private operations reports fixed aggregates and distinguishes missing maintenance',async t=>{
   const DB=await createTestDatabase();t.after(()=>DB.sqlite.close());
@@ -30,9 +34,34 @@ test('private operations reports fixed aggregates and distinguishes missing main
 
 test('published reflection endpoints are coming soon before auth, billing or provider work',async()=>{
   for(const path of ['checkout','generate']){
-    const response=await app.request('https://lacuna.example/reflections/'+path,{method:'POST'},{FRONTEND_ORIGIN:'https://lacuna.example'});
+    const request=new Request('https://lacuna.example/reflections/'+path,{method:'POST',body:'private test payload'});
+    const response=await app.fetch(request,{FRONTEND_ORIGIN:'https://lacuna.example',REFLECTIONS_ENABLED:'true'});
+    assert.equal(request.bodyUsed,false);
+    assert.equal(response.headers.get('X-Content-Type-Options'),'nosniff');
     assert.equal(response.status,503);assert.equal((await response.json()).code,'COMING_SOON');
   }
+});
+
+test('free billing sign-in only sends codes and opens sessions for existing accounts',async t=>{
+  const DB=await createTestDatabase();
+  t.after(()=>DB.sqlite.close());
+  const origin='https://lacuna.example', env={DB,FRONTEND_ORIGIN:origin,JWT_SECRET:'fixture',RESEND_API_KEY:'fixture',EMAIL_FROM:'fixture@example.invalid'};
+  const originalFetch=globalThis.fetch, messages=[];
+  t.after(()=>{globalThis.fetch=originalFetch;});
+  globalThis.fetch=async (_url,init)=>{messages.push(JSON.parse(init.body));return Response.json({id:'sent'});};
+  const send=(path,body)=>app.request(origin+'/reflections/'+path,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json',Cookie:'__Host-lacuna-device='+'a'.repeat(64)},body:JSON.stringify(body)},env);
+  const unknown='unknown@example.invalid', existing='existing@example.invalid';
+  assert.deepEqual(await (await send('login',{email:unknown})).json(),{ok:true});
+  assert.equal(messages.length,0);
+  assert.equal(await DB.prepare('SELECT email FROM reflection_challenges').first(),null);
+  const stale='abcdefabcdef';
+  await DB.prepare('INSERT INTO reflection_challenges VALUES(?,?,?)').bind(unknown,await hashToken('fixture:'+unknown+':'+stale),Math.floor(Date.now()/1000)+60).run();
+  assert.equal((await send('verify',{email:unknown,code:stale})).status,401);
+  assert.equal(await DB.prepare('SELECT id FROM reflection_accounts').first(),null);
+  await DB.prepare('INSERT INTO reflection_accounts(id,email) VALUES(?,?)').bind('existing',existing).run();
+  assert.deepEqual(await (await send('login',{email:existing})).json(),{ok:true});
+  assert.equal(messages.length,1);
+  assert.equal((await send('verify',{email:existing,code:messages[0].text.match(/[a-f0-9]{12}/)[0]})).status,200);
 });
 
 const page=(n,day,body)=>({id:n.toString(16).padStart(32,'0'),created_at:day*86400,body});
@@ -91,7 +120,7 @@ test('opening, distinct days, long gaps, chapter size and evidence validation',(
 });
 test('background work refuses a result after forgetting, locking, or losing entitlement',async()=>{
   for(const change of ['forget','lock','billing']){
-    const data={entries:[pages[0]],revision:1,reflectionConsent:{account:'owner',epoch:1}};
+    const data={entries:[pages[0]],revision:1,reflectionConsent:{account:'owner',epoch:1,noticeVersion:'2026-11-24'}};
     const vault={unlocked:true,sessionGeneration:1,read:()=>structuredClone(data),current:async()=>true,update:()=>assert.fail('stale write')};
     let paid=true;
     const call=async(path,body)=>{
@@ -104,6 +133,16 @@ test('background work refuses a result after forgetting, locking, or losing enti
     assert.equal(await processBookUnit(vault,new AbortController().signal,call),false);
     assert.equal(data.book,undefined);
   }
+});
+
+test('Luna requests omit cache breakpoints, tools and stored responses', () => {
+  const task=nextBookTask(emptyBook(),pages);
+  const payload=reflectionPayload('gpt-6-luna',task);
+  assert.equal(payload.store,false);
+  assert.deepEqual(payload.prompt_cache_options,{mode:'explicit'});
+  assert.equal(typeof payload.input,'string');
+  assert.equal(payload.tools,undefined);
+  assert.equal(reflectionPayload('gpt-5.4-mini-2026-03-17',task).prompt_cache_options,undefined);
 });
 
 test('hosted payment, consent and usage gates with signed Stripe events and stateless model requests',async t=>{
@@ -134,9 +173,11 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
       assert.equal(options.body.get('billing_address_collection'),'required');
       const price=options.body.get('line_items[0][price]');
       assert.equal(options.body.get('metadata[lacuna_price]'),price);
+      assert.equal(options.body.get('metadata[terms_version]'),termsVersion);
+      assert.equal(options.body.get('subscription_data[metadata][terms_version]'),termsVersion);
       if(!sessions.has(key)){
         const id='cs_'+sessions.size;
-        sessions.set(key,{id,status:'open',url:'https://checkout.stripe.com/'+id,metadata:{lacuna_price:price},mode:'subscription',automatic_tax:{enabled:true}});
+        sessions.set(key,{id,status:'open',url:'https://checkout.stripe.com/'+id,metadata:{lacuna_price:price,terms_version:options.body.get('metadata[terms_version]')},mode:'subscription',automatic_tax:{enabled:true}});
       }
       if(loseCheckoutResponse){loseCheckoutResponse=false;return new Response(null,{status:503});}
       return Response.json(sessions.get(key));
@@ -157,52 +198,57 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
     const payload=JSON.parse(options.body);assert.equal(payload.store,false);assert.match(payload.input,/\bJSON\b/i);modelCalls++;
     return Response.json({status:'completed',output:[{content:[{type:'output_text',text:'{"notes":[]}'}]}],usage:{input_tokens:300,output_tokens:15}});
   });
-  env.REFLECTIONS_ENABLED='true';
+  const paidRouter = new Hono();
+  paidRouter.use('*', async (c, next) => { c.set('reflectionsAvailable', true); await next(); });
+  paidRouter.route('/reflections', reflectionRoutes);
+  let router = paidRouter;
   const periodEnd=Math.floor(Date.now()/1000)+365*86400;
-  const send=(path,body,headers={})=>app.request('https://lacuna.example/reflections/'+path,{method:body===undefined?'GET':'POST',headers:{Cookie:cookie+'; __Host-lacuna-device='+'a'.repeat(64),Origin:env.FRONTEND_ORIGIN,'Content-Type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body)},env);
+  const send=(path,body,headers={})=>router.request('https://lacuna.example/reflections/'+path,{method:body===undefined?'GET':'POST',headers:{Cookie:cookie+'; __Host-lacuna-device='+'a'.repeat(64),Origin:env.FRONTEND_ORIGIN,'Content-Type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body)},env);
   assert.equal((await send('login',{email:'me@example.com'})).status,200);
   const verify=await send('verify',{email:'me@example.com',code});
   cookie=verify.headers.get('set-cookie').split(';')[0];
   const account=await verify.json();
   assert.equal(account.paid,false);
+  assert.equal((await send('checkout',{})).status,400);
+  assert.equal((await send('checkout',{termsVersion:'2025-01-01'})).status,400);
   assert.equal(account.annualAvailable,false);
-  assert.equal((await send('checkout',{interval:'year'})).status,503);
+  assert.equal((await send('checkout',{termsVersion,interval:'year'})).status,503);
   env.STRIPE_ANNUAL_PRICE_ID='price_annual';
   assert.equal((await (await send('account')).json()).annualAvailable,true);
-  assert.equal((await send('checkout',{interval:'week'})).status,400);
+  assert.equal((await send('checkout',{termsVersion,interval:'week'})).status,400);
   yearlyOffer.unit_amount=500;
-  assert.equal((await send('checkout',{interval:'year'})).status,503);
+  assert.equal((await send('checkout',{termsVersion,interval:'year'})).status,503);
   yearlyOffer.unit_amount=5000;yearlyOffer.recurring.interval='month';
-  assert.equal((await send('checkout',{interval:'year'})).status,503);
+  assert.equal((await send('checkout',{termsVersion,interval:'year'})).status,503);
   yearlyOffer.recurring.interval='year';
   assert.equal((await send('account',undefined,{Cookie:cookie})).status,401);
   assert.equal((await send('account',undefined,{Cookie:cookie+'; __Host-lacuna-device='+'b'.repeat(64)})).status,401);
   assert.equal((await send('account')).status,200);
   const modelKey=env.OPENAI_API_KEY;
   delete env.OPENAI_API_KEY;
-  assert.equal((await send('checkout',{})).status,503);
+  assert.equal((await send('checkout',{termsVersion})).status,503);
   env.OPENAI_API_KEY=modelKey;
   offer.currency='usd';
-  assert.equal((await send('checkout',{})).status,503);
+  assert.equal((await send('checkout',{termsVersion})).status,503);
   offer.currency='cad';
   loseCheckoutResponse=true;
-  assert.equal((await send('checkout',{})).status,503);
-  const monthly=await (await send('checkout',{})).json();
+  assert.equal((await send('checkout',{termsVersion})).status,503);
+  const monthly=await (await send('checkout',{termsVersion})).json();
   assert.equal(monthly.url,'https://checkout.stripe.com/cs_0');
-  assert.equal((await (await send('checkout',{interval:'month'})).json()).url,monthly.url);
+  assert.equal((await (await send('checkout',{termsVersion,interval:'month'})).json()).url,monthly.url);
   assert.equal(sessions.size,1);
   assert.deepEqual(customerKeys,['customer-'+account.id,'customer-'+account.id]);
   const monthlySession=sessions.get(checkoutKeys[0]);
   assert.equal(monthlySession.metadata.lacuna_price,env.STRIPE_PRICE_ID);
   await DB.prepare('UPDATE reflection_accounts SET checkout_price=NULL,checkout_session=NULL WHERE id=?').bind(account.id).run();
-  const annual=await (await send('checkout',{interval:'year'})).json();
+  const annual=await (await send('checkout',{termsVersion,interval:'year'})).json();
   assert.equal(annual.url,'https://checkout.stripe.com/cs_1');
   assert.equal(monthlySession.status,'expired');
   const annualSession=[...sessions.values()].find(s=>s.url===annual.url);
   assert.equal(annualSession.metadata.lacuna_price,env.STRIPE_ANNUAL_PRICE_ID);
-  assert.deepEqual(await (await send('checkout',{interval:'year'})).json(),annual);
+  assert.deepEqual(await (await send('checkout',{termsVersion,interval:'year'})).json(),annual);
   annualSession.status='expired';annualSession.url=null;
-  const concurrent=await Promise.all([send('checkout',{interval:'month'}),send('checkout',{interval:'year'})]);
+  const concurrent=await Promise.all([send('checkout',{termsVersion,interval:'month'}),send('checkout',{termsVersion,interval:'year'})]);
   assert.ok(concurrent.some(response=>response.status===200));
   assert.ok(concurrent.every(response=>[200,409].includes(response.status)));
   assert.equal([...sessions.values()].filter(s=>s.status==='open').length,1);
@@ -213,13 +259,13 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
   assert.equal((await send('webhook',event)).status,400);
   const hook=()=>send('webhook',event,{'Stripe-Signature':'t='+stamp+',v1='+sig});
   paid=true;
-  assert.equal((await send('checkout',{interval:'year'})).status,409);
+  assert.equal((await send('checkout',{termsVersion,interval:'year'})).status,409);
   await hook();
   assert.equal((await (await send('account')).json()).paid,true);
   subscriptionPrice='unrelated';await hook();
   assert.equal((await (await send('account')).json()).paid,false);
   subscriptionPrice='price_annual';
-  assert.equal((await send('checkout',{})).status,409);
+  assert.equal((await send('checkout',{termsVersion})).status,409);
   for(const [status,refunded,disputed,expectedPaid] of [
     ['open',false,false,false],['paid',true,false,false],['paid',false,true,false],['paid',false,false,true]
   ]){
@@ -233,7 +279,8 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
   assert.equal(ending.billingState,'ending');
   assert.equal(ending.paidUntil,periodEnd);
   assert.equal((await send('generate',data)).status,403);
-  assert.equal((await send('consent',{enabled:true})).status,200);
+  assert.equal((await send('consent',{enabled:true})).status,400);
+  assert.equal((await send('consent',{enabled:true,noticeVersion:'2026-11-24'})).status,200);
   assert.equal((await send('generate',data,{Origin:'https://elsewhere.example'})).status,403);
   assert.equal((await send('generate',data)).status,200);
   assert.equal(modelCalls,1);
@@ -248,7 +295,14 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
   assert.equal((await (await send('generate',{...data,unit:'b'.repeat(64)})).json()).code,'service_limit');
   paid=false;await hook();assert.equal((await send('generate',data)).status,403);
   assert.equal(modelCalls,1);
-  env.REFLECTIONS_ENABLED='false';
+  router=app;
+  env.REFLECTIONS_ENABLED='true';
+  const fetchesBeforePause=t.mock.method(globalThis,'fetch',()=>{throw new Error('Unexpected provider call');});
+  for (const [path, body] of [['consent',{enabled:true,noticeVersion:'2026-11-24'}],['checkout',{termsVersion}],['generate',data]]) {
+    assert.equal((await send(path,body)).status,503);
+  }
+  assert.equal(fetchesBeforePause.mock.callCount(),0);
+  fetchesBeforePause.mock.restore();
   assert.equal((await send('portal',{})).status,200);
   const currentTime=Date.now();
   const clock=t.mock.method(Date,'now',()=>currentTime+301000);

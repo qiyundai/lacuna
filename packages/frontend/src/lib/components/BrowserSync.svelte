@@ -3,6 +3,7 @@
   import { browserVault, type DeviceSync } from '$lib/web-vault.js';
   import { newPairingCode, runBrowserSync, pauseSyncWork, removeOnline, syncMessage, hasConflict } from '$lib/browser-sync.js';
   import { passkeysSupported, saveRecoveryPasskey } from '$lib/sync-passkey.js';
+  import { loadVault, vaultStore } from '$lib/stores/vault.svelte.js';
   let pairing=$state<DeviceSync>(), dirty=$state(false), busy=$state(false), reveal=$state(false), confirming=$state(false);
   let message=$state(''), notice=$state(''), conflict=$state(false), passkeys=$state(false);
   function refresh() {
@@ -32,7 +33,8 @@
     await pauseSyncWork();
     const vault=browserVault(),previous=vault.pairing;
     const next=previous?{...previous,enabled:!previous.enabled}:{code:newPairingCode(),version:0,syncedRevision:-1,syncedPages:0,enabled:true};
-    await vault.setPairing(previous,next);
+    await vault.setPairing(previous,next,next.enabled?'opt-in':undefined);
+    await loadVault();
     if (!previous && !passkeys) reveal=true;
     if (next.enabled) await runBrowserSync();
   }
@@ -50,10 +52,12 @@
 </script>
 <section aria-labelledby="sync-title">
   <h3 id="sync-title">Sync across devices</h3>
-  <p>Sync sends an encrypted copy of your journal. Pair another device with your private code and journal passphrase.</p>
+  <p>Turning on sync uploads an encrypted copy of your journal to Lacuna. To read it on another device, you need both your private pairing code and your journal passphrase. Lacuna can see the size and timing of transfers.</p>
+  <p>You can keep writing with sync off. Pausing sync keeps the online copy. Deleting the online copy keeps the journal on this device.</p>
   <button class="atlas-link" disabled={busy} onclick={()=>run(toggle)}>{pairing?.enabled?'Pause sync on this device':pairing?'Resume sync':'Enable encrypted sync'}</button>
   {#if pairing}
-    <p role="status">{pairing.enabled?(dirty?'Local changes waiting to sync.':'This device is synced.'):'Sync paused on this device.'}</p>
+    <p role="status">{pairing.enabled?(dirty?'Local changes waiting to sync.':'This device is synced.'):'Sync paused on this device. Previously paired devices can receive your pages if you resume.'}</p>
+    {#if !vaultStore.status?.deviceOnly}
     <p>{pairing.passkey
       ?'If this browser’s data is cleared, restore the journal with your recovery passkey and passphrase.'
       :passkeys
@@ -68,6 +72,7 @@
     {#if pairing.enabled}
       <button class="atlas-link" disabled={busy} onclick={()=>run(()=>runBrowserSync())}>Sync now</button>
       {#if conflict}<button class="atlas-link" disabled={busy} onclick={()=>run(()=>runBrowserSync(true))}>Back up this device and use online copy</button>{/if}
+    {/if}
     {/if}
     <button class="atlas-link danger" disabled={busy} onclick={()=>{if(!confirming){confirming=true;return;}void run(async()=>{await pauseSyncWork();await removeOnline(browserVault());confirming=false;});}}>{confirming?'Confirm deletion of online copy':'Delete online copy'}</button>
     {#if confirming}<p>This removes the active online copy for all paired devices. Their local journals stay intact, and its pairing code and recovery passkeys stop working. Encrypted database backups expire separately.</p><button class="atlas-link" disabled={busy} onclick={()=>confirming=false}>Cancel</button>{/if}

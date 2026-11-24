@@ -10,7 +10,7 @@
   import ChatGPTSettings from './ChatGPTSettings.svelte';
   import ArchiveExport from './ArchiveExport.svelte';
   import VaultSettings from './VaultSettings.svelte';
-  import { lockVault, loadVault } from '$lib/stores/vault.svelte.js';
+  import { lockVault, loadVault, vaultStore } from '$lib/stores/vault.svelte.js';
   import { modal } from '$lib/modal.js';
   import { loadAI } from '$lib/stores/ai.svelte.js';
   import { onMount } from 'svelte';
@@ -64,7 +64,6 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
-      if (showInfo) { showInfo = false; return; }
       if (showPrivacy) { showPrivacy = false; return; }
       if (showPlan) { showPlan = false; return; }
       if (showExport) { showExport = false; return; }
@@ -103,7 +102,7 @@
         <button class="menu-item" onclick={() => { open = false; confirming = false; showInfo = true; }}>About Lacuna</button>
         <button class="menu-item" onclick={() => { open = false; confirming = false; showPrivacy = true; }}>Data and privacy</button>
         <button class="menu-item" onclick={() => { open = false; showVault = true; }}>Privacy &amp; storage</button>
-        <button class="menu-item" onclick={() => { open = false; showPlan = true; }}>AI reflections{#if !aiAvailable}<span class="soon">Coming soon</span>{/if}</button>
+        {#if !vaultStore.status?.deviceOnly}<button class="menu-item" onclick={() => { open = false; showPlan = true; }}>Reflections{#if !aiAvailable}<span class="soon">Coming soon</span>{/if}</button>{/if}
         <button class="menu-item" onclick={() => { open = false; showExport = true; }}>Export journal</button>
         <button class="menu-item" onclick={handleSignOut}>Lock journal</button>
       </nav>
@@ -121,7 +120,7 @@
 
 <InfoOverlay bind:show={showInfo} />
 <PrivacyOverlay bind:show={showPrivacy} />
-<ChatGPTSettings bind:show={showPlan} bind:billingReturn />
+{#if !vaultStore.status?.deviceOnly}<ChatGPTSettings bind:show={showPlan} bind:billingReturn />{/if}
 <ArchiveExport bind:show={showExport} />
 <VaultSettings bind:show={showVault} />
 

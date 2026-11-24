@@ -1,3 +1,5 @@
+import { reflectionNoticeVersion, termsVersion } from '../../../shared/terms.js';
+import { aiAvailable } from './ai-release.js';
 import { disconnectBillingDevice } from './billing-device.js';
 import type { EntryData, MemoirEdition, ModelWeights, StoryData } from './api.js';
 import type { RiverClock } from '../../../shared/river.js';
@@ -5,9 +7,11 @@ import { forgetFromBook, validBook, type Book } from '../../../shared/living-boo
 import { forgetPageAt, validCityHistory, type ForgottenAddress } from '../../../shared/city-address.js';
 
 export interface WebJournal {
+  deviceOnly?: true;
+  acceptedTerms?: string;
   deviceSync?: DeviceSync;
   book?: Book;
-  reflectionConsent?: {account:string; epoch:number};
+  reflectionConsent?: {account:string; epoch:number; noticeVersion?:string};
   forgotten?: ForgottenAddress[];
   river?: RiverClock;
   format: 'lacuna.web-journal.v1'; revision: number; entries: EntryData[];
@@ -154,7 +158,8 @@ export class WebVault {
   private lastActive = 0;
   private failures: number[] = [];
   constructor(private storage: EncryptedStorage, private now = Date.now, private changed = (_saved?:boolean,_synced?:boolean) => {}) {}
-  get sharingAllowed() { return this.unlocked && !!this.data?.reflectionConsent; }
+  get deviceOnly() { return this.unlocked && this.data?.deviceOnly === true; }
+  get sharingAllowed() { return aiAvailable && !this.deviceOnly && this.unlocked && this.data?.reflectionConsent?.noticeVersion===reflectionNoticeVersion; }
   get sessionGeneration() { return this.generation; }
   async current() { return this.unlocked && envelopeToken(this.envelope)===envelopeToken(await this.storage.read()); }
   async refresh(synced=false) {
@@ -183,7 +188,7 @@ export class WebVault {
     const {deviceSync,...journal}=this.data;
     return structuredClone(journal);
   }
-  async unlock(passphrase: string, create = false) {
+  async unlock(passphrase: string, create = false, acceptedTerms = false) {
     const generation = this.generation;
     return this.serial(async () => {
       this.failures = this.failures.filter(t => this.now() - t < 60000);
@@ -195,9 +200,16 @@ export class WebVault {
         if (existing) validateEnvelope(existing);
         const salt = existing?.salt ?? random(32), key = await keyFor(passphrase, salt);
         const owner = existing?.owner ?? crypto.randomUUID().replace(/-/g, '');
-        const data: WebJournal = existing ? await open(existing, key) : { format: 'lacuna.web-journal.v1', revision: 0, entries: [], memoirs: [], weights: {}, graph: { nodes: [], processed_count: 0 } };
+        const data: WebJournal = existing ? await open(existing, key) : { acceptedTerms: termsVersion, format: 'lacuna.web-journal.v1', revision: 0, entries: [], memoirs: [], weights: {}, graph: { nodes: [], processed_count: 0 } };
         if (generation !== this.generation) throw new WebVaultError('VAULT_LOCKED', 'Opening was cancelled. Unlock again when you are ready.');
-        const envelope = existing ?? await seal(data, key, owner, salt);
+        const needsReview = existing && data.acceptedTerms !== termsVersion;
+        if (needsReview && !acceptedTerms) throw new WebVaultError('TERMS_REVIEW_REQUIRED', 'Review the updated terms to open your journal.');
+        if (needsReview) {
+          data.acceptedTerms = termsVersion;
+          if (data.deviceOnly && data.deviceSync) data.deviceSync.enabled = false;
+        }
+        const envelope = existing && !needsReview ? existing : await seal(data, key, owner, salt);
+        if (needsReview) await this.storage.replace(envelopeToken(existing), envelope);
         if (!existing) {
           disconnectBillingDevice();
           await this.storage.replace(null, envelope);
@@ -205,13 +217,19 @@ export class WebVault {
         if (generation !== this.generation) throw new WebVaultError('VAULT_LOCKED', 'Your encrypted copy is saved and remains locked.');
         this.key = key; this.data = data; this.envelope = envelope; this.lastActive = this.now();
         this.changed();
-      } catch (e) { this.failures.push(this.now()); if (e instanceof WebVaultError) throw e; throw new WebVaultError('UNLOCK_FAILED', 'Could not unlock your space. Check the passphrase. A damaged backup can also cause this error.'); }
+      } catch (e) { if (!(e instanceof WebVaultError && e.code==='TERMS_REVIEW_REQUIRED')) this.failures.push(this.now()); if (e instanceof WebVaultError) throw e; throw new WebVaultError('UNLOCK_FAILED', 'Could not unlock your space. Check the passphrase. A damaged backup can also cause this error.'); }
     });
   }
   async update<T>(action: (data: WebJournal) => T): Promise<T> {
     return this.serial(async () => {
       const data = this.read(), generation = this.generation, previous = this.envelope!, key = this.key!;
-      const result = action(data); data.revision++;
+      const result = action(data);
+      if (this.deviceOnly) {
+        data.deviceOnly = true;
+        delete data.reflectionConsent;
+        delete data.deviceSync;
+      }
+      data.revision++;
       const pairing=this.pairing;
       const stored=pairing?{...data,deviceSync:pairing}:data;
       const envelope = await seal(stored, key, previous.owner, previous.salt);
@@ -243,13 +261,20 @@ export class WebVault {
     delete data.reflectionConsent;
     return data;
   }
-  async setPairing(expected:DeviceSync|undefined,next:DeviceSync|undefined, replacement?:{data:WebJournal; expectedRevision:number; backup:boolean}) {
+  async setPairing(expected:DeviceSync|undefined,next:DeviceSync|undefined, change?: 'opt-in' | {data:WebJournal; expectedRevision:number; backup:boolean}) {
+    const replacement = typeof change === 'object' ? change : undefined;
     const generation=this.generation;
     return this.serial(async()=>{
       const local=this.read(),previous=this.envelope!;
       if (generation!==this.generation || JSON.stringify(this.pairing)!==JSON.stringify(expected) ||
           (replacement && local.revision!==replacement.expectedRevision)) throw new Error('This journal changed. Retry sync.');
       const data=replacement?.data ?? local;
+      if ((next || replacement) && (local.deviceOnly || data.deviceOnly)) {
+        if (change !== 'opt-in' || !next?.enabled) throw new Error('This journal stays on this device.');
+        delete data.deviceOnly;
+        delete data.reflectionConsent;
+      }
+      if (local.acceptedTerms) data.acceptedTerms=local.acceptedTerms;
       if (local.reflectionConsent) data.reflectionConsent=local.reflectionConsent;
       if (next) data.deviceSync=next;
       else delete data.deviceSync;
@@ -281,7 +306,11 @@ export class WebVault {
       catch (e) { if (e instanceof WebVaultError) throw e; throw new WebVaultError('UNLOCK_FAILED', 'The backup could not be unlocked. Your current copy has been kept.'); }
       const previous = await this.storage.read();
       if (generation !== this.generation) throw new WebVaultError('VAULT_LOCKED', 'Restore was cancelled. Your current copy has been kept.');
-      if(data.reflectionConsent || data.deviceSync || pairing){
+      const restrict = this.deviceOnly || data.deviceOnly === true;
+      if (restrict && pairing) throw new Error('This journal stays on this device.');
+      if(data.reflectionConsent || data.deviceSync || pairing || data.acceptedTerms!==termsVersion || (restrict && !data.deviceOnly)){
+        data.acceptedTerms = termsVersion;
+        if (restrict) data.deviceOnly = true;
         delete data.reflectionConsent;
         delete data.deviceSync;
         if(pairing) data.deviceSync={...pairing,enabled:true,syncedRevision:data.revision,syncedPages:data.entries.length};

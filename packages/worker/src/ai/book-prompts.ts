@@ -25,6 +25,16 @@ export function reflectionInstructions(kind: BookTask['kind']) {
   ].join(' ');
 }
 
+export function reflectionPayload(model:string, task:BookTask) {
+  return {
+    model, store:false,
+    ...(model==='gpt-6-luna' ? {prompt_cache_options:{mode:'explicit'}} : {}),
+    instructions:reflectionInstructions(task.kind),
+    input:'Return JSON.\n'+JSON.stringify({primary:task.primary,pages:task.evidence}),
+    max_output_tokens:task.kind==='observe'?500:1400, text:{format:{type:'json_object'}}
+  };
+}
+
 export function sourceReadings(task:BookTask, value:unknown):unknown {
   if(task.kind!=='write' || !value || typeof value!=='object' || !('readings' in value) || !Array.isArray(value.readings))return value;
   const segmenter=new Intl.Segmenter(undefined,{granularity:'sentence'});

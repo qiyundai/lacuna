@@ -2,20 +2,24 @@
   import { onMount, type Snippet } from 'svelte';
   import MusicButton from './MusicButton.svelte';
   import SoundToggle from './SoundToggle.svelte';
+  import IconAction from './IconAction.svelte';
+  import InfoOverlay from './InfoOverlay.svelte';
   /*
    * Top bar: signature on the left, controls on the right.
    *   children — menu items (scene actions, navigation, exits)
    *   sound    — sound toggles, grouped at the end of the menu with Music
    *   audio    — show the master sound switch beside the menu button
    */
-  let { children, sound, world, pageCount=0, floating=false, disabled=false, audio=false }: {
+  let { children, sound, world, pageCount=0, floating=false, disabled=false, audio=false, journalMenu=false, showSignature=true }: {
     children?:Snippet; sound?:Snippet; world?:string; pageCount?:number; floating?:boolean; disabled?:boolean; audio?:boolean
+    journalMenu?:boolean; showSignature?:boolean
   } = $props();
   const menuId=$props.id();
   const calendar=new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric'});
   const clock=new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'});
   let trigger:HTMLButtonElement, sheet:HTMLElement;
   let supported=$state(false), open=$state(false), now=$state(new Date());
+  let showInfo=$state(false);
   onMount(async()=>{
     if(!('popover' in HTMLElement.prototype))await import('@oddbird/popover-polyfill');
     supported=true;
@@ -39,7 +43,7 @@
 </script>
 
 <header class="masthead" class:floating class:with-details={open && !!world}>
-  <span class="signature">Lacuna</span>
+  {#if showSignature}<span class="signature">Lacuna</span>{/if}
   <div class="launcher captions-below">
     {#if world && open}
       <div class="world">
@@ -57,17 +61,23 @@
   </div>
   <nav id={menuId} popover="auto" bind:this={sheet} aria-label="Lacuna menu" onclickcapture={choose} ontoggle={e=>open=e.newState==='open'}>
     {@render children?.()}
+    {#if journalMenu}
+      <IconAction icon="info" label="About Lacuna" onclick={()=>showInfo=true}/>
+      <IconAction icon="privacy" label="Privacy" href="/privacy"/>
+      <IconAction icon="pages" label="Terms of Service" href="/terms"/>
+    {/if}
     <span class="group-break" aria-hidden="true"></span>
     {@render sound?.()}
     <MusicButton opener={()=>trigger}/>
   </nav>
 </header>
+{#if journalMenu}<InfoOverlay bind:show={showInfo}/>{/if}
 
 <style>
   .masthead{height:var(--mast-height);padding-inline:var(--gutter);display:flex;align-items:center;justify-content:space-between;color:var(--ink);background:var(--paper)}
   .floating{position:absolute;inset:0 0 auto;z-index:var(--z-chrome);pointer-events:none;background:var(--scene-scrim);color:var(--scene-ink)}
   .signature{font:400 var(--text-signature)/1 var(--font);letter-spacing:var(--ls-hero)}.floating .signature{text-shadow:0 1px 6px var(--scene-shade)}
-  .launcher{position:relative;display:flex;align-items:center;gap:var(--control-gap)}
+  .launcher{position:relative;display:flex;align-items:center;gap:var(--control-gap);margin-inline-start:auto}
 
 
   .trigger svg{inline-size:var(--icon);block-size:var(--icon);stroke-width:1.7}

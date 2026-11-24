@@ -5,7 +5,7 @@
   import JournalCity from '$lib/components/JournalCity.svelte';
 </script>
 
-<svelte:head><title>The valley city · Lacuna</title></svelte:head>
+<svelte:head><title>Example city · Lacuna</title></svelte:head>
 {#key page.url.search}
-  <JournalCity guest fixedHour={studioHour(page.url.searchParams.get('time'))} afterglow={page.url.searchParams.get('light')==='afterglow'} onExit={() => goto('/')}/>
+  <JournalCity guest readOnly fixedHour={studioHour(page.url.searchParams.get('time'))} afterglow={page.url.searchParams.get('light')==='afterglow'} onExit={() => goto('/')}/>
 {/key}

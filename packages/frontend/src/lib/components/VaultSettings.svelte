@@ -3,7 +3,7 @@
   import { fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { modal } from '$lib/modal.js';
-  import { vaultRequest, loadVault, lockVault } from '$lib/stores/vault.svelte.js';
+  import { vaultRequest, loadVault, lockVault, vaultStore } from '$lib/stores/vault.svelte.js';
   import { downloadFile } from '$lib/story.js';
   import BrowserSync from './BrowserSync.svelte';
   let { show = $bindable(false) }: { show: boolean } = $props();
@@ -33,12 +33,14 @@
       <button class="atlas-link" disabled={busy} onclick={() => run(async () => { await lockVault(); show = false; })}>Lock my space now</button>
       <button class="atlas-link" disabled={busy} onclick={() => run(async () => { const encrypted = await vaultRequest('vault/backup'); downloadFile(JSON.stringify(encrypted), `lacuna-${new Date().toISOString().slice(0, 10)}.lacuna-web-vault`, 'application/json'); message = 'Encrypted backup downloaded. Keep it and your passphrase somewhere you can recover.'; })}>Download an encrypted backup</button>
       <p class="note">The backup stays encrypted outside this app. Restore it from the lock screen with your passphrase.</p>
+      {#if vaultStore.status?.deviceOnly}<p>Sync is off for this journal. You can keep an encrypted backup yourself or turn on sync below.</p>
+      {/if}
       <BrowserSync/>
       <section>
         <h3>Your encrypted journal</h3>
         <p>An encrypted backup opens with your original passphrase. A browser file restore starts with sync off.</p>
         <p>Clearing site data, using a private tab, losing your device, or browser storage cleanup can erase the only copy. Keep an encrypted backup somewhere safe. You can restore a browser backup on another phone or computer using its original passphrase.</p>
-        {#if suggestHomeScreen}<p>On iPhone and iPad, Safari can clear this journal after seven days without a visit. To keep it, add Lacuna to your Home Screen from the Share menu. The Home Screen app starts with its own empty storage, so turn on sync here first, then open the app and choose “Link a synced journal”.</p>{/if}
+        {#if suggestHomeScreen && !vaultStore.status?.deviceOnly}<p>On iPhone and iPad, Safari can clear this journal after seven days without a visit. To keep it, add Lacuna to your Home Screen from the Share menu. The Home Screen app starts with its own empty storage, so turn on sync here first, then open the app and choose “Link a synced journal”.</p>{/if}
         {#if recoveryCopies.length}<h3>Copies kept before a restore.</h3><p>Each copy may contain forgotten pages and old pairing credentials, encrypted with its original passphrase.</p>{/if}
         {#each recoveryCopies as id}
           <button class="atlas-link" disabled={busy} onclick={() => run(async () => { const { browserVault } = await import('$lib/web-vault.js'); const encrypted = await browserVault().recoveryCopy(id); downloadFile(JSON.stringify(encrypted), `lacuna-restore-copy-${id.split(':')[1]}.lacuna-web-vault`, 'application/json'); })}>Download copy from {new Date(Number(id.split(':')[1])).toLocaleString()}</button>

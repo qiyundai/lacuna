@@ -4,7 +4,6 @@ export interface Env {
   SYNC_CAPACITY_BYTES?: string;
   LEGACY_SYNC_ORIGIN?: string;
   JWT_SECRET: string;
-  REFLECTIONS_ENABLED?: string;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   RESEND_API_KEY?: string;

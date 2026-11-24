@@ -1,9 +1,19 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import adapter from '@sveltejs/adapter-static';
 import { defineConfig } from 'vite';
+import { journalAvailable } from '../shared/region';
 
 export default defineConfig({
-	plugins: [sveltekit({
+	plugins: [{
+    name: 'local-journal-region',
+    configureServer(server) {
+      server.middlewares.use('/availability', (_request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        response.setHeader('Cache-Control', 'no-store');
+        response.end(JSON.stringify({ available: journalAvailable(process.env.LACUNA_PREVIEW_COUNTRY ?? 'CA', process.env.LACUNA_PREVIEW_REGION ?? 'BC') }));
+      });
+    }
+  }, sveltekit({
       alias: { '$lib': './src/lib' },
       adapter: adapter({
         pages: process.env.LACUNA_BUILD_DIR || 'build',
