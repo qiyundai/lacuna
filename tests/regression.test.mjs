@@ -287,6 +287,8 @@ test('release headers allow the configured encrypted sync endpoint and keep othe
     execFileSync(process.execPath,[script],{cwd:directory,env});
     const policy=await readFile(headers,'utf8');
     assert.equal(/connect-src ([^;]+);/.exec(policy)?.[1],expected);
+    assert.deepEqual(policy.split(/\r?\n/).filter(line=>line==='/*'),['/*']);
+    assert.match(policy,/Cache-Control: no-store/);
     assert.match(policy,/script-src 'self' 'sha256-/);
   }
 });
