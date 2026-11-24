@@ -323,6 +323,14 @@ test('browser devices pair privately, converge offline additions and preserve bo
   assert.equal(first.pairing.version,1);
   const upload=wire.find(r=>r.method==='PUT');
   assert.deepEqual(Object.keys(JSON.parse(upload.body)).sort(),['ciphertext','iv','version']);
+  const packet=JSON.parse(upload.body);
+  env.SYNC_CAPACITY_BYTES=String(packet.ciphertext.length);
+  const tooLarge={...packet,version:2,ciphertext:'A'.repeat(packet.ciphertext.length+4)};
+  const limited=await send(upload.path,{...upload,body:JSON.stringify(tooLarge)});
+  assert.equal(limited.status,507);
+  assert.equal(DB.sqlite.prepare('SELECT used_bytes FROM sync_capacity').get().used_bytes,packet.ciphertext.length);
+  assert.equal(DB.sqlite.prepare('SELECT version FROM browser_sync').get().version,1);
+  delete env.SYNC_CAPACITY_BYTES;
   const stored=DB.sqlite.prepare('SELECT * FROM browser_sync JOIN browser_sync_chunks USING(slot)').all();
   for(const secret of [code,samplePassphrase,'an entirely private first page',first.read().entries[0].id]){
     assert.ok(!JSON.stringify(wire).includes(secret));assert.ok(!JSON.stringify(stored).includes(secret));

@@ -1,6 +1,7 @@
 export interface Env {
   DB: D1Database;
   FRONTEND_ORIGIN: string;
+  SYNC_CAPACITY_BYTES?: string;
   LEGACY_SYNC_ORIGIN?: string;
   JWT_SECRET: string;
   REFLECTIONS_ENABLED?: string;

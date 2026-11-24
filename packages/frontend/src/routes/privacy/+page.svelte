@@ -17,7 +17,7 @@
     <section>
       <h2>Your journal on this device</h2>
       <p>Your passphrase encrypts everything you write, along with your city and any saved reflections, before it is stored in this browser. Lacuna never receives your passphrase and cannot reset it. Keep it, and an encrypted backup, somewhere safe.</p>
-      <p>The city’s buildings and details are drawn from your entries on this device. Ordinary writing, reading and searching never leave it. The journal locks when you reload the page or after 15 minutes without activity.</p>
+      <p>The city’s buildings and details are drawn from your entries on this device. Lacuna processes ordinary writing, reading and searching locally. Extensions and third-party keyboards may independently access text while you type. The journal locks when you reload the page or after 15 minutes without activity.</p>
       <p>Sound, music and interface preferences are stored on this device outside the encrypted journal. None of it is included in backups or sync. The example city is a sample journal, and changes you make there are discarded when you leave.</p>
     </section>
     <section>
@@ -36,8 +36,8 @@
     <section>
       <h2>Optional AI reflections</h2>
       <p>Where subscriptions are available, Lacuna stores your billing email, session, Stripe customer reference, paid access, consent and usage records. Resend handles your email address and sign-in code. Stripe handles checkout, billing address, applicable taxes, payments and cancellation.</p>
-      <p>After subscribing, you can allow reflections on an unlocked journal. Lacuna then forwards selected past and future pages, their dates, page identifiers and related reading notes to OpenAI. Lacuna returns the result to your browser for encrypted storage. Its database records usage and cost without storing those excerpts or readings. Requests use OpenAI’s storage opt-out. <a href="https://developers.openai.com/api/docs/guides/your-data" rel="noreferrer">OpenAI’s API data controls and retention</a></p>
-      <p>Pause reflections in Journal settings to stop new requests. You can manage or cancel your subscription there. Saved readings remain in your journal. Deleting your browser journal does not cancel billing.</p>
+      <p>After subscribing, you can allow reflections on an unlocked journal. Lacuna then forwards selected past and future pages, their dates, page identifiers and related reading notes to OpenAI. Lacuna returns the result to your browser for encrypted storage. Its database records usage and cost without storing those excerpts or readings. Requests use OpenAI’s storage opt-out. Under its standard policy OpenAI may retain submitted material for abuse monitoring for up to 30 days. Forgetting a page cannot recall an excerpt already sent. <a href="https://developers.openai.com/api/docs/guides/your-data" rel="noreferrer">OpenAI’s API data controls and retention</a></p>
+      <p>Pause reflections in Journal settings to stop new requests. You can also <a href="/billing">manage or cancel billing</a> with your email when your journal is locked or reflections are offline. Saved readings remain in your journal. Deleting your browser journal does not cancel billing.</p>
     </section>
     <section>
       <h2>Backups and readable exports</h2>
@@ -53,7 +53,7 @@
     <footer>
       <h2>About these protections</h2>
       <p>We test encryption, recovery and sync using disposable journals. Lacuna has not had an independent security audit. If we change how your data is handled, we will update this page and its date.</p>
-      <p>You can inspect the <a href="https://github.com/qiyundai/lacuna" target="_blank" rel="noreferrer">source and release history</a>, published under the GNU Affero General Public License, version 3. Questions and reports are welcome there. Please keep journal text, passphrases and pairing codes out of public reports.</p>
+      <p>You can inspect the <a href="https://github.com/qiyundai/lacuna" target="_blank" rel="noreferrer">source and release history</a>, published under the GNU Affero General Public License, version 3. For private account access or erasure requests, email <a href="mailto:qiyund@quietatlas.io">qiyund@quietatlas.io</a> from your billing address. We verify account control before acting. Expired sign-in codes and sessions are cleared by a scheduled job. Detailed usage is kept for 90 days. Stripe may retain billing records for financial obligations. Use <a href="https://github.com/qiyundai/lacuna/security/advisories/new" rel="noreferrer">private vulnerability reporting</a> for security reports. Please keep journal text, passphrases and pairing codes out of public reports.</p>
       <a class="return" href="/">Return to your space <span aria-hidden="true">←</span></a>
       <p><a href="/city/harbor/credits.txt">Waterfront model credits</a></p>
     </footer>

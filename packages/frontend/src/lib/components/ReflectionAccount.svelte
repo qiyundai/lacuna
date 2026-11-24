@@ -1,14 +1,18 @@
 <script lang="ts">
+  import { aiAvailable } from '$lib/ai-release.js';
+  import { prepareBillingSignIn, disconnectBillingDevice } from '$lib/billing-device.js';
   import { onMount } from 'svelte';
   import { hosted,reflectionStatus,type Account } from '$lib/reflection-service.js';
   import { browserVault, announceBrowserLock } from '$lib/web-vault.js';
-  let {billingReturn=$bindable('')}:{billingReturn?:string}=$props();
+  let {billingReturn=$bindable(''), billingOnly=false}:{billingReturn?:string;billingOnly?:boolean}=$props();
+  let verifiedHere = false;
   let account=$state<Account|null>(null), email=$state(''),code=$state(''),sent=$state(false),busy=$state(false),error=$state(''),enabled=$state(false);
   let mounted=false, progress=$state(''), online=$state(true), loaded=$state(false), delayed=$state(false), notice=$state('');
-  let paymentIssue=$derived(['past_due','unpaid','incomplete','paused'].includes(account?.billingState??''));
+  let paymentIssue=$derived(['past_due','unpaid','incomplete','paused','payment_review'].includes(account?.billingState??''));
   async function refresh(){
+    if (billingOnly && !verifiedHere) { loaded=true; return; }
     try{const fresh=await hosted<Account>('account');if(!mounted)return;account=fresh;sync();
-      if(fresh.paid || ['past_due','unpaid','incomplete','paused'].includes(fresh.billingState))billingReturn='';
+      if(fresh.paid || ['past_due','unpaid','incomplete','paused','payment_review'].includes(fresh.billingState))billingReturn='';
     }catch(e){if((e as {status?:number}).status!==401)throw e;account=null;enabled=false;}
     loaded=true;
   }
@@ -34,7 +38,8 @@
     return ()=>{mounted=false;clearInterval(timer);clearTimeout(wait);window.removeEventListener('online',connection);window.removeEventListener('offline',connection);window.removeEventListener('lacuna:reflection-status',status);};
   });
   async function signIn(){
-    if(sent){account=await hosted<Account>('verify',{email,code:code.trim()});code='';sync();}
+    prepareBillingSignIn();
+    if(sent){account=await hosted<Account>('verify',{email,code:code.trim()});verifiedHere=true;code='';sync();}
     else{await hosted('login',{email});sent=true;}
   }
   async function share(allow:boolean){
@@ -46,8 +51,25 @@
     if(allow)await vault.update(d=>{d.reflectionConsent={account:fresh.id,epoch:fresh.consent};});
     sync();
   }
+  async function signOut(){
+    const vault=browserVault();
+    try {
+      await hosted('logout',{});
+    } finally {
+      disconnectBillingDevice();
+      account=null;enabled=false;sent=false;verifiedHere=false;
+      announceBrowserLock();
+      if(vault.unlocked)await vault.update(d=>{delete d.reflectionConsent;});
+    }
+  }
   async function checkout(path:string){
-    const {url}=await hosted<{url:string}>(path,{});
+    let url:string;
+    try { ({url}=await hosted<{url:string}>(path,{})); }
+    catch(e) {
+      if ((e as {code?:string}).code!=='reauthenticate') throw e;
+      email=account?.email??''; account=null; sent=false; verifiedHere=false;
+      notice='Verify your email again to manage billing.'; return;
+    }
     const target=new URL(url);
     if(target.protocol!=='https:' || !['checkout.stripe.com','billing.stripe.com'].includes(target.hostname))throw new Error('Billing could not open.');
     location.assign(target.href);
@@ -66,18 +88,19 @@
   {#if !loaded}
     {#if online && error}<button class="atlas-link" disabled={busy} onclick={()=>run(refresh)}>Retry account check</button>{/if}
   {:else if !account && online}
-    <p>CA$5 per month adds a Soul Map and a memoir written from your pages. Applicable tax is shown at checkout. Writing, encrypted sync and reading your saved book stay free.</p>
+    <p>Sign in with the email address you use for Lacuna billing.</p>
     <form onsubmit={e=>{e.preventDefault();void run(signIn);}}>
       <div class="field"><label for="billing-email">Email</label><input id="billing-email" required type="email" autocomplete="email" bind:value={email} disabled={sent}/></div>
-      {#if sent}<div class="field"><label for="billing-code">Code from your email</label><input id="billing-code" required maxlength="12" autocomplete="one-time-code" bind:value={code}/><p class="note">Codes expire after ten minutes. Use the latest email.</p></div>{/if}
+      {#if sent}<div class="field"><label for="billing-code">Code from your email</label><input id="billing-code" required maxlength="12" autocomplete="one-time-code" spellcheck="false" autocorrect="off" autocapitalize="none" bind:value={code}/><p class="note">Codes expire after ten minutes. Use the latest email.</p></div>{/if}
       <button class="atlas-primary" disabled={busy}>{sent?'Sign in':'Email a sign-in code'}</button>
       {#if sent}<button class="atlas-link" type="button" disabled={busy} onclick={()=>run(async()=>{await hosted('login',{email});code='';notice='A new code has been sent.';})}>Send a new code</button><button class="atlas-link" type="button" disabled={busy} onclick={()=>{sent=false;code='';error='';notice='';}}>Change email</button>{/if}
     </form>
   {:else if account && online}
     <p class="note">{account.email}</p>
+    {#if !billingOnly && aiAvailable}
     {#if account.paid}
       {#if account.billingState==='ending'}<p>Your subscription ends on {new Date(account.paidUntil*1000).toLocaleDateString()}. Your saved memoir stays available.</p>{/if}
-      <p>With your permission, Lacuna sends excerpts from past and future pages to OpenAI while this journal is unlocked. Your book is saved here.</p>
+      <p>With your permission, Lacuna sends excerpts from past and future pages to OpenAI while this journal is unlocked. Your book is saved here. OpenAI may retain submitted excerpts for abuse monitoring for up to 30 days under its standard policy. Pausing stops future requests.</p>
       {#if !enabled}<p>Reflections are paused on this journal.</p>{/if}
       <button class="atlas-link" disabled={busy} onclick={()=>run(()=>share(!enabled))}>{enabled?'Pause reflections':'Allow reflections on this journal'}</button>
     {:else}
@@ -90,8 +113,10 @@
       {/if}
       {#if enabled}<button class="atlas-link" disabled={busy} onclick={()=>run(()=>share(false))}>Withdraw journal consent</button>{/if}
     {/if}
+    {/if}
+    {#if (billingOnly || !aiAvailable) && account.consent%2===1}<button class="atlas-link" disabled={busy} onclick={()=>run(async()=>{account=await hosted<Account>('consent',{enabled:false});enabled=false;})}>Withdraw reflection permission</button>{/if}
     {#if account.customer}<button class="atlas-link" disabled={busy} onclick={()=>run(()=>checkout('portal'))}>Manage billing</button>{/if}
-    <button class="atlas-link" disabled={busy} onclick={()=>run(async()=>{await browserVault().update(d=>{delete d.reflectionConsent;});announceBrowserLock();await hosted('logout',{});account=null;enabled=false;sent=false;})}>Sign out of billing account</button>
+    <button class="atlas-link" disabled={busy} onclick={()=>run(signOut)}>Sign out of billing account</button>
   {/if}
   <div role="alert">{#if error}<p class="error">{error}</p>{/if}</div>
 </div>

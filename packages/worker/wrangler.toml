@@ -1,5 +1,5 @@
 name = "lacuna-api"
-main = "src/index.ts"
+main = "src/worker.ts"
 compatibility_date = "2025-04-01"
 compatibility_flags = ["nodejs_compat"]
 keep_vars = true
@@ -10,7 +10,15 @@ database_name = "lacuna-db"
 database_id = "aa2e68ac-6b77-4c8f-9947-6865d5e8d330"
 migrations_dir = "migrations"
 
+[triggers]
+crons = ["*/15 * * * *"]
+
+[observability.logs]
+enabled = true
+invocation_logs = false
+
 [vars]
+SYNC_CAPACITY_BYTES = "134217728"
 FRONTEND_ORIGIN = "https://lacuna.quietatlas.io"
 LEGACY_SYNC_ORIGIN = "https://lacuna-app.pages.dev"
 EMAIL_FROM = "Lacuna <lacuna@quietatlas.io>"

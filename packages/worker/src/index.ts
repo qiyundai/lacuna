@@ -35,7 +35,7 @@ app.use('*', async (c, next) => {
 app.get('/health', (c) => c.json({ ok: true, version: '0.4.0' }));
 
 app.route('/journal-sync', browserSync);
-app.use('/reflections/*', async (c, next) => c.env.REFLECTIONS_ENABLED === 'true'
+app.use('/reflections/*', async (c, next) => !['/reflections/generate','/reflections/checkout'].includes(c.req.path) || c.env.REFLECTIONS_ENABLED === 'true'
   ? next()
   : c.json({code:'COMING_SOON',error:'AI reflections are coming soon.'},503));
 app.route('/reflections', reflections);

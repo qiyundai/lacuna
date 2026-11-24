@@ -240,7 +240,7 @@
           <time datetime={writingDate.toISOString()}>{weekday.format(writingDate)}, {fullDate.format(writingDate)}</time>
           <form onsubmit={event=>{event.preventDefault();void save();}}>
             <label class="visually-hidden" for="entry">Your journal entry</label>
-            <textarea id="entry" rows="5" maxlength="500" required placeholder="What would you like to remember?" bind:value={draft}
+            <textarea spellcheck="false" {...{autocorrect:'off'}} writingsuggestions="false" autocomplete="off" id="entry" rows="5" maxlength="500" required placeholder="What would you like to remember?" bind:value={draft}
               oninput={()=>draftId=''} onkeydown={e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)&&!e.isComposing){e.preventDefault();void save();}}}></textarea>
             <div class="leaf-foot"><span class="count" aria-label={draft.length+' of 500 characters'}>{draft.length} / 500</span>
               <button disabled={busy||!ready||!draft.trim()} class="atlas-primary">{busy?'Saving…':'Save page'}</button></div>

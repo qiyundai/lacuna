@@ -32,6 +32,7 @@ function requireSuccess(response:Response) {
   if (response.ok) return;
   if (response.status===410) throw new Error('The online copy was deleted. Your local journal is safe.');
   if (response.status===404) throw new Error('No online journal was found for this pairing code.');
+  if (response.status===507) throw new Error('Online storage is full. Your local journal is safe. Download an encrypted backup.');
   if (response.status===429) throw new Error('Sync is taking a break. Your pages are saved here. Try again later.');
   if (response.status===409) throw new Error('Another device just saved. Retry sync to pick up its changes.');
   throw new Error('Could not reach encrypted storage. Your local journal is safe.');

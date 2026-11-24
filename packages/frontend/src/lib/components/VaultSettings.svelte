@@ -8,6 +8,7 @@
   import BrowserSync from './BrowserSync.svelte';
   let { show = $bindable(false) }: { show: boolean } = $props();
   let busy = $state(false), error = $state(''), message = $state('');
+  let confirmCopy = $state('');
   let recoveryCopies = $state<string[]>([]);
   async function run(action: () => Promise<unknown>) {
     if (busy) return;
@@ -33,9 +34,15 @@
         <h3>Your encrypted journal</h3>
         <p>An encrypted backup opens with your original passphrase. A browser file restore starts with sync off.</p>
         <p>Clearing site data, using a private tab, losing your device, or browser storage cleanup can erase the only copy. Keep an encrypted backup somewhere safe. You can restore a browser backup on another phone or computer using its original passphrase.</p>
-        {#if recoveryCopies.length}<h3>Copies kept before a restore.</h3><p>These files remain encrypted with their original passphrase.</p>{/if}
+        {#if recoveryCopies.length}<h3>Copies kept before a restore.</h3><p>Each copy may contain forgotten pages and old pairing credentials, encrypted with its original passphrase.</p>{/if}
         {#each recoveryCopies as id}
           <button class="atlas-link" disabled={busy} onclick={() => run(async () => { const { browserVault } = await import('$lib/web-vault.js'); const encrypted = await browserVault().recoveryCopy(id); downloadFile(JSON.stringify(encrypted), `lacuna-restore-copy-${id.split(':')[1]}.lacuna-web-vault`, 'application/json'); })}>Download copy from {new Date(Number(id.split(':')[1])).toLocaleString()}</button>
+          <button class="atlas-link danger" disabled={busy} onclick={() => run(async () => {
+            if (confirmCopy !== id) { confirmCopy=id; return; }
+            const { browserVault }=await import('$lib/web-vault.js');
+            await browserVault().deleteRecoveryCopy(id);
+            confirmCopy=''; recoveryCopies=await browserVault().recoveryCopies();
+          })}>{confirmCopy===id?'Confirm permanent removal':'Remove this recovery copy'}</button>
         {/each}
       </section>
       {#if error}<p role="alert" class="error">{error}</p>{/if}

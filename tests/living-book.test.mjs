@@ -5,10 +5,11 @@ import { emptyBook, nextBookTask, acceptBookResult, forgetFromBook, validBook } 
 import { processBookUnit } from '../packages/frontend/src/lib/reflection-service.ts';
 import { sourceReadings } from '../packages/worker/src/ai/book-prompts.ts';
 import { createTestDatabase } from './database.mjs';
+import { maintainAccounts } from '../packages/worker/src/routes/reflections.ts';
 import app from '../packages/worker/src/index.ts';
 
 test('published reflection endpoints are coming soon before auth, billing or provider work',async()=>{
-  for(const path of ['login','checkout','consent','generate']){
+  for(const path of ['checkout','generate']){
     const response=await app.request('https://lacuna.example/reflections/'+path,{method:'POST'},{FRONTEND_ORIGIN:'https://lacuna.example'});
     assert.equal(response.status,503);assert.equal((await response.json()).code,'COMING_SOON');
   }
@@ -89,12 +90,15 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
   const DB=await createTestDatabase();t.after(()=>DB.sqlite.close());
   const env={DB,FRONTEND_ORIGIN:'https://lacuna.example',JWT_SECRET:'synthetic-test-secret',RESEND_API_KEY:'mail',EMAIL_FROM:'test@example.com',STRIPE_SECRET_KEY:'stripe',STRIPE_PRICE_ID:'price_1',STRIPE_WEBHOOK_SECRET:'hook',OPENAI_API_KEY:'model-key',OPENAI_MODEL:'test-model',MODEL_INPUT_MICROS_PER_TOKEN:'1',MODEL_OUTPUT_MICROS_PER_TOKEN:'2',REFLECTION_ACCOUNT_MICROS:'20000',REFLECTION_GLOBAL_MICROS:'50000'};
   let code,cookie='',modelCalls=0,paid=false;
+  const checkoutKeys=[];
+  const invoice={status:'paid',charge:{refunded:false,disputed:false}};
   const offer={active:true,currency:'cad',unit_amount:500,recurring:{interval:'month',interval_count:1,usage_type:'licensed'}};
   t.mock.method(globalThis,'fetch',async(url,options)=>{
     if(String(url).includes('resend.com')){code=JSON.parse(options.body).text.match(/[a-f0-9]{12}/)[0];return Response.json({id:'sent'});}
     if(String(url).endsWith('/customers'))return Response.json({id:'cus_test'});
     if(String(url).endsWith('/prices/price_1'))return Response.json(offer);
     if(String(url).endsWith('/checkout/sessions')){
+      checkoutKeys.push(options.headers['Idempotency-Key']);
       assert.equal(options.body.get('automatic_tax[enabled]'),'true');
       assert.equal(options.body.get('customer_update[address]'),'auto');
       assert.equal(options.body.get('billing_address_collection'),'required');
@@ -102,18 +106,22 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
       return Response.json({url:'https://checkout.stripe.com/test'});
     }
     if(String(url).includes('/checkout/sessions?'))return Response.json({data:[]});
-    if(String(url).includes('/subscriptions?'))return Response.json({data:paid?[{status:'active',current_period_end:2000000000,items:{data:[{price:{id:'price_1'}}]}}]:[]});
+    if(String(url).endsWith('/billing_portal/sessions'))return Response.json({url:'https://billing.stripe.com/test'});
+    if(String(url).includes('/subscriptions?'))return Response.json({data:paid?[{status:'active',latest_invoice:invoice,current_period_end:Math.floor(Date.now()/1000)+86400,items:{data:[{price:{id:'price_1'}}]}}]:[]});
     assert.equal(String(url),'https://api.openai.com/v1/responses');
     const payload=JSON.parse(options.body);assert.equal(payload.store,false);assert.match(payload.input,/\bJSON\b/i);modelCalls++;
     return Response.json({status:'completed',output:[{content:[{type:'output_text',text:'{"notes":[]}'}]}],usage:{input_tokens:300,output_tokens:15}});
   });
   env.REFLECTIONS_ENABLED='true';
-  const send=(path,body,headers={})=>app.request('https://lacuna.example/reflections/'+path,{method:body===undefined?'GET':'POST',headers:{Cookie:cookie,Origin:env.FRONTEND_ORIGIN,'Content-Type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body)},env);
+  const send=(path,body,headers={})=>app.request('https://lacuna.example/reflections/'+path,{method:body===undefined?'GET':'POST',headers:{Cookie:cookie+'; __Host-lacuna-device='+'a'.repeat(64),Origin:env.FRONTEND_ORIGIN,'Content-Type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body)},env);
   assert.equal((await send('login',{email:'me@example.com'})).status,200);
   const verify=await send('verify',{email:'me@example.com',code});
   cookie=verify.headers.get('set-cookie').split(';')[0];
   const account=await verify.json();
   assert.equal(account.paid,false);
+  assert.equal((await send('account',undefined,{Cookie:cookie})).status,401);
+  assert.equal((await send('account',undefined,{Cookie:cookie+'; __Host-lacuna-device='+'b'.repeat(64)})).status,401);
+  assert.equal((await send('account')).status,200);
   const modelKey=env.OPENAI_API_KEY;
   delete env.OPENAI_API_KEY;
   assert.equal((await send('checkout',{})).status,503);
@@ -122,6 +130,9 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
   assert.equal((await send('checkout',{})).status,503);
   offer.currency='cad';
   assert.equal((await send('checkout',{})).status,200);
+  assert.equal((await send('checkout',{})).status,200);
+  assert.equal(checkoutKeys.length,2);
+  assert.ok(checkoutKeys[0] && checkoutKeys[0]===checkoutKeys[1]);
   const data={...nextBookTask(emptyBook(),pages),account:account.id,consent:1,unit:'a'.repeat(64)};
   assert.equal((await send('generate',data)).status,403);
   const event={type:'customer.subscription.updated',data:{object:{customer:'cus_test'}}};
@@ -129,7 +140,14 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
   assert.equal((await send('webhook',event)).status,400);
   const hook=()=>send('webhook',event,{'Stripe-Signature':'t='+stamp+',v1='+sig});
   paid=true;
-  assert.equal((await hook()).status,200);
+  for(const [status,refunded,disputed,expectedPaid] of [
+    ['open',false,false,false],['paid',true,false,false],['paid',false,true,false],['paid',false,false,true]
+  ]){
+    invoice.status=status;
+    Object.assign(invoice.charge,{refunded,disputed});
+    assert.equal((await hook()).status,200);
+    assert.equal((await (await send('account')).json()).paid,expectedPaid);
+  }
   assert.equal((await send('generate',data)).status,403);
   assert.equal((await send('consent',{enabled:true})).status,200);
   assert.equal((await send('generate',data,{Origin:'https://elsewhere.example'})).status,403);
@@ -146,8 +164,36 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
   assert.equal((await (await send('generate',{...data,unit:'b'.repeat(64)})).json()).code,'service_limit');
   paid=false;await hook();assert.equal((await send('generate',data)).status,403);
   assert.equal(modelCalls,1);
-  await send('logout',{});
+  env.REFLECTIONS_ENABLED='false';
+  assert.equal((await send('portal',{})).status,200);
+  const currentTime=Date.now();
+  const clock=t.mock.method(Date,'now',()=>currentTime+301000);
+  assert.equal((await (await send('portal',{})).json()).code,'reauthenticate');
+  clock.mock.restore();
+  assert.equal((await hook()).status,200);
+  assert.equal((await send('consent',{enabled:false})).status,200);
+  assert.equal((await send('logout',{})).status,200);
   assert.equal((await send('account')).status,401);
+});
+
+test('scheduled retention removes expired records and preserves recent metering and valid logins',async t=>{
+  const DB=await createTestDatabase();
+  t.after(()=>DB.sqlite.close());
+  const time=Math.floor(Date.now()/1000);
+  await DB.prepare('INSERT INTO reflection_accounts(id,email) VALUES(?,?)').bind('owner','owner@example.test').run();
+  for(const [id,expires,started] of [['expired',time-1,time-91*86400],['current',time+3600,time-89*86400]]){
+    await DB.prepare('INSERT INTO reflection_challenges VALUES(?,?,?)').bind(id,'digest',expires).run();
+    await DB.prepare('INSERT INTO reflection_sessions VALUES(?,?,?)').bind(id,'owner',expires).run();
+    await DB.prepare('INSERT INTO reflection_usage(id,account,month,micros,unit,started) VALUES(?,?,?,?,?,?)').bind(id,'owner',new Date().toISOString().slice(0,7),100,id,started).run();
+  }
+  await maintainAccounts({DB});
+  for(const [table,key] of [['reflection_challenges','email'],['reflection_sessions','id'],['reflection_usage','id']]){
+    assert.deepEqual(DB.sqlite.prepare('SELECT '+key+' AS id FROM '+table).all().map(row=>row.id),['current']);
+  }
+  await DB.prepare('DELETE FROM reflection_accounts WHERE id=?').bind('owner').run();
+  assert.equal((await DB.prepare('SELECT micros FROM erased_usage_totals').first()).micros,100);
+  assert.equal(await DB.prepare('SELECT id FROM reflection_sessions').first(),null);
+  assert.equal(await DB.prepare('SELECT id FROM reflection_usage').first(),null);
 });
 
 test('published Soul Map excerpts retain the original actor, direction and negation',()=>{

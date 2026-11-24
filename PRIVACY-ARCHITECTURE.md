@@ -27,3 +27,21 @@ Malware, browser extensions, an unlocked device, a weak passphrase and a malicio
 ## Verification
 
 Regression tests exercise the browser vault's encryption, wrong-key and tamper rejection, competing-tab and quota failures, lock and unlock races, encrypted backup and restore with recovery copies, forgetting across reopen and export, pairing, offline convergence, conflict preservation, tombstones and stale uploads against the Worker's real SQL in disposable SQLite, release headers, IP pseudonyms, and no-network ambient color. Browser QA uses the disposable fixture from `pnpm preview:web`; real passphrases and journal text must never enter test output or screenshots.
+
+## Operating the paid service
+
+The release switch pauses new purchases and generation. Subscribers can still open /billing, verify their email and manage billing or withdraw permission. A reconciliation job revisits Stripe subscriptions every 15 minutes in batches of 20, prioritizing accounts that have gone a day without an update. Access requires the matching active subscription and a paid latest invoice. A full refund or a disputed charge on that invoice pauses new readings when reconciled. Saved journal material stays readable.
+
+The same job expires challenges, sessions and rate-limit buckets and removes detailed usage older than 90 days. Sync admits at most 256 new slots per UTC day and 128 MiB of encoded ciphertext across the service by default. Existing slots can shrink and their owners can delete them at capacity. The sign-in service allows up to 200 email sends per UTC day. Review aggregate volumes before raising a limit.
+
+### Handling private erasure requests
+
+The operator receives requests at qiyund@quietatlas.io. Confirm the requested scope and verify control by sending a new confirmation to the billing address already on file. Never ask for a journal passphrase, pairing code or sign-in code. For complete billing-account closure, obtain confirmation of cancellation, cancel any ongoing subscription in Stripe, and verify its final state before removing the link to the customer. Handle Stripe and Resend records in their respective dashboards according to the applicable retention obligations.
+
+Using a bound account ID, delete the verified row from reflection_accounts. The database trigger clears the associated challenges, sessions and usage in the same transaction. It adds current-month spend to an anonymous service-wide total so erasure preserves the shared budget. For a sign-in-only request with no account, delete the challenge for the verified email separately. Verify the deletion by ID and close the request privately. Anonymous encrypted sync has no billing account link. Writers remove an online copy on a paired device and remove local recovery copies in Vault settings.
+
+### Restores and incident response
+
+Before a D1 recovery, disable generation and production writes and preserve the current database. Restore in isolation first. Reapply deletion markers, verified erasures, and consent or session revocations recorded after the restore point. If they cannot be reconstructed, invalidate restored sessions, clear consent, and omit uncertain records or sync slots. Reconcile billing against Stripe and confirm retained ciphertext belongs to a current slot before reconnecting writers. Roll frontend and Worker code forward against the migrated schema.
+
+Inspect aggregate rate-limit rejections, email failures, webhook signature failures, reconciliation failures, sync capacity and model-budget exhaustion. Keep request bodies, billing URLs, email addresses, cookies, codes and sync credentials out of alerts or exports. Check Stripe delivery status after payment-method or signing-secret changes. Use Stripe test mode to exercise checkout, payment failure and cancellation. Verify DMARC aggregate reports from legitimate senders before changing the domain from monitoring to enforcement.
