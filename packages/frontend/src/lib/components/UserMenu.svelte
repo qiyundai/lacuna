@@ -22,13 +22,16 @@
   let showInfo = $state(false);
   let showPrivacy = $state(false);
   let showPlan = $state(false);
+  let billingReturn = $state('');
   let showExport = $state(false);
   let showVault = $state(false);
   let error = $state('');
   let deleting = $state(false);
   onMount(() => {
     const returned=new URL(location.href);
-    if(returned.searchParams.get('billing')==='returned'){
+    const billing=returned.searchParams.get('billing');
+    if(billing && ['returned','cancelled','managed'].includes(billing)){
+      billingReturn=billing;
       showPlan=true;returned.searchParams.delete('billing');replaceState(returned,page.state);
     }
     loadAI().catch(() => {});
@@ -118,7 +121,7 @@
 
 <InfoOverlay bind:show={showInfo} />
 <PrivacyOverlay bind:show={showPrivacy} />
-<ChatGPTSettings bind:show={showPlan} />
+<ChatGPTSettings bind:show={showPlan} bind:billingReturn />
 <ArchiveExport bind:show={showExport} />
 <VaultSettings bind:show={showVault} />
 

@@ -3,7 +3,7 @@ import { randomInt } from 'node:crypto';
 import { mkdir, writeFile, mkdtemp } from 'node:fs/promises';
 import { resolve } from 'node:path';
 const compiled=await build({stdin:{contents:`export * from './packages/shared/living-book.ts';export * from './packages/worker/src/ai/book-prompts.ts';export * from './packages/worker/src/ai/pipeline.ts';`,resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'node'});
-const {emptyBook,nextBookTask,acceptBookResult,reflectionInstructions,analyzeSnapshot}=await import('data:text/javascript;base64,'+Buffer.from(compiled.outputFiles[0].text).toString('base64'));
+const {emptyBook,nextBookTask,acceptBookResult,reflectionInstructions,sourceReadings,analyzeSnapshot}=await import('data:text/javascript;base64,'+Buffer.from(compiled.outputFiles[0].text).toString('base64'));
 const garden=['The beans have two leaves.','I moved the tray to the lower shelf.','I watered the same row again.','The string around the pots came loose.','I picked one bean and left the rest.'];
 const walks=['Dad and I took the long way home.','At the crossing Dad stopped to tie a lace.','I was sure he liked this walk for the view.','Today he said he walks this way for the quiet.','I wanted to ask more and also wanted to stay quiet.'];
 const letters=['I folded the letter twice.','I wrote the greeting and left the rest blank.','I used to think I always left letters unfinished.','I sent the blue envelope today.','I never wrote about the letter because I was waiting for an answer.'];
@@ -45,7 +45,7 @@ if(!process.argv.includes('--live')){
       const user=JSON.stringify({primary:task.primary,pages:task.evidence});
       const response=await ask(reflectionInstructions(task.kind),user,task.kind==='observe'?500:1400,true);
       try {
-        acceptBookResult(book,entries,task,JSON.parse(response));
+        acceptBookResult(book,entries,task,sourceReadings(task,JSON.parse(response)));
       } catch (error) {
         await writeFile(resolve(dir,'rejected.json'),JSON.stringify({name,task,response,reason:error.message},null,2));
         throw new Error(name+' '+task.kind+': '+error.message);
