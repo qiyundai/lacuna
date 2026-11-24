@@ -12,6 +12,7 @@ export interface Env {
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   STRIPE_PRICE_ID?: string;
+  STRIPE_ANNUAL_PRICE_ID?: string;
   REFLECTION_ACCOUNT_MICROS?: string;
   REFLECTION_GLOBAL_MICROS?: string;
   MODEL_INPUT_MICROS_PER_TOKEN?: string;
