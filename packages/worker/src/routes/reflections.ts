@@ -75,9 +75,14 @@ async function stripe<T={id:string;url:string}>(env:Env,path:string,fields?:Reco
   if (!env.STRIPE_SECRET_KEY || !env.STRIPE_PRICE_ID) throw unavailable();
   const headers:Record<string,string>={Authorization:'Bearer '+env.STRIPE_SECRET_KEY,'Stripe-Version':'2024-06-20'};
   if (idempotency) headers['Idempotency-Key']=idempotency;
-  const res=await fetch('https://api.stripe.com/v1/'+path,{method:fields?'POST':'GET',headers,body:fields?new URLSearchParams(fields):undefined});
-  if (!res.ok) throw unavailable();
-  return await res.json() as T;
+  for (let attempt=0; ; attempt++) {
+    const res=await fetch('https://api.stripe.com/v1/'+path,{method:fields?'POST':'GET',headers,body:fields?new URLSearchParams(fields):undefined});
+    if (res.ok) return await res.json() as T;
+    if (!idempotency || res.status!==409 || attempt>=3) throw unavailable();
+    const problem=await res.json() as {error?:{code?:string}};
+    if (problem.error?.code!=='idempotency_key_in_use') throw unavailable();
+    await new Promise(resolve=>setTimeout(resolve,200*2**attempt));
+  }
 }
 async function reconcileBilling(env:Env,account:Account) {
   const list=await stripe<Subscriptions>(env,'subscriptions?customer='+encodeURIComponent(account.customer!)+'&status=all&limit=100&expand[]=data.latest_invoice.charge');
