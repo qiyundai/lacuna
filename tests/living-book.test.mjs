@@ -91,11 +91,16 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
   const env={DB,FRONTEND_ORIGIN:'https://lacuna.example',JWT_SECRET:'synthetic-test-secret',RESEND_API_KEY:'mail',EMAIL_FROM:'test@example.com',STRIPE_SECRET_KEY:'stripe',STRIPE_PRICE_ID:'price_1',STRIPE_WEBHOOK_SECRET:'hook',OPENAI_API_KEY:'model-key',OPENAI_MODEL:'test-model',MODEL_INPUT_MICROS_PER_TOKEN:'1',MODEL_OUTPUT_MICROS_PER_TOKEN:'2',REFLECTION_ACCOUNT_MICROS:'20000',REFLECTION_GLOBAL_MICROS:'50000'};
   let code,cookie='',modelCalls=0,paid=false;
   const checkoutKeys=[];
+  const customerKeys=[];
   const invoice={status:'paid',charge:{refunded:false,disputed:false}};
   const offer={active:true,currency:'cad',unit_amount:500,recurring:{interval:'month',interval_count:1,usage_type:'licensed'}};
   t.mock.method(globalThis,'fetch',async(url,options)=>{
     if(String(url).includes('resend.com')){code=JSON.parse(options.body).text.match(/[a-f0-9]{12}/)[0];return Response.json({id:'sent'});}
-    if(String(url).endsWith('/customers'))return Response.json({id:'cus_test'});
+    if(String(url).endsWith('/customers')){
+      customerKeys.push(options.headers['Idempotency-Key']);
+      if(customerKeys.length===1)return Response.json({error:{code:'idempotency_key_in_use'}},{status:409});
+      return Response.json({id:'cus_test'});
+    }
     if(String(url).endsWith('/prices/price_1'))return Response.json(offer);
     if(String(url).endsWith('/checkout/sessions')){
       checkoutKeys.push(options.headers['Idempotency-Key']);
@@ -132,6 +137,7 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
   assert.equal((await send('checkout',{})).status,200);
   assert.equal((await send('checkout',{})).status,200);
   assert.equal(checkoutKeys.length,2);
+  assert.deepEqual(customerKeys,['customer-'+account.id,'customer-'+account.id]);
   assert.ok(checkoutKeys[0] && checkoutKeys[0]===checkoutKeys[1]);
   const data={...nextBookTask(emptyBook(),pages),account:account.id,consent:1,unit:'a'.repeat(64)};
   assert.equal((await send('generate',data)).status,403);
