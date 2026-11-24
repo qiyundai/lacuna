@@ -58,20 +58,20 @@ In **Privacy & storage**, enable encrypted sync and save the private pairing cod
 
 The browser generates a 256-bit random pairing secret. HKDF-SHA-256 derives independent storage-access and AES-GCM keys. The already passphrase-encrypted vault is encrypted again with a fresh 96-bit IV, and its version is authenticated. Device pairing settings and AI consent are not transferred. The service receives only a bearer credential and opaque ciphertext, and stores a hash of the credential as the storage address. Deleting the online copy leaves a version tombstone so that stale devices cannot upload it again. Transfers are limited to 8 MiB of encoded ciphertext; a larger journal still works locally.
 
-## AI reflections · Coming soon
+## Paid AI reflections
 
-The GitHub Actions repository variable `REFLECTIONS_ENABLED` controls launch. On a deploy, CI uses it for the frontend build and the Worker binding. Only the literal `true` enables subscriptions and background analysis. For local testing set `VITE_REFLECTIONS_ENABLED=true` in the frontend build or dev environment and `REFLECTIONS_ENABLED=true` in the Worker's ignored `.dev.vars`.
+The GitHub Actions repository variable `REFLECTIONS_ENABLED` controls launch. On a deploy, CI uses it for the frontend build and the Worker binding. Only the literal `true` enables new purchases and background analysis. The public billing page, sign-in, portal, consent withdrawal and webhook processing remain available during a pause. For local testing set `VITE_REFLECTIONS_ENABLED=true` in the frontend build or dev environment and `REFLECTIONS_ENABLED=true` in the Worker's ignored `.dev.vars`.
 
 - In **Journal settings → AI reflections**, writers sign in with an email code, subscribe, and separately allow analysis of past and future pages. Work resumes whenever the browser is unlocked. Published chapters and the Soul Map stay in the encrypted vault after cancelling.
-- A Pages function proxies `/reflections/*` to the Worker on the session's origin. Set `REFLECTION_WORKER_ORIGIN` on Pages if the Worker runs on another host. Both must use HTTPS in production.
-- Worker secrets: `JWT_SECRET`, `RESEND_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `OPENAI_API_KEY`. Variables: `EMAIL_FROM` (a verified sender), `STRIPE_PRICE_ID` (a recurring price), `OPENAI_MODEL` (the evaluated Responses model). Enable the Stripe billing portal, apply migration 0007, and register `/reflections/webhook` for checkout completion, subscription created/updated/deleted, and invoice paid/payment-failed events. Use test credentials and a test price first.
+- On the canonical HTTPS site, the Pages function forwards billing requests to the Worker's BillingIngress entrypoint through the BILLING service binding. Deploy the Worker before Pages.
+- Worker secrets: `JWT_SECRET`, `RESEND_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `OPENAI_API_KEY`. Variables: `EMAIL_FROM` (a verified sender), `STRIPE_PRICE_ID` (a recurring price), `OPENAI_MODEL` (the evaluated Responses model). Enable the Stripe billing portal, apply all D1 migrations, and register `/reflections/webhook` for checkout completion, subscription created/updated/deleted, and invoice paid/payment-failed events. Use test credentials and a test price first.
 - Spending limits: `REFLECTION_ACCOUNT_MICROS` and `REFLECTION_GLOBAL_MICROS` are monthly caps in millionths of a US dollar. `MODEL_INPUT_MICROS_PER_TOKEN` and `MODEL_OUTPUT_MICROS_PER_TOKEN` are the model's uncached rates in the same units. The Worker reserves a conservative budget before sending excerpts and reconciles it against reported usage. Generation is disabled when any limit or credential is missing.
 - Checkout uses Stripe Tax and saves the billing address on the Stripe customer. Configure the seller's verified registrations, product tax code and recurring price tax behavior in the matching Stripe environment. Verify a taxable and a non-collecting location, webhook entitlement and portal cancellation in the sandbox before enabling live sales. Keep sandbox keys, webhooks and customers in a separate Worker and D1 database from production.
 - `node scripts/evaluate-memoir.mjs` lists the synthetic review journals. With a model key, token rates, and an explicit `EVAL_BUDGET_USD`, `--live` generates blinded comparisons and cost measurements under `.test-output`. Score the outputs before opening the answer key.
 
 ## Development
 
-Requires Node.js 22.16+ and pnpm 9+.
+Requires Node.js 22.17+ and pnpm 9+. CI uses pnpm 10.29.2.
 
 ```bash
 pnpm install
