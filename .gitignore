@@ -16,6 +16,7 @@ build/
 .env.*
 !.env.example
 .dev.vars
+/private-operations/
 
 # OS
 .DS_Store

@@ -24,6 +24,7 @@
       <h2>What reaches our servers</h2>
       <p>Cloudflare hosts Lacuna. When you open the app, Cloudflare receives ordinary web requests for the app, images, models and music, including your IP address. Lacuna has no advertising, analytics or tracking, and it never requests your location.</p>
       <p>Encrypted sync sends a protected copy to Lacuna. AI reflections use a separate service that handles readable excerpts with your permission.</p>
+      <p>The operator can see service health and totals for paid access, sign-in requests, encrypted storage and AI costs. These come from the records needed to run the service. Reading or writing in your journal sends no activity report to the dashboard.</p>
     </section>
     <section>
       <h2>Optional encrypted sync</h2>

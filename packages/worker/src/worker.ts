@@ -2,6 +2,19 @@ import { WorkerEntrypoint } from 'cloudflare:workers';
 import app from './index.js';
 import { maintainAccounts } from './routes/reflections.js';
 import type { Env } from './types.js';
+import { operationsSummary } from './operations.js';
+
+export class ConsoleService extends WorkerEntrypoint<Env> {
+  async fetch(request: Request) {
+    const { pathname, search } = new URL(request.url);
+    if (request.method !== 'GET' || search) return new Response(null, { status: 400 });
+    if (pathname === '/health') {
+      return app.request('https://internal/health/maintenance', {}, this.env);
+    }
+    if (pathname !== '/summary') return new Response(null, { status: 404 });
+    return Response.json(await operationsSummary(this.env), { headers: { 'Cache-Control': 'no-store' } });
+  }
+}
 
 export class BillingIngress extends WorkerEntrypoint<Env> {
   async fetch(request: Request) {
