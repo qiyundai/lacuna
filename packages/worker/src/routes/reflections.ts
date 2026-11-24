@@ -6,7 +6,7 @@ import type { Env } from '../types.js';
 import { checkRateLimit, privateRateKey, hashToken } from '../ratelimit.js';
 import { reflectionInstructions, sourceReadings, validEvidenceRequest } from '../ai/book-prompts.js';
 
-type Account = {id:string; email:string; customer:string|null; paid_until:number; consent:number; billing_revision:number; billing_state:string;billing_checked:number};
+type Account = {id:string; email:string; customer:string|null; paid_until:number; consent:number; billing_revision:number; billing_state:string;billing_checked:number; checkout_key:string|null; checkout_started:number|null; checkout_price:string|null; checkout_session:string|null};
 const route = new Hono<{Bindings:Env;Variables:{account:Account;session:string;authenticatedAt:number}}>();
 const encoder = new TextEncoder();
 const now = () => Math.floor(Date.now()/1000);
@@ -24,7 +24,7 @@ function modelBudget(env: Env) {
   }
   return {accountCap, globalCap, inputRate, outputRate};
 }
-const publicStatus = (a:Account) => ({id:a.id,email:a.email,paid:entitled(a),paidUntil:a.paid_until,billingState:a.billing_state,customer:!!a.customer,consent:a.consent});
+const publicStatus = (a:Account,env:Env) => ({id:a.id,email:a.email,paid:entitled(a),paidUntil:a.paid_until,billingState:a.billing_state,customer:!!a.customer,consent:a.consent,annualAvailable:!!env.STRIPE_ANNUAL_PRICE_ID && env.STRIPE_ANNUAL_PRICE_ID!==env.STRIPE_PRICE_ID});
 route.use('*',async(c,next)=>{
   if(!c.env.JWT_SECRET)throw unavailable();
   if(c.req.method==='POST' && !c.req.path.endsWith('/webhook') && c.req.header('Origin')!==c.env.FRONTEND_ORIGIN) return c.json({error:'Invalid origin.'},403);
@@ -67,10 +67,13 @@ route.post('/verify',async c=>{
   await c.env.DB.batch([c.env.DB.prepare('DELETE FROM reflection_sessions WHERE expires<=?').bind(now()),c.env.DB.prepare('INSERT INTO reflection_sessions VALUES(?,?,?)').bind(session,account.id,now()+2592000)]);
   const token=await new SignJWT({device:await hashToken(device)}).setProtectedHeader({alg:'HS256'}).setIssuer('lacuna-book').setAudience('reflections').setSubject(account.id).setJti(session).setIssuedAt().setExpirationTime('30d').sign(encoder.encode(c.env.JWT_SECRET));
   setCookie(c,'lacuna_book',token,{path:'/reflections',httpOnly:true,secure:true,sameSite:'Strict',maxAge:2592000});
-  return c.json(publicStatus(account));
+  return c.json(publicStatus(account,c.env));
 });
 
 type Subscriptions = {data:{status:string;cancel_at_period_end?:boolean;cancel_at?:number|null;current_period_end:number;latest_invoice?:{status:string;charge?:{refunded:boolean;disputed:boolean}|null};items:{data:{price:{id:string}}[]}}[]};
+function reflectionPrice(env:Env,id:string) {
+  return !!id && (id===env.STRIPE_PRICE_ID || id===env.STRIPE_ANNUAL_PRICE_ID);
+}
 async function stripe<T={id:string;url:string}>(env:Env,path:string,fields?:Record<string,string>,idempotency?:string):Promise<T> {
   if (!env.STRIPE_SECRET_KEY || !env.STRIPE_PRICE_ID) throw unavailable();
   const headers:Record<string,string>={Authorization:'Bearer '+env.STRIPE_SECRET_KEY,'Stripe-Version':'2024-06-20'};
@@ -86,7 +89,7 @@ async function stripe<T={id:string;url:string}>(env:Env,path:string,fields?:Reco
 }
 async function reconcileBilling(env:Env,account:Account) {
   const list=await stripe<Subscriptions>(env,'subscriptions?customer='+encodeURIComponent(account.customer!)+'&status=all&limit=100&expand[]=data.latest_invoice.charge');
-  const matching=list.data.filter(s=>s.items.data.some(i=>i.price.id===env.STRIPE_PRICE_ID));
+  const matching=list.data.filter(s=>s.items.data.some(i=>reflectionPrice(env,i.price.id)));
   const active=matching.filter(s=>s.status==='active' && s.latest_invoice?.status==='paid' && !s.latest_invoice.charge?.refunded && !s.latest_invoice.charge?.disputed).sort((a,b)=>b.current_period_end-a.current_period_end)[0];
   const end=active ? Math.min(active.current_period_end,active.cancel_at??Infinity) : 0;
   const state=active ? (active.cancel_at_period_end || active.cancel_at ? 'ending' : 'active') : matching.some(s=>s.status==='active') ? 'payment_review' : matching[0]?.status??'none';
@@ -155,7 +158,7 @@ route.use('*',async(c,next)=>{
   if (!account) return c.json({error:'Sign in to Lacuna.'},401);
   c.set('authenticatedAt',authenticatedAt);c.set('account',account);c.set('session',session);await next();return;
 });
-route.get('/account',c=>c.json(publicStatus(c.get('account'))));
+route.get('/account',c=>c.json(publicStatus(c.get('account'),c.env)));
 route.post('/logout',async c=>{
   await c.env.DB.prepare('DELETE FROM reflection_sessions WHERE id=?').bind(c.get('session')).run();
   deleteCookie(c,'lacuna_book',{path:'/reflections'});return c.json({ok:true});
@@ -165,42 +168,77 @@ route.post('/consent',async c=>{
   if (enabled === true && c.env.REFLECTIONS_ENABLED !== 'true') return c.json({error:'New reflections are paused.'},503);
   if (typeof enabled!=='boolean' || (enabled && !entitled(a))) return c.json({error:'An active subscription is required.'},403);
   const updated=await c.env.DB.prepare('UPDATE reflection_accounts SET consent=consent+CASE WHEN consent%2=? THEN 0 ELSE 1 END WHERE id=? RETURNING *').bind(Number(enabled),a.id).first<Account>();
-  return c.json(publicStatus(updated!));
+  return c.json(publicStatus(updated!,c.env));
 });
+type CheckoutSession = {id:string; status:'open'|'expired'|'complete'; url:string|null; mode:string; automatic_tax?:{enabled:boolean}; metadata?:{lacuna_price?:string}};
+
+function createCheckout(env:Env,customer:string,price:string,key:string) {
+  const url=env.FRONTEND_ORIGIN+'/';
+  return stripe<CheckoutSession>(env,'checkout/sessions',{
+    customer, mode:'subscription', 'line_items[0][price]':price, 'line_items[0][quantity]':'1',
+    'automatic_tax[enabled]':'true', billing_address_collection:'required', 'customer_update[address]':'auto',
+    'metadata[lacuna_price]':price, success_url:url+'?billing=returned', cancel_url:url+'?billing=cancelled'
+  },'checkout-'+price+'-'+key);
+}
+
+async function previousCheckout(env:Env,account:Account,customer:string) {
+  let id=account.checkout_session;
+  if (!id) {
+    const open=await stripe<{data:CheckoutSession[]}>(env,'checkout/sessions?status=open&customer='+encodeURIComponent(customer)+'&limit=100');
+    const existing=open.data.find(s=>s.mode==='subscription' && reflectionPrice(env,s.metadata?.lacuna_price??''));
+    if (existing) return existing;
+    if (!account.checkout_key || (account.checkout_started??0)<=now()-86400) return null;
+    const price=account.checkout_price??env.STRIPE_PRICE_ID!;
+    id=(await createCheckout(env,customer,price,account.checkout_key)).id;
+  }
+  return stripe<CheckoutSession>(env,'checkout/sessions/'+encodeURIComponent(id));
+}
+
+async function existingSubscription(env:Env,customer:string) {
+  const list=await stripe<Subscriptions>(env,'subscriptions?customer='+encodeURIComponent(customer)+'&status=all&limit=100');
+  return list.data.find(s=>!['canceled','incomplete_expired'].includes(s.status) && s.items.data.some(i=>reflectionPrice(env,i.price.id)));
+}
+
 route.post('/checkout',async c=>{
   const a=c.get('account');
   if (entitled(a)) return c.json({error:'Your subscription is already active.'},409);
   modelBudget(c.env);
   if (!c.env.STRIPE_WEBHOOK_SECRET) throw unavailable();
-  const price = c.env.STRIPE_PRICE_ID;
-  if (!price) throw unavailable();
+  const body=await c.req.text();
+  const input=body ? JSON.parse(body) : {};
+  if (!input || typeof input!=='object' || Array.isArray(input) || ![undefined,'month','year'].includes(input.interval))
+    return c.json({error:'Choose monthly or annual billing.'},400);
+  const annual=input.interval==='year';
+  const price=annual ? c.env.STRIPE_ANNUAL_PRICE_ID : c.env.STRIPE_PRICE_ID;
+  if (!price || (annual && price===c.env.STRIPE_PRICE_ID)) throw unavailable();
   const offer = await stripe<{active:boolean;currency:string;unit_amount:number;recurring?:{interval:string;interval_count:number;usage_type:string}}>(
     c.env, 'prices/'+encodeURIComponent(price)
   );
-  if (!offer.active || offer.currency!=='cad' || offer.unit_amount!==500 ||
-      offer.recurring?.interval!=='month' || offer.recurring.interval_count!==1 || offer.recurring.usage_type!=='licensed') throw unavailable();
+  if (!offer.active || offer.currency!=='cad' || offer.unit_amount!==(annual?5000:500) ||
+      offer.recurring?.interval!==(annual?'year':'month') || offer.recurring.interval_count!==1 || offer.recurring.usage_type!=='licensed') throw unavailable();
   let customer=a.customer;
   if (!customer) {
     customer=(await stripe(c.env,'customers',{email:a.email},'customer-'+a.id)).id;
     await c.env.DB.prepare('UPDATE reflection_accounts SET customer=? WHERE id=?').bind(customer,a.id).run();
   }
-  const url=c.env.FRONTEND_ORIGIN+'/';
-  const existingSubscriptions=await stripe<Subscriptions>(c.env,'subscriptions?customer='+encodeURIComponent(customer)+'&status=all&limit=100');
-  const existingPlan=existingSubscriptions.data.find(s=>!['canceled','incomplete_expired'].includes(s.status) && s.items.data.some(i=>i.price.id===price));
+  const existingPlan=await existingSubscription(c.env,customer);
   if(existingPlan)return c.json({error:existingPlan.status==='active'?'Payment received. Check billing status in a moment.':'You already have a subscription. Open Manage billing to review it.'},409);
-  const open=await stripe<{data:{url:string;mode:string;automatic_tax?:{enabled:boolean};metadata?:{lacuna_price?:string}}[]}>(c.env,'checkout/sessions?status=open&customer='+encodeURIComponent(customer)+'&limit=10');
-  const existing=open.data.find(s=>s.mode==='subscription' && s.url && s.automatic_tax?.enabled && s.metadata?.lacuna_price===c.env.STRIPE_PRICE_ID);
-  if(existing)return c.json({url:existing.url});
-  const attempt = await c.env.DB.prepare(
-    'UPDATE reflection_accounts SET checkout_key=CASE WHEN checkout_key IS NULL OR checkout_started<=? THEN ? ELSE checkout_key END,'+
-    ' checkout_started=CASE WHEN checkout_key IS NULL OR checkout_started<=? THEN ? ELSE checkout_started END WHERE id=? RETURNING checkout_key'
-  ).bind(now()-86400,crypto.randomUUID(),now()-86400,now(),a.id).first<{checkout_key:string}>();
-  if (!attempt) throw unavailable();
-  const session = await stripe(c.env, 'checkout/sessions', {
-    customer, mode: 'subscription', 'line_items[0][price]': price, 'line_items[0][quantity]': '1',
-    'automatic_tax[enabled]': 'true', billing_address_collection: 'required', 'customer_update[address]': 'auto',
-    'metadata[lacuna_price]': price, success_url: url+'?billing=returned', cancel_url: url+'?billing=cancelled'
-  }, 'checkout-'+price+'-'+attempt.checkout_key);
+  const previous=await previousCheckout(c.env,a,customer);
+  if (previous?.status==='open') {
+    if (previous.url && previous.automatic_tax?.enabled && previous.metadata?.lacuna_price===price)
+      return c.json({url:previous.url});
+    await stripe(c.env,'checkout/sessions/'+encodeURIComponent(previous.id)+'/expire',{});
+  }
+  if (previous && await existingSubscription(c.env,customer))
+    return c.json({error:'You already have a subscription. Open Manage billing to review it.'},409);
+  const key=crypto.randomUUID();
+  const claim=await c.env.DB.prepare(
+    'UPDATE reflection_accounts SET checkout_key=?,checkout_price=?,checkout_started=?,checkout_session=NULL WHERE id=? AND checkout_key IS ?'
+  ).bind(key,price,now(),a.id,a.checkout_key).run();
+  if (!claim.meta.changes) return c.json({error:'Another checkout is in progress. Try again to review your choice.'},409);
+  const session=await createCheckout(c.env,customer,price,key);
+  const saved=await c.env.DB.prepare('UPDATE reflection_accounts SET checkout_session=? WHERE id=? AND checkout_key=?').bind(session.id,a.id,key).run();
+  if (!saved.meta.changes || !session.url) return c.json({error:'Checkout changed. Try again to review your choice.'},409);
   return c.json({url:session.url});
 });
 route.post('/portal',async c=>{

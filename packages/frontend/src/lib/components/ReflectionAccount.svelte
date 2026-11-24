@@ -6,6 +6,7 @@
   import { browserVault, announceBrowserLock } from '$lib/web-vault.js';
   let {billingReturn=$bindable(''), billingOnly=false}:{billingReturn?:string;billingOnly?:boolean}=$props();
   let verifiedHere = false;
+  let interval=$state<'month'|'year'>('month');
   let account=$state<Account|null>(null), email=$state(''),code=$state(''),sent=$state(false),busy=$state(false),error=$state(''),enabled=$state(false);
   let mounted=false, progress=$state(''), online=$state(true), loaded=$state(false), delayed=$state(false), notice=$state('');
   let paymentIssue=$derived(['past_due','unpaid','incomplete','paused','payment_review'].includes(account?.billingState??''));
@@ -62,9 +63,9 @@
       if(vault.unlocked)await vault.update(d=>{delete d.reflectionConsent;});
     }
   }
-  async function checkout(path:string){
+  async function checkout(path:'checkout'|'portal'){
     let url:string;
-    try { ({url}=await hosted<{url:string}>(path,{})); }
+    try { ({url}=await hosted<{url:string}>(path,path==='checkout'?{interval:account?.annualAvailable?interval:'month'}:{})); }
     catch(e) {
       if ((e as {code?:string}).code!=='reauthenticate') throw e;
       email=account?.email??''; account=null; sent=false; verifiedHere=false;
@@ -108,8 +109,18 @@
       {:else if billingReturn==='returned'}<button class="atlas-link" disabled={busy} onclick={()=>run(refresh)}>Check billing status</button>
       {:else}
         {#if account.billingState==='canceled' || account.billingState==='ending'}<p>Your subscription has ended. You can still read your saved book.</p>{/if}
-        <p>CA$5 per month for new readings and memoir passages. Review applicable tax at checkout. You can cancel in Manage billing.</p>
-        <button class="atlas-link" disabled={busy} onclick={()=>run(()=>checkout('checkout'))}>View subscription</button>
+        {#if account.annualAvailable}
+          <fieldset disabled={busy}>
+            <legend>Billing interval</legend>
+            <label><input type="radio" name="billing-interval" value="month" bind:group={interval}/> CA$5 monthly</label>
+            <label><input type="radio" name="billing-interval" value="year" bind:group={interval}/> CA$50 annually · Save CA$10 a year</label>
+          </fieldset>
+          <p>Both options include new readings and memoir passages with the same monthly allowance.</p>
+        {:else}
+          <p>CA$5 per month for new readings and memoir passages.</p>
+        {/if}
+        <p class="note">Review applicable tax at checkout. You can cancel in Manage billing.</p>
+        <button class="atlas-link" disabled={busy} onclick={()=>run(()=>checkout('checkout'))}>Continue to checkout</button>
       {/if}
       {#if enabled}<button class="atlas-link" disabled={busy} onclick={()=>run(()=>share(false))}>Withdraw journal consent</button>{/if}
     {/if}
@@ -123,5 +134,8 @@
 <style>
   .membership,form{display:grid;gap:var(--space-4);justify-items:start}
   .field{justify-self:stretch}
+  fieldset{display:grid;gap:var(--space-2);border:0;padding:0;margin:0;min-inline-size:0}
+  legend{margin-block-end:var(--space-2)}
+  fieldset label{display:flex;align-items:baseline;gap:var(--space-2);cursor:pointer}
   .error{color:var(--danger)}
 </style>

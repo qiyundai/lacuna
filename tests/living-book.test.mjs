@@ -109,11 +109,14 @@ test('background work refuses a result after forgetting, locking, or losing enti
 test('hosted payment, consent and usage gates with signed Stripe events and stateless model requests',async t=>{
   const DB=await createTestDatabase();t.after(()=>DB.sqlite.close());
   const env={DB,FRONTEND_ORIGIN:'https://lacuna.example',JWT_SECRET:'synthetic-test-secret',RESEND_API_KEY:'mail',EMAIL_FROM:'test@example.com',STRIPE_SECRET_KEY:'stripe',STRIPE_PRICE_ID:'price_1',STRIPE_WEBHOOK_SECRET:'hook',OPENAI_API_KEY:'model-key',OPENAI_MODEL:'test-model',MODEL_INPUT_MICROS_PER_TOKEN:'1',MODEL_OUTPUT_MICROS_PER_TOKEN:'2',REFLECTION_ACCOUNT_MICROS:'20000',REFLECTION_GLOBAL_MICROS:'50000'};
-  let code,cookie='',modelCalls=0,paid=false;
+  let code,cookie='',modelCalls=0,paid=false,subscriptionPrice='price_1',subscriptionEnding=false;
   const checkoutKeys=[];
+  const sessions=new Map();
+  let loseCheckoutResponse=false;
   const customerKeys=[];
   const invoice={status:'paid',charge:{refunded:false,disputed:false}};
   const offer={active:true,currency:'cad',unit_amount:500,recurring:{interval:'month',interval_count:1,usage_type:'licensed'}};
+  const yearlyOffer={...offer,unit_amount:5000,recurring:{...offer.recurring,interval:'year'}};
   t.mock.method(globalThis,'fetch',async(url,options)=>{
     if(String(url).includes('resend.com')){code=JSON.parse(options.body).text.match(/[a-f0-9]{12}/)[0];return Response.json({id:'sent'});}
     if(String(url).endsWith('/customers')){
@@ -122,28 +125,56 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
       return Response.json({id:'cus_test'});
     }
     if(String(url).endsWith('/prices/price_1'))return Response.json(offer);
+    if(String(url).endsWith('/prices/price_annual'))return Response.json(yearlyOffer);
     if(String(url).endsWith('/checkout/sessions')){
-      checkoutKeys.push(options.headers['Idempotency-Key']);
+      const key=options.headers['Idempotency-Key'];
+      checkoutKeys.push(key);
       assert.equal(options.body.get('automatic_tax[enabled]'),'true');
       assert.equal(options.body.get('customer_update[address]'),'auto');
       assert.equal(options.body.get('billing_address_collection'),'required');
-      assert.equal(options.body.get('metadata[lacuna_price]'),env.STRIPE_PRICE_ID);
-      return Response.json({url:'https://checkout.stripe.com/test'});
+      const price=options.body.get('line_items[0][price]');
+      assert.equal(options.body.get('metadata[lacuna_price]'),price);
+      if(!sessions.has(key)){
+        const id='cs_'+sessions.size;
+        sessions.set(key,{id,status:'open',url:'https://checkout.stripe.com/'+id,metadata:{lacuna_price:price},mode:'subscription',automatic_tax:{enabled:true}});
+      }
+      if(loseCheckoutResponse){loseCheckoutResponse=false;return new Response(null,{status:503});}
+      return Response.json(sessions.get(key));
     }
-    if(String(url).includes('/checkout/sessions?'))return Response.json({data:[]});
+    if(String(url).includes('/checkout/sessions?'))return Response.json({data:[...sessions.values()].filter(s=>s.status==='open')});
+    if(String(url).includes('/checkout/sessions/')){
+      const [,id,action]=new URL(url).pathname.match(/\/checkout\/sessions\/([^/]+)(?:\/(expire))?$/);
+      const session=[...sessions.values()].find(s=>s.id===id);
+      if(action==='expire'){
+        if(session.status!=='open')return new Response(null,{status:400});
+        session.status='expired';session.url=null;
+      }
+      return Response.json(session);
+    }
     if(String(url).endsWith('/billing_portal/sessions'))return Response.json({url:'https://billing.stripe.com/test'});
-    if(String(url).includes('/subscriptions?'))return Response.json({data:paid?[{status:'active',latest_invoice:invoice,current_period_end:Math.floor(Date.now()/1000)+86400,items:{data:[{price:{id:'price_1'}}]}}]:[]});
+    if(String(url).includes('/subscriptions?'))return Response.json({data:paid?[{status:'active',latest_invoice:invoice,cancel_at_period_end:subscriptionEnding,current_period_end:periodEnd,items:{data:[{price:{id:subscriptionPrice}}]}}]:[]});
     assert.equal(String(url),'https://api.openai.com/v1/responses');
     const payload=JSON.parse(options.body);assert.equal(payload.store,false);assert.match(payload.input,/\bJSON\b/i);modelCalls++;
     return Response.json({status:'completed',output:[{content:[{type:'output_text',text:'{"notes":[]}'}]}],usage:{input_tokens:300,output_tokens:15}});
   });
   env.REFLECTIONS_ENABLED='true';
+  const periodEnd=Math.floor(Date.now()/1000)+365*86400;
   const send=(path,body,headers={})=>app.request('https://lacuna.example/reflections/'+path,{method:body===undefined?'GET':'POST',headers:{Cookie:cookie+'; __Host-lacuna-device='+'a'.repeat(64),Origin:env.FRONTEND_ORIGIN,'Content-Type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body)},env);
   assert.equal((await send('login',{email:'me@example.com'})).status,200);
   const verify=await send('verify',{email:'me@example.com',code});
   cookie=verify.headers.get('set-cookie').split(';')[0];
   const account=await verify.json();
   assert.equal(account.paid,false);
+  assert.equal(account.annualAvailable,false);
+  assert.equal((await send('checkout',{interval:'year'})).status,503);
+  env.STRIPE_ANNUAL_PRICE_ID='price_annual';
+  assert.equal((await (await send('account')).json()).annualAvailable,true);
+  assert.equal((await send('checkout',{interval:'week'})).status,400);
+  yearlyOffer.unit_amount=500;
+  assert.equal((await send('checkout',{interval:'year'})).status,503);
+  yearlyOffer.unit_amount=5000;yearlyOffer.recurring.interval='month';
+  assert.equal((await send('checkout',{interval:'year'})).status,503);
+  yearlyOffer.recurring.interval='year';
   assert.equal((await send('account',undefined,{Cookie:cookie})).status,401);
   assert.equal((await send('account',undefined,{Cookie:cookie+'; __Host-lacuna-device='+'b'.repeat(64)})).status,401);
   assert.equal((await send('account')).status,200);
@@ -154,11 +185,27 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
   offer.currency='usd';
   assert.equal((await send('checkout',{})).status,503);
   offer.currency='cad';
-  assert.equal((await send('checkout',{})).status,200);
-  assert.equal((await send('checkout',{})).status,200);
-  assert.equal(checkoutKeys.length,2);
+  loseCheckoutResponse=true;
+  assert.equal((await send('checkout',{})).status,503);
+  const monthly=await (await send('checkout',{})).json();
+  assert.equal(monthly.url,'https://checkout.stripe.com/cs_0');
+  assert.equal((await (await send('checkout',{interval:'month'})).json()).url,monthly.url);
+  assert.equal(sessions.size,1);
   assert.deepEqual(customerKeys,['customer-'+account.id,'customer-'+account.id]);
-  assert.ok(checkoutKeys[0] && checkoutKeys[0]===checkoutKeys[1]);
+  const monthlySession=sessions.get(checkoutKeys[0]);
+  assert.equal(monthlySession.metadata.lacuna_price,env.STRIPE_PRICE_ID);
+  await DB.prepare('UPDATE reflection_accounts SET checkout_price=NULL,checkout_session=NULL WHERE id=?').bind(account.id).run();
+  const annual=await (await send('checkout',{interval:'year'})).json();
+  assert.equal(annual.url,'https://checkout.stripe.com/cs_1');
+  assert.equal(monthlySession.status,'expired');
+  const annualSession=[...sessions.values()].find(s=>s.url===annual.url);
+  assert.equal(annualSession.metadata.lacuna_price,env.STRIPE_ANNUAL_PRICE_ID);
+  assert.deepEqual(await (await send('checkout',{interval:'year'})).json(),annual);
+  annualSession.status='expired';annualSession.url=null;
+  const concurrent=await Promise.all([send('checkout',{interval:'month'}),send('checkout',{interval:'year'})]);
+  assert.ok(concurrent.some(response=>response.status===200));
+  assert.ok(concurrent.every(response=>[200,409].includes(response.status)));
+  assert.equal([...sessions.values()].filter(s=>s.status==='open').length,1);
   const data={...nextBookTask(emptyBook(),pages),account:account.id,consent:1,unit:'a'.repeat(64)};
   assert.equal((await send('generate',data)).status,403);
   const event={type:'customer.subscription.updated',data:{object:{customer:'cus_test'}}};
@@ -166,6 +213,13 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
   assert.equal((await send('webhook',event)).status,400);
   const hook=()=>send('webhook',event,{'Stripe-Signature':'t='+stamp+',v1='+sig});
   paid=true;
+  assert.equal((await send('checkout',{interval:'year'})).status,409);
+  await hook();
+  assert.equal((await (await send('account')).json()).paid,true);
+  subscriptionPrice='unrelated';await hook();
+  assert.equal((await (await send('account')).json()).paid,false);
+  subscriptionPrice='price_annual';
+  assert.equal((await send('checkout',{})).status,409);
   for(const [status,refunded,disputed,expectedPaid] of [
     ['open',false,false,false],['paid',true,false,false],['paid',false,true,false],['paid',false,false,true]
   ]){
@@ -174,6 +228,10 @@ test('hosted payment, consent and usage gates with signed Stripe events and stat
     assert.equal((await hook()).status,200);
     assert.equal((await (await send('account')).json()).paid,expectedPaid);
   }
+  subscriptionEnding=true;await hook();
+  const ending=await (await send('account')).json();
+  assert.equal(ending.billingState,'ending');
+  assert.equal(ending.paidUntil,periodEnd);
   assert.equal((await send('generate',data)).status,403);
   assert.equal((await send('consent',{enabled:true})).status,200);
   assert.equal((await send('generate',data,{Origin:'https://elsewhere.example'})).status,403);

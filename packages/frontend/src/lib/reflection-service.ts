@@ -1,7 +1,7 @@
 import { emptyBook, nextBookTask, acceptBookResult } from '../../../shared/living-book.js';
 import { browserVault, type WebVault } from './web-vault.js';
 
-export type Account = {id:string;email:string;paid:boolean;customer:boolean;consent:number;paidUntil:number;billingState:string};
+export type Account = {id:string;email:string;paid:boolean;customer:boolean;consent:number;paidUntil:number;billingState:string;annualAvailable:boolean};
 let backgroundMessage='';
 export function reflectionStatus(){return backgroundMessage;}
 function report(message:string){
