@@ -12,7 +12,7 @@
     <header>
       <h1>Privacy at Lacuna</h1>
       <p class="opening">Your journal lives in your browser. You can write and read without an account. You choose whether to sync an encrypted copy or share excerpts for AI reflections.</p>
-      <p>Updated <time datetime="2026-11-23">November 23, 2026</time></p>
+      <p>Updated <time datetime="2026-11-24">November 24, 2026</time></p>
     </header>
     <section>
       <h2>Your journal on this device</h2>
@@ -28,8 +28,9 @@
     </section>
     <section>
       <h2>Optional encrypted sync</h2>
-      <p>Sync is off until you turn it on. Turning it on creates a random pairing code on your device. Your browser uses that code to encrypt the already passphrase-protected journal a second time before uploading it. Your passphrase, pairing code and decryption keys stay on your devices.</p>
-      <p>In Journal settings → Privacy &amp; storage, choose <strong>Enable encrypted sync</strong>. On another device, choose <strong>Link a synced journal</strong> on the passphrase screen. Keep the code private, because anyone who has it can delete the online copy. To read the copy, they would also need your passphrase.</p>
+      <p>Sync is off until you turn it on. Turning it on creates a random pairing code on your device. Your browser uses that code to encrypt the already passphrase-protected journal a second time before uploading it. Your passphrase, pairing code and decryption keys stay on your devices, unless you save a recovery passkey.</p>
+      <p>A <strong>recovery passkey</strong> is optional. It keeps the pairing code in the passkey manager you choose, such as iCloud Keychain, Google Password Manager or 1Password, so you can restore the journal after this browser’s data is cleared. That manager, and whoever can unlock it, holds the code. The passkey only works on this site, only after you confirm with your face, fingerprint or device PIN, and is never sent to Lacuna. It isn’t a sign-in: Lacuna has no account to attach it to. Restoring also needs your passphrase, so the passkey alone cannot open your pages. Deleting the online copy stops its recovery passkeys from working. You can remove a passkey in your passkey manager.</p>
+      <p>In Journal settings → Privacy &amp; storage, choose <strong>Enable encrypted sync</strong>. On another device, choose <strong>Link a synced journal</strong> on the passphrase screen, then use your recovery passkey or enter the code. Keep the code private, because anyone who has it can delete the online copy. To read the copy, they would also need your passphrase.</p>
       <p>Lacuna stores the encrypted copy and its version number in Cloudflare’s database, filed under a one-way hash of the pairing code. It stores no name, email address or account details with it. The service can see how large each transfer is and when it happens. To limit abuse, it counts requests using a pseudonym derived from your IP address, which changes daily. The counts expire within a day. Even with access to the database, nobody can read your pages. A device that is unlocked, or a malicious app update, could still expose them.</p>
       <p><strong>Pause sync</strong> stops transfers on this device. The online copy and your other paired devices are not affected. <strong>Delete online copy</strong> removes the encrypted contents and keeps only a version marker, so an offline device can’t upload the journal again with the old code. Each device keeps its own local journal.</p>
       <p>Deleted data can remain in Cloudflare’s database recovery history for up to 30 days. <a href="https://developers.cloudflare.com/d1/reference/time-travel/" rel="noreferrer">Cloudflare’s backup documentation</a></p>

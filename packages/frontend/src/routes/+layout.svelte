@@ -4,6 +4,7 @@
   import { aiAvailable } from '$lib/ai-release.js';
   import { backgroundBook } from '$lib/reflection-service.js';
   import { watchBrowserSync } from '$lib/browser-sync.js';
+  import { requestDurableStorage } from '$lib/storage.js';
   import { session, hydrateSession, setAuthed, resetJournalData } from '$lib/stores/session.svelte.js';
   import { initWeather } from '$lib/stores/weather.svelte.js';
   import { page } from '$app/state';
@@ -27,6 +28,8 @@
     loadVault().catch(err => { loadError = err instanceof Error ? err.message : 'Could not open browser storage.'; });
     const permissionChanged = () => { void loadVault().catch(() => {}); };
     window.addEventListener('lacuna:journal-changed', permissionChanged);
+    const keepJournal = (event: Event) => { if ((event as CustomEvent<{ saved?: boolean }>).detail?.saved) void requestDurableStorage(); };
+    window.addEventListener('lacuna:journal-changed', keepJournal);
     window.addEventListener('lacuna:locked', didLock);
     let lastActivity = 0;
     const activity = () => {
@@ -40,6 +43,7 @@
       stopBook?.();
       stopSync();
       window.removeEventListener('lacuna:journal-changed', permissionChanged);
+      window.removeEventListener('lacuna:journal-changed', keepJournal);
       window.removeEventListener('lacuna:sync-applied', resetJournalData);
       clearInterval(timer); window.removeEventListener('lacuna:locked', didLock);
       for (const event of activityEvents) window.removeEventListener(event, activity);

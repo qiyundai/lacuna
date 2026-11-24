@@ -54,7 +54,11 @@ Exports are **plaintext**, unlike backups.
 
 ### Optional browser sync
 
-In **Privacy & storage**, enable encrypted sync and save the private pairing code. On another device, choose **Link a synced journal** on the passphrase screen and enter the code and the original passphrase. Sync runs while the journal is unlocked, and saves continue offline. Compatible additions from both devices are combined. When changes conflict, sync keeps both versions and offers to back up the local journal before using the online copy.
+In **Privacy & storage**, enable encrypted sync, then choose **Save a recovery passkey** or keep the private pairing code in a password manager. On another device, or after this browser's data is cleared, choose **Link a synced journal** on the passphrase screen, use the recovery passkey or enter the code, and enter the original passphrase.
+
+The recovery passkey is a discoverable WebAuthn credential whose user handle is the 32-byte pairing secret. It is scoped to the site's exact host and requires user verification. The browser reads the handle back with `navigator.credentials.get()` and never verifies or sends the assertion: the passkey only stores the secret, so the Worker is unchanged and there is no account. The journal stores only whether a passkey was saved.
+
+Pages saved while the tab is hidden upload immediately, and the app asks the browser for persistent storage after a save. On iPhone and iPad, Privacy & storage suggests adding Lacuna to the Home Screen, which Safari's seven-day storage cleanup does not affect. Sync runs while the journal is unlocked, and saves continue offline. Compatible additions from both devices are combined. When changes conflict, sync keeps both versions and offers to back up the local journal before using the online copy.
 
 The browser generates a 256-bit random pairing secret. HKDF-SHA-256 derives independent storage-access and AES-GCM keys. The already passphrase-encrypted vault is encrypted again with a fresh 96-bit IV, and its version is authenticated. Device pairing settings and AI consent are not transferred. The service receives only a bearer credential and opaque ciphertext, and stores a hash of the credential as the storage address. Deleting the online copy leaves a version tombstone so that stale devices cannot upload it again. Transfers are limited to 8 MiB of encoded ciphertext; a larger journal still works locally.
 

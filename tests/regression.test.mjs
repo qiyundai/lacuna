@@ -63,6 +63,7 @@ import { archiveMarkdown } from '../packages/frontend/src/lib/story.ts';
 import { initWeather, weather } from '../packages/frontend/src/lib/stores/weather.svelte.ts';
 import { WebVault, envelopeToken } from '../packages/frontend/src/lib/web-vault.ts';
 import { newPairingCode, linkDevice, syncJournal, removeOnline, SyncConflict } from '../packages/frontend/src/lib/browser-sync.ts';
+import { saveRecoveryPasskey, readRecoveryPasskey } from '../packages/frontend/src/lib/sync-passkey.ts';
 import { webRequest } from '../packages/frontend/src/lib/web-api.ts';
 import { advance, firstMorning, home, population, workday } from '../packages/shared/river.ts';
 
@@ -386,6 +387,46 @@ test('browser devices pair privately, converge offline additions and preserve bo
   assert.equal((await send('/journal-sync',upload)).status,409);
   assert.equal((await send('/journal-sync',{...upload,body:JSON.stringify({...oldPacket,body:'readable'})})).status,400);
   assert.equal(first.read().entries.length,1);
+});
+
+
+test('a recovery passkey finds the online journal again after this browser loses it',async t=>{
+  const DB=await createTestDatabase();t.after(()=>DB.sqlite.close());
+  const origin='https://lacuna.example', env={DB,JWT_SECRET:'fixture',FRONTEND_ORIGIN:origin};
+  const send=(url,init)=>app.request(new Request(new URL(url,origin),{...init,headers:{...init.headers,Origin:origin}}),undefined,env);
+  const first=new WebVault(webStorage()),code=newPairingCode();
+  await first.unlock(samplePassphrase,true);
+  await webRequest('/entries','POST',{...thought(1,'kept through a cleared browser'),city:true},first);
+  await first.setPairing(undefined,{code,enabled:true,version:0,syncedRevision:-1,syncedPages:0});
+  await syncJournal(first,send);
+  let created;
+  const provider={
+    async create(options){created=options.publicKey;return {id:'recovery'};},
+    async get(options){assert.equal(options.publicKey.userVerification,'required');return {response:{userHandle:created.user.id.slice().buffer}};},
+  };
+  await saveRecoveryPasskey(code,provider,new Date('2026-11-24T12:00:00Z'));
+  assert.equal(created.user.id.byteLength,32);
+  assert.equal(created.authenticatorSelection.residentKey,'required');
+  assert.equal(created.authenticatorSelection.userVerification,'required');
+  assert.equal(created.rp.id,undefined,'the passkey stays scoped to the exact Lacuna host');
+  assert.match(created.user.name,/^Lacuna journal · /);
+  assert.ok(!JSON.stringify([created.user.name,created.user.displayName]).includes(code));
+  const recovered=await readRecoveryPasskey(provider);
+  assert.equal(recovered,code);
+  const cleared=new WebVault(webStorage());
+  await linkDevice(cleared,recovered,samplePassphrase,send,true);
+  assert.deepEqual(cleared.read().entries,first.read().entries);
+  assert.equal(cleared.pairing.passkey,true);
+  await webRequest('/entries','POST',{...thought(2,'written after recovery'),city:true},cleared);
+  await syncJournal(cleared,send);
+  assert.equal(cleared.pairing.passkey,true,'sync checkpoints keep the passkey marker');
+  await syncJournal(first,send);
+  assert.equal(first.read().entries.length,2);
+  const cancelled=async()=>{throw new DOMException('cancelled','NotAllowedError');};
+  await assert.rejects(readRecoveryPasskey({get:cancelled}),/cancelled/);
+  await assert.rejects(saveRecoveryPasskey(code,{create:cancelled}),/cancelled/);
+  await assert.rejects(readRecoveryPasskey({get:async()=>({response:{userHandle:new Uint8Array(16).buffer}})}),/does not hold/);
+  await assert.rejects(readRecoveryPasskey({get:async()=>null}),/does not hold/);
 });
 
 test('browser sync retries an unacknowledged upload and ignores a download that outlives its unlock session',async t=>{
