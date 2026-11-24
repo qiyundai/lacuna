@@ -117,7 +117,7 @@ export function createHarborBuildings(paint?: Gouache,clockHour?:T.IUniform<numb
     mesh.rotation.y = turn;
     g.add(mesh);
   }
-  function dwelling(kind: Street, floors: number, colorIndex: number, windowSeed: number) {
+  function dwelling(kind: Street, floors: number, colorIndex: number, windowSeed: number, additions=0) {
     const g = new T.Group(), color = streetColors[colorIndex % streetColors.length]!;
     const w = kind === 'apartments' ? 4.58 : 3, d = kind === 'apartments' ? 3.70 : 3.15;
     const pattern = kind === 'crescent' || kind === 'terraces' ? 'gallery' : kind === 'apartments' ? 'pilasters' : 'shutters';
@@ -127,7 +127,10 @@ export function createHarborBuildings(paint?: Gouache,clockHour?:T.IUniform<numb
       const style = ground ? (pattern === 'shutters' ? 'sash' : 'fanlight') : upperWindows[kind][windowSeed % 2 === 0 ? 0 : 1];
       const phase = (windowSeed + level) % 3;
       const key = [pattern, w, color, ground, style, phase].join('/');
-      add(g, part(key, p => storey(p, w, d, floorHeight, color, pattern, ground, style, phase)), 0, level * floorHeight);
+      const floor=part(key, p => storey(p, w, d, floorHeight, color, pattern, ground, style, phase));
+      const room=level-(floors-additions)+1;
+      if(room>0)floor.name='Room floor '+room;
+      add(g, floor, 0, level * floorHeight);
     }
     const top = floors * floorHeight;
     if (kind === 'terraces')
@@ -166,7 +169,7 @@ export function createHarborBuildings(paint?: Gouache,clockHour?:T.IUniform<numb
       const angle = kind === 'crescent' ? centered * .24 : (n % 3 - 1) * .033;
       const tint=kind==='crescent'?seed:n,palette=district && districtColors[district];
       const color=palette?palette[tint%palette.length]!:tint%5;
-      add(g, dwelling(kind, floors+additions, color, (seed >>> (i*5+3)) % 6), centered * pitch, y, z, angle);
+      add(g, dwelling(kind, floors+additions, color, (seed >>> (i*5+3)) % 6, additions), centered * pitch, y, z, angle);
       if (kind === 'steps')
         add(g, part('stair', stair), centered * pitch + 1.88, y, z + .05);
     }

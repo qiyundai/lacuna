@@ -51,7 +51,7 @@ export async function webRequest(path: string, method = 'GET', value?: unknown, 
     return vault.update(journal => {
       if(journal.forgotten?.some(a=>a.id===body.entry_id))throw new WebVaultError('ENTRY_CONFLICT','This page has already been forgotten.');
       const existing = journal.entries.find(e => e.id === body.entry_id);
-      if (existing) { if (existing.body !== body.body) throw new WebVaultError('ENTRY_CONFLICT', 'This thought ID already belongs to a different thought.'); return { entry: existing }; }
+      if (existing) { if (existing.body !== body.body) throw new WebVaultError('ENTRY_CONFLICT', 'This thought ID already belongs to a different thought.'); return { entry: existing, created:false }; }
       const entry: EntryData = { id: body.entry_id as string, riverEdition: 3, user_id: owner, body: body.body as string, created_at: timestamp, writingDay:localWritingDay(new Date(timestamp*1000)), solidified_at: body.solidified_at as number, kept_at: null };
       if(body.settlement !== undefined){
         if(!isSettlement(body.settlement) || !canSettle(population(journal.entries),body.settlement)) throw new WebVaultError('SITE_TAKEN','Choose a site with room for this trade.');
@@ -59,7 +59,7 @@ export async function webRequest(path: string, method = 'GET', value?: unknown, 
       }
       journal.river=morning(journal,timestamp);
       if(body.city !== true)attachPresence(journal.entries, entry);
-      journal.entries.push(entry); return { entry };
+      journal.entries.push(entry); return { entry, created:true };
     });
   }
   const entry = /^\/entries\/([a-f0-9]{32})(\/keep)?$/.exec(path);

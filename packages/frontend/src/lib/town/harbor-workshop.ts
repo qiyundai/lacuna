@@ -144,8 +144,10 @@ export async function harborWorkshop(breezeTime={value:0}){
     instance.scale.set(spread,h,spread);p.add(instance);
   }
   function lantern(p:Part,x:number,y:number,z:number,h=1.15){
-    pole(p,'iron',x,y+h*.5,z,.07,h);piece(p,geometries.plinth,'lamp',x,y+h+.1,z,.23,.26,.23);
+    pole(p,'iron',x,y+h*.5,z,.07,h);
+    const light=piece(p,geometries.plinth,'lamp',x,y+h+.1,z,.23,.26,.23);
     piece(p,geometries.cone,'iron',x,y+h+.28,z,.32,.16,.32);
+    return light;
   }
   if(paint?.relief){
     const relief=paint.relief;
@@ -197,7 +199,7 @@ export async function harborWorkshop(breezeTime={value:0}){
         tree(g,w*.46,0,-2.04,2.36+(seed%10)*.09,seed);
       }
     }
-    for(let i=0;i<(s.litAdditions??s.lights);i++)lantern(g,-w*.36+i*1.9,.1,2.5);
+    for(let i=0;i<(s.litAdditions??s.lights);i++)lantern(g,-w*.36+i*1.9,.1,2.5).name='Room lantern '+(i+1);
     g.traverse(part=>{
       if(!(part instanceof T.Mesh))return;
       if(part.material instanceof T.MeshBasicMaterial || part.material===materials.lamp)
