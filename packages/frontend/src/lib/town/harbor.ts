@@ -194,6 +194,14 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     vertexShader:'uniform float screen;attribute float radius;void main(){vec4 p=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*p;gl_PointSize=clamp(radius*screen/max(1.,-p.z),2.,76.);}',
     fragmentShader:'uniform float strength;void main(){float r=length(gl_PointCoord-.5)*2.;float a=exp(-5.6*r*r)*(1.-smoothstep(.76,1.,r));gl_FragColor=vec4(1.,.54,.22,a*.40*strength);}'
   }));glows.renderOrder=2;city.add(glows);
+  const roomHighlight=new T.Points(new T.BufferGeometry(),glows.material.clone());
+  roomHighlight.geometry.setAttribute('position',new T.Float32BufferAttribute([0,0,0],3));
+  roomHighlight.geometry.setAttribute('radius',new T.Float32BufferAttribute([1.6],1));
+  roomHighlight.material.uniforms.screen=glows.material.uniforms.screen!;
+  roomHighlight.renderOrder=3;
+  roomHighlight.visible=false;
+  city.add(roomHighlight);
+  let roomAge=0;
   const motionPreference=matchMedia('(prefers-reduced-motion: reduce)');
   let frame=0,paused=false,skipped=false,dead=false,last=0,time=afterglow?133:0,framed=false,inspected=false;
   let lastShadowTime = -Infinity;
@@ -219,7 +227,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   function visit(view:ValleyView|'Page',id?:string){
     pageTargets.invalidate();
     const site=id?plan.addresses.get(id):undefined;
-    if(site && Math.abs(Math.floor(site.x/1800)-loadedInlet)>1)update(plan,false,Math.floor(site.x/1800));
+    if(site && Math.abs(Math.floor(site.x/1800)-loadedInlet)>1)update(plan,undefined,Math.floor(site.x/1800));
     const detail = id && detailViews.get(id);
     const p=site?inValley(sitePoint(site)):undefined;
     const pose=view==='Overlook'?{eye:v(70,165,493),target:v(73,132,263)}:
@@ -257,12 +265,19 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     }
     constrainCamera();
     const centerInlet=T.MathUtils.clamp(Math.floor((valleyOrigin.z-target.z+72)/144),plan.start/1800,plan.end/1800-1);
-    if(inspected&&!framing&&centerInlet!==loadedInlet)update(plan,false,centerInlet);
+    if(inspected&&!framing&&centerInlet!==loadedInlet)update(plan,undefined,centerInlet);
+    if(roomHighlight.visible && !framing){
+      roomAge+=dt;
+      const progress=paused||motionPreference.matches?1:Math.min(1,roomAge/.9);
+      roomHighlight.material.uniforms.strength!.value=2.7*(1-T.MathUtils.smoothstep(progress,.14,1))*T.MathUtils.smoothstep(progress,0,.14);
+      roomHighlight.visible=progress<1;
+    }
     if (construction) {
-      const progress=paused?1:Math.min(1,(time-construction.start)/1.85);
+      const progress=paused||motionPreference.matches?1:Math.min(1,(time-construction.start)/1.85);
       construction.arrival.sample(progress);
       if (progress===1) {
         construction.arrival.finish();
+        if(construction.site.kind!=='pines')sound?.settle(inValley(sitePoint(construction.site)));
         construction=undefined;
         atmosphere.invalidateRooms();
       }
@@ -386,14 +401,15 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       slot.wake.clear();sea.wakeCounts[i]=0;
     }
   }
-  function update(next:HarborPlan,reveal=false,viewInlet?:number){
+  function update(next:HarborPlan,savedPage?:string,viewInlet?:number){
     const previous=plan;
     pageTargets.invalidate();
-    if(reveal)selectedPage=Array.from(next.addresses.keys()).at(-1);
+    const savedSite=savedPage && !previous.addresses.has(savedPage)?next.addresses.get(savedPage):undefined;
+    if(savedSite)selectedPage=savedPage;
     water.forceUpdate=true;
-    construction?.arrival.finish();
-    construction=undefined;
-    plan=next;focusX=next.latest?sitePoint(next.latest).x:0;
+    plan=next;
+    const focusSite=savedSite??next.latest;
+    focusX=focusSite?sitePoint(focusSite).x:0;
     loadedInlet=viewInlet??Math.floor((focusX+72)/144);
     if(viewInlet!==undefined)focusX=valleyOrigin.z-target.z;
     const start=Math.max(next.start,(loadedInlet-1)*1800),end=Math.min(next.end,(loadedInlet+2)*1800);
@@ -401,6 +417,9 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       sailings(start,end);
       return;
     }
+    roomHighlight.visible=false;
+    construction?.arrival.finish();
+    construction=undefined;
     refreshTerrain(start,end);releaseInstances(structures);rooms.sources.length=0;atmosphere.invalidateRooms();
     bridge?.dispose();bridge=undefined;
     detailViews.clear();
@@ -522,6 +541,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       meadow?.mow(part.position.x,part.position.z,radius);reserved.mark(part.position.x,part.position.z,radius+.16);
     }
     parcels.length=0;
+    const still=paused||motionPreference.matches;
     for(const lot of lots) {
       const {model,site,doors}=lot;
       parcels.push({site,box:new T.Box3().setFromObject(model)});
@@ -534,7 +554,26 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       connectDoors(shop,access,lot,streetsByBank.get(site.bank)![laneOf(site)]!,clearance);
       access.traverse(clearWalk);
       model.attach(access);
-      if(reveal && site===next.latest && !paused && site.lights===0) {
+      const newBuilding=site===savedSite && site.id===savedPage;
+      if(site===savedSite && savedPage && !newBuilding){
+        const room=next.rooms.get(savedPage);
+        const floor=model.getObjectByName('Room floor '+room);
+        const ledge=floor?.getObjectByName('Window ledge');
+        const lantern=model.getObjectByName('Room lantern '+(site.litAdditions??room));
+        const anchor=ledge??lantern;
+        if(anchor){
+          const position=anchor.localToWorld(v(0,ledge ? .48 : 0,0));
+          roomHighlight.position.copy(position);
+          roomHighlight.visible=!still;
+          roomHighlight.material.uniforms.strength!.value=0;
+          roomAge=0;
+          const cameraAnchor=ledge??model;
+          const eye=position.clone().add(v(2.4,2.7,8).applyQuaternion(cameraAnchor.getWorldQuaternion(new T.Quaternion())));
+          detailViews.set(savedPage,{target:inValley(position),eye:inValley(eye)});
+        }
+      }
+      if(newBuilding && still && site.kind!=='pines')sound?.settle(inValley(model.position));
+      if(newBuilding && !still) {
         const addition=bake(model,valley.plant,rooms);
         structures.add(addition);
         construction={arrival:buildingArrival(addition,model.position.y,Math.min(model.position.y-.65,...doors.map(door=>landHeight(door.exit.x,door.exit.z)))),start:time,site};
@@ -568,9 +607,9 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     sailings(start,end);
     renderer.shadowMap.needsUpdate=true;
     if(viewInlet===undefined){
-      if(reveal && selectedPage && detailViews.has(selectedPage))visit('Page',selectedPage);
-      else if(reveal && next.latest){
-        const raised=inValley(sitePoint(next.latest));raised.y+=2;
+      if(savedSite && savedPage && detailViews.has(savedPage))visit('Page',savedPage);
+      else if(savedSite){
+        const raised=inValley(sitePoint(savedSite));raised.y+=2;
         const screen=raised.project(camera);
         if(!framed||Math.abs(screen.x)>.80||Math.abs(screen.y)>.64||screen.z>1||screen.z< -1)fit(true);
       }else if(!inspected)fit();
@@ -625,6 +664,6 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     for(const p of paths.children)if(p instanceof T.Mesh)p.geometry.dispose();
     for(const slot of fleet)releaseInstances(slot.boat);
     const hull=vessel.children[0];if(hull instanceof T.Mesh)hull.geometry.dispose();
-    beamGeometry.dispose();beamMaterial.dispose();glows.geometry.dispose();glows.material.dispose();valley.dispose();atmosphere.dispose();world.dispose();sea.dispose();gardens.dispose();furniture.dispose();shop.dispose();renderer.dispose();
+    beamGeometry.dispose();beamMaterial.dispose();glows.geometry.dispose();glows.material.dispose();roomHighlight.geometry.dispose();roomHighlight.material.dispose();valley.dispose();atmosphere.dispose();world.dispose();sea.dispose();gardens.dispose();furniture.dispose();shop.dispose();renderer.dispose();
   }};
 }

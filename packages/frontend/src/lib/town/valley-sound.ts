@@ -44,7 +44,7 @@ export function createValleySound(context: AudioContext, refresh: () => void) {
     } catch {}
   }
 
-  function start(source: Source, buffer: AudioBuffer, loop: boolean) {
+  function start(source: Source, buffer: AudioBuffer, loop: boolean, offset=0) {
     const node = context.createBufferSource(), gain = context.createGain();
     const pan = source.position ? context.createPanner() : undefined;
     const air = source.position ? context.createBiquadFilter() : undefined;
@@ -65,7 +65,7 @@ export function createValleySound(context: AudioContext, refresh: () => void) {
       if (voices.get(source.key) === voice) voices.delete(source.key);
       if (!abort.signal.aborted) refresh();
     };
-    node.start(0, loop ? Math.random() * buffer.duration : 0);
+    node.start(0, loop ? Math.random() * buffer.duration : offset);
     live.add(voice); voices.set(source.key, voice);
     return voice;
   }
@@ -98,7 +98,16 @@ export function createValleySound(context: AudioContext, refresh: () => void) {
     if (enabled) master.gain.setTargetAtTime(reading ? 10 ** (-8 / 20) : 1, context.currentTime, .09);
     else { master.gain.cancelScheduledValues(context.currentTime); master.gain.value = 0; }
     for (const [key, voice] of voices) if (!enabled || (reading && !voice.loop)) fade(key);
-    if (enabled) nextCall = context.currentTime + 2 + Math.random() * 4;
+    if (enabled) {
+      void load('dock-a');
+      nextCall = context.currentTime + 2 + Math.random() * 4;
+    }
+  }
+
+  function settle(position:Vector3){
+    const buffer=buffers.get('dock-a');
+    if(!buffer || !enabled || reading || context.state!=='running')return;
+    start({key:'settling',clip:'dock-a',position,range:180,level:.34,score:1},buffer,false,.027);
   }
 
   function update(camera: Camera, daylight: number, paused: boolean, places: readonly SoundPlace[],
@@ -173,7 +182,7 @@ export function createValleySound(context: AudioContext, refresh: () => void) {
     });
     const chosen = loops.sort(nearest).slice(0, 10);
     for (const [key,voice] of voices) {
-      if (voice.loop ? !chosen.some(s => s.key === key) : paused) fade(key);
+      if (voice.loop ? !chosen.some(s => s.key === key) : paused && key!=='settling') fade(key);
       else if (key === 'gull' && voice.pan && callingGull && flocks.includes(callingGull)) {
         voice.pan.setPosition(callingGull.x, callingGull.y, callingGull.z);
         voice.air?.frequency.setTargetAtTime(airCutoff(callingGull.distanceTo(eye), 130), context.currentTime, .2);
@@ -191,7 +200,7 @@ export function createValleySound(context: AudioContext, refresh: () => void) {
     }
   }
   let callingGull: Vector3 | undefined;
-  return { mix, update, destroy() {
+  return { mix, update, settle, destroy() {
     abort.abort();
     for (const voice of live) {
       voice.node.onended = null; voice.node.stop(); voice.node.disconnect();

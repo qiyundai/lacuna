@@ -71,6 +71,31 @@ function stubAudio() {
   return { context, playing };
 }
 
+test('a completed building plays a positional cue that survives reduced motion and respects the mix', async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async url => ({ok:true,arrayBuffer:async()=>({clip:String(url).split('/').pop().replace('.mp3','')})});
+  const {context,playing}=stubAudio();
+  const sound=createValleySound(context,()=>{});
+  try {
+    sound.mix(true,false);
+    await new Promise(resolve=>setTimeout(resolve,0));
+    const site=new Vector3(3,2,8);
+    sound.settle(site);
+    assert.ok(playing.has('dock-a'));
+    sound.update(new PerspectiveCamera(),1,true,[],[],[],()=>0,()=>0);
+    assert.ok(playing.has('dock-a'));
+    sound.mix(false,false);
+    sound.settle(site);
+    assert.equal(playing.has('dock-a'),false);
+    sound.mix(true,true);
+    sound.settle(site);
+    assert.equal(playing.has('dock-a'),false);
+  } finally {
+    sound.destroy();
+    globalThis.fetch=realFetch;
+  }
+});
+
 test('crickets and leaves belong to the ground, and fall away as the camera climbs', async () => {
   const realFetch = globalThis.fetch;
   globalThis.fetch = async url => ({ ok: true, arrayBuffer: async () => ({ clip: String(url).split('/').pop().replace('.mp3', '') }) });

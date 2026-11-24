@@ -31,7 +31,7 @@ export const api = {
   },
   city: {
     get: () => request<{entries:EntryData[];forgotten:ForgottenAddress[]}>('/city'),
-    write: (body:string, solidified_at:number, entry_id:string) => request<{entry:EntryData}>('/entries', {method:'POST',body:JSON.stringify({body,solidified_at,entry_id,city:true})}),
+    write: (body:string, solidified_at:number, entry_id:string) => request<{entry:EntryData;created:boolean}>('/entries', {method:'POST',body:JSON.stringify({body,solidified_at,entry_id,city:true})}),
   },
   entries: {
     list: (cursor?: string, filter: { query?: string; kept?: boolean } = {}) =>
