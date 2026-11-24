@@ -41,10 +41,16 @@ route.put('/',async c => {
   const packet=await c.req.json();
   if (!validPacket(packet)) return c.body(null,400);
   const slot=c.get('slot'), db=c.env.DB, marker=crypto.randomUUID();
-  if (packet.version===1 && !await checkRateLimit(db,'browser-create:'+c.get('peer'),8,86400)) return c.body(null,429);
+  if (packet.version===1 && (!await checkRateLimit(db,'browser-create:'+c.get('peer'),8,86400) || !await checkRateLimit(db,'sync-new-slots',256,86400))) return c.body(null,429);
+  if (!await checkRateLimit(db,'sync-writes',20000,86400)) return c.body(null,429);
+  const size = packet.ciphertext.length;
+  const capacity = Number(c.env.SYNC_CAPACITY_BYTES ?? 134217728);
+  if (!Number.isSafeInteger(capacity) || capacity < 1) return c.body(null,503);
+  const available = '(SELECT used_bytes FROM sync_capacity WHERE id=1)';
+  const existing = '(SELECT COALESCE(SUM(length(ciphertext)),0) FROM browser_sync_chunks WHERE slot=?)';
   const write=packet.version===1
-    ? db.prepare('INSERT INTO browser_sync VALUES(?,1,?,?) ON CONFLICT DO NOTHING').bind(slot,packet.iv,marker)
-    : db.prepare('UPDATE browser_sync SET version=?, iv=?, write_id=? WHERE slot=? AND version=? AND iv IS NOT NULL').bind(packet.version,packet.iv,marker,slot,packet.version-1);
+    ? db.prepare('INSERT INTO browser_sync SELECT ?,1,?,? WHERE '+available+'+?<=? ON CONFLICT DO NOTHING').bind(slot,packet.iv,marker,size,capacity)
+    : db.prepare('UPDATE browser_sync SET version=?, iv=?, write_id=? WHERE slot=? AND version=? AND iv IS NOT NULL AND ? <= '+existing+'+MAX(0,?-'+available+')').bind(packet.version,packet.iv,marker,slot,packet.version-1,size,slot,capacity);
   const guard='EXISTS (SELECT 1 FROM browser_sync WHERE slot=? AND write_id=?)';
   const statements=[write,db.prepare('DELETE FROM browser_sync_chunks WHERE slot=? AND '+guard).bind(slot,slot,marker)];
   const chunk=750000;
@@ -53,14 +59,22 @@ route.put('/',async c => {
       .bind(slot,start/chunk,packet.ciphertext.slice(start,start+chunk),slot,marker));
   }
   const [saved]=await db.batch(statements);
-  return saved!.meta.changes ? c.body(null,204) : c.body(null,409);
+  if (saved!.meta.changes) return c.body(null,204);
+  const budget = await db.prepare('SELECT '+available+' AS total, '+existing+' AS previous').bind(slot).first<{total:number;previous:number}>();
+  if (budget && size > budget.previous + Math.max(0,capacity-budget.total)) {
+    console.warn('sync_capacity_reached');
+    return c.body(null,507);
+  }
+  return c.body(null,409);
 });
 
 route.delete('/',async c => {
   const db=c.env.DB, slot=c.get('slot');
   if (!await checkRateLimit(db,'browser-delete:'+c.get('peer'),32,86400)) return c.body(null,429);
+  const known = await db.prepare('SELECT 1 FROM browser_sync WHERE slot=?').bind(slot).first();
+  if (!known && !await checkRateLimit(db,'sync-new-tombstone',256,86400)) return c.body(null,429);
   await db.batch([
-    db.prepare('INSERT INTO browser_sync VALUES(?,1,NULL,?) ON CONFLICT(slot) DO UPDATE SET iv=NULL, version=version+1 WHERE iv IS NOT NULL').bind(slot,crypto.randomUUID()),
+    db.prepare('INSERT INTO browser_sync VALUES(?,1,NULL,?) ON CONFLICT(slot) DO UPDATE SET iv=NULL,version=version+1 WHERE iv IS NOT NULL').bind(slot,crypto.randomUUID()),
     db.prepare('DELETE FROM browser_sync_chunks WHERE slot=?').bind(slot)
   ]);
   return c.body(null,204);

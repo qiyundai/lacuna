@@ -1,3 +1,4 @@
+import { disconnectBillingDevice } from './billing-device.js';
 import type { EntryData, MemoirEdition, ModelWeights, StoryData } from './api.js';
 import type { RiverClock } from '../../../shared/river.js';
 import { forgetFromBook, validBook, type Book } from '../../../shared/living-book.js';
@@ -33,6 +34,7 @@ export interface EncryptedStorage {
   read(): Promise<WebEnvelope | null>;
   replace(expected: string | null, envelope: WebEnvelope | null, backup?: boolean): Promise<void>;
   listBackups?(): Promise<string[]>;
+  deleteBackup?(id: string): Promise<void>;
   readBackup?(id: string): Promise<WebEnvelope | null>;
 }
 export class WebVaultError extends Error {
@@ -122,6 +124,15 @@ export function indexedVaultStorage(name = 'lacuna-private-journal'): EncryptedS
         transaction.onabort = transaction.onerror = () => reject(new WebVaultError('STORAGE_UNAVAILABLE', 'Could not list your encrypted restore copies.'));
       });
     },
+    async deleteBackup(id) {
+      const db = await database();
+      return new Promise<void>((resolve,reject) => {
+        const tx = db.transaction('vault','readwrite');
+        tx.objectStore('vault').delete(id);
+        tx.oncomplete = () => resolve();
+        tx.onabort = tx.onerror = () => reject(new Error('Could not remove the recovery copy.'));
+      });
+    },
     async readBackup(id) {
       const db = await database();
       return new Promise((resolve, reject) => {
@@ -141,6 +152,7 @@ export class WebVault {
   private lastActive = 0;
   private failures: number[] = [];
   constructor(private storage: EncryptedStorage, private now = Date.now, private changed = (_saved?:boolean,_synced?:boolean) => {}) {}
+  get sharingAllowed() { return this.unlocked && !!this.data?.reflectionConsent; }
   get sessionGeneration() { return this.generation; }
   async current() { return this.unlocked && envelopeToken(this.envelope)===envelopeToken(await this.storage.read()); }
   async refresh(synced=false) {
@@ -184,7 +196,10 @@ export class WebVault {
         const data: WebJournal = existing ? await open(existing, key) : { format: 'lacuna.web-journal.v1', revision: 0, entries: [], memoirs: [], weights: {}, graph: { nodes: [], processed_count: 0 } };
         if (generation !== this.generation) throw new WebVaultError('VAULT_LOCKED', 'Opening was cancelled. Unlock again when you are ready.');
         const envelope = existing ?? await seal(data, key, owner, salt);
-        if (!existing) await this.storage.replace(null, envelope);
+        if (!existing) {
+          disconnectBillingDevice();
+          await this.storage.replace(null, envelope);
+        }
         if (generation !== this.generation) throw new WebVaultError('VAULT_LOCKED', 'Your encrypted copy is saved and remains locked.');
         this.key = key; this.data = data; this.envelope = envelope; this.lastActive = this.now();
         this.changed();
@@ -245,6 +260,11 @@ export class WebVault {
     });
   }
   async recoveryCopies() { this.read(); return await this.storage.listBackups?.() ?? []; }
+  async deleteRecoveryCopy(id: string) {
+    this.read();
+    if (!/^backup:[0-9]{13}:[a-f0-9-]{36}$/.test(id) || !this.storage.deleteBackup) throw new Error('Choose a saved recovery copy.');
+    await this.storage.deleteBackup(id);
+  }
   async recoveryCopy(id: string) {
     this.read();
     if (!/^backup:[0-9]{13}:[a-f0-9-]{36}$/.test(id)) throw new WebVaultError('INVALID_BACKUP', 'Choose a saved restore copy.');
@@ -266,13 +286,14 @@ export class WebVault {
         value=await seal(data,key,value.owner,value.salt);
         validateEnvelope(value);
       }
+      disconnectBillingDevice();
       await this.storage.replace(envelopeToken(previous), value, true);
       if (generation !== this.generation) throw new WebVaultError('VAULT_LOCKED', 'Your encrypted copy is saved and remains locked.');
       this.key = key; this.data = data; this.envelope = value; this.lastActive = this.now();
       this.changed();
     });
   }
-  async remove() { this.lock(); await this.pending.catch(() => {}); const current = await this.storage.read(); await this.storage.replace(envelopeToken(current), null); this.envelope = null; }
+  async remove() { disconnectBillingDevice(); this.lock(); await this.pending.catch(() => {}); const current = await this.storage.read(); await this.storage.replace(envelopeToken(current), null); this.envelope = null; }
 }
 let instance: WebVault | undefined;
 let channel: BroadcastChannel | undefined;

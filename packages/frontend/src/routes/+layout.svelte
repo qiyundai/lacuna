@@ -25,6 +25,8 @@
     initWeather();
     setAuthed({ id: 'this-browser', email: 'on this device' });
     loadVault().catch(err => { loadError = err instanceof Error ? err.message : 'Could not open browser storage.'; });
+    const permissionChanged = () => { void loadVault().catch(() => {}); };
+    window.addEventListener('lacuna:journal-changed', permissionChanged);
     window.addEventListener('lacuna:locked', didLock);
     let lastActivity = 0;
     const activity = () => {
@@ -37,6 +39,7 @@
     return () => {
       stopBook?.();
       stopSync();
+      window.removeEventListener('lacuna:journal-changed', permissionChanged);
       window.removeEventListener('lacuna:sync-applied', resetJournalData);
       clearInterval(timer); window.removeEventListener('lacuna:locked', didLock);
       for (const event of activityEvents) window.removeEventListener(event, activity);
@@ -45,7 +48,7 @@
 </script>
 
 <AlbumPlayer/>
-{#if page.url.pathname === '/privacy' || page.route.id === '/studio/tide-house' || page.route.id === '/studio/ferry-hall' || page.route.id === '/studio/waterfront'}
+{#if page.route.id === '/billing' || page.url.pathname === '/privacy' || page.route.id === '/studio/tide-house' || page.route.id === '/studio/ferry-hall' || page.route.id === '/studio/waterfront'}
   {@render children()}
 {:else if !vaultStore.status}
   {#if loadError}

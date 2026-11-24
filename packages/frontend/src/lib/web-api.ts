@@ -92,7 +92,7 @@ export async function webRequest(path: string, method = 'GET', value?: unknown, 
 }
 export async function webControl(path: string, method: string, value?: unknown): Promise<unknown> {
   const vault = browserVault(), body = value as { passphrase?: string; create?: boolean; envelope?: unknown };
-  if (path === 'vault/status') { const status = await vault.status(),pair=vault.pairing; return { ...status, aiAllowed: false, automaticAI: false, sync: { enabled: pair?.enabled??false, version: pair?.version??0, error: '' } }; }
+  if (path === 'vault/status') { const status = await vault.status(),pair=vault.pairing; return { ...status, aiAllowed: vault.sharingAllowed, automaticAI: vault.sharingAllowed, sync: { enabled: pair?.enabled??false, version: pair?.version??0, error: '' } }; }
   if (path === 'vault/unlock' && method === 'POST') { await vault.unlock(body?.passphrase ?? '', body?.create === true); return { ok: true }; }
   if (path === 'vault/lock' && method === 'POST') { vault.lock(); announceBrowserLock(); return { ok: true }; }
   if (path === 'vault/activity' && method === 'POST') { vault.activity(); return { ok: true }; }

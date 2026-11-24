@@ -608,6 +608,7 @@
     autocomplete="off"
     autocapitalize="off"
     spellcheck={false}
+    writingsuggestions="false"
     {...{ autocorrect: 'off' }}
     maxlength={MAX_CHARS}
     disabled={!active || overlayStore.open}

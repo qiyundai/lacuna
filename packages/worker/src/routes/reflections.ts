@@ -6,8 +6,8 @@ import type { Env } from '../types.js';
 import { checkRateLimit, privateRateKey, hashToken } from '../ratelimit.js';
 import { reflectionInstructions, sourceReadings, validEvidenceRequest } from '../ai/book-prompts.js';
 
-type Account = {id:string; email:string; customer:string|null; paid_until:number; consent:number; billing_revision:number; billing_state:string};
-const route = new Hono<{Bindings:Env;Variables:{account:Account;session:string}}>();
+type Account = {id:string; email:string; customer:string|null; paid_until:number; consent:number; billing_revision:number; billing_state:string;billing_checked:number};
+const route = new Hono<{Bindings:Env;Variables:{account:Account;session:string;authenticatedAt:number}}>();
 const encoder = new TextEncoder();
 const now = () => Math.floor(Date.now()/1000);
 const unavailable = () => new HTTPException(503,{message:'Hosted reflections are unavailable.'});
@@ -38,17 +38,26 @@ route.post('/login',async c=>{
   if (!email) return c.json({error:'Enter a valid email address.'},400);
   if (!c.env.RESEND_API_KEY || !c.env.EMAIL_FROM) throw unavailable();
   const ip=await privateRateKey(c.req.header('CF-Connecting-IP')??'local',c.env.JWT_SECRET);
-  if (!await checkRateLimit(c.env.DB,'mail:'+ip,10,900) || !await checkRateLimit(c.env.DB,'mail:'+await hashToken(email),3,600)) return c.json({error:'Try again later.'},429);
+  if (!await checkRateLimit(c.env.DB,'mail:'+ip,10,900) || !await checkRateLimit(c.env.DB,'mail:'+await privateRateKey(email,c.env.JWT_SECRET),3,600) || !await checkRateLimit(c.env.DB,'mail-total',200,86400)) return c.json({error:'Try again later.'},429);
   const code=crypto.randomUUID().replaceAll('-','').slice(0,12);
   const digest=await hashToken(c.env.JWT_SECRET+':'+email+':'+code);
   await c.env.DB.prepare('INSERT OR REPLACE INTO reflection_challenges VALUES(?,?,?)').bind(email,digest,now()+600).run();
   const sent=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+c.env.RESEND_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:c.env.EMAIL_FROM,to:[email],subject:'Your Lacuna sign-in code',text:'Your sign-in code is '+code+'. It expires in ten minutes.'})});
-  if (!sent.ok) throw unavailable();
+  if (!sent.ok) {
+    console.warn('mail_delivery_failed');
+    await checkRateLimit(c.env.DB,'mail-failed',3,3600);
+    throw unavailable();
+  }
   return c.json({ok:true});
 });
 route.post('/verify',async c=>{
   const input=await c.req.json(),email=emailOf(input.email);
   if (!email || typeof input.code!=='string' || !/^[0-9a-f]{12}$/i.test(input.code)) return c.json({error:'Check your email and code.'},400);
+  const device = getCookie(c,'__Host-lacuna-device') ?? '';
+  if (!/^[a-f0-9]{64}$/.test(device)) return c.json({error:'Enable secure cookies and sign in again.'},400);
+  const peer = await privateRateKey(c.req.header('CF-Connecting-IP') ?? 'local',c.env.JWT_SECRET);
+  if (!await checkRateLimit(c.env.DB,'verify:'+peer,60,900) ||
+      !await checkRateLimit(c.env.DB,'verify:'+await privateRateKey(email,c.env.JWT_SECRET),15,600)) return c.json({error:'Try again later.'},429);
   const digest=await hashToken(c.env.JWT_SECRET+':'+email+':'+input.code.toLowerCase());
   const used=await c.env.DB.prepare('DELETE FROM reflection_challenges WHERE email=? AND digest=? AND expires>? RETURNING email').bind(email,digest,now()).first();
   if (!used) return c.json({error:'Code expired or incorrect.'},401);
@@ -56,12 +65,12 @@ route.post('/verify',async c=>{
   if (!account) throw unavailable();
   const session=crypto.randomUUID();
   await c.env.DB.batch([c.env.DB.prepare('DELETE FROM reflection_sessions WHERE expires<=?').bind(now()),c.env.DB.prepare('INSERT INTO reflection_sessions VALUES(?,?,?)').bind(session,account.id,now()+2592000)]);
-  const token=await new SignJWT({}).setProtectedHeader({alg:'HS256'}).setIssuer('lacuna-book').setAudience('reflections').setSubject(account.id).setJti(session).setIssuedAt().setExpirationTime('30d').sign(encoder.encode(c.env.JWT_SECRET));
+  const token=await new SignJWT({device:await hashToken(device)}).setProtectedHeader({alg:'HS256'}).setIssuer('lacuna-book').setAudience('reflections').setSubject(account.id).setJti(session).setIssuedAt().setExpirationTime('30d').sign(encoder.encode(c.env.JWT_SECRET));
   setCookie(c,'lacuna_book',token,{path:'/reflections',httpOnly:true,secure:true,sameSite:'Strict',maxAge:2592000});
   return c.json(publicStatus(account));
 });
 
-type Subscriptions = {data:{status:string;cancel_at_period_end?:boolean;cancel_at?:number|null;current_period_end:number;items:{data:{price:{id:string}}[]}}[]};
+type Subscriptions = {data:{status:string;cancel_at_period_end?:boolean;cancel_at?:number|null;current_period_end:number;latest_invoice?:{status:string;charge?:{refunded:boolean;disputed:boolean}|null};items:{data:{price:{id:string}}[]}}[]};
 async function stripe<T={id:string;url:string}>(env:Env,path:string,fields?:Record<string,string>,idempotency?:string):Promise<T> {
   if (!env.STRIPE_SECRET_KEY || !env.STRIPE_PRICE_ID) throw unavailable();
   const headers:Record<string,string>={Authorization:'Bearer '+env.STRIPE_SECRET_KEY,'Stripe-Version':'2024-06-20'};
@@ -70,6 +79,44 @@ async function stripe<T={id:string;url:string}>(env:Env,path:string,fields?:Reco
   if (!res.ok) throw unavailable();
   return await res.json() as T;
 }
+async function reconcileBilling(env:Env,account:Account) {
+  const list=await stripe<Subscriptions>(env,'subscriptions?customer='+encodeURIComponent(account.customer!)+'&status=all&limit=100&expand[]=data.latest_invoice.charge');
+  const matching=list.data.filter(s=>s.items.data.some(i=>i.price.id===env.STRIPE_PRICE_ID));
+  const active=matching.filter(s=>s.status==='active' && s.latest_invoice?.status==='paid' && !s.latest_invoice.charge?.refunded && !s.latest_invoice.charge?.disputed).sort((a,b)=>b.current_period_end-a.current_period_end)[0];
+  const end=active ? Math.min(active.current_period_end,active.cancel_at??Infinity) : 0;
+  const state=active ? (active.cancel_at_period_end || active.cancel_at ? 'ending' : 'active') : matching.some(s=>s.status==='active') ? 'payment_review' : matching[0]?.status??'none';
+  const write=await env.DB.prepare('UPDATE reflection_accounts SET paid_until=?,billing_state=?,billing_checked=?,billing_revision=billing_revision+1 WHERE id=? AND billing_revision=?').bind(end,state,now(),account.id,account.billing_revision).run();
+  if (!write.meta.changes) throw unavailable();
+}
+
+export async function maintainAccounts(env:Env) {
+  const time = now();
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM reflection_challenges WHERE expires<=?').bind(time),
+    env.DB.prepare('DELETE FROM reflection_sessions WHERE expires<=?').bind(time),
+    env.DB.prepare('DELETE FROM reflection_usage WHERE started<?').bind(time-90*86400),
+    env.DB.prepare("DELETE FROM erased_usage_totals WHERE month<strftime('%Y-%m','now')"),
+    env.DB.prepare('DELETE FROM rate_limits WHERE window_end<=?').bind(time)
+  ]);
+  const {results} = await env.DB.prepare('SELECT * FROM reflection_accounts WHERE customer IS NOT NULL AND billing_checked<? ORDER BY billing_checked LIMIT 20').bind(time-86400).all<Account>();
+  const outcomes=await Promise.allSettled(results.map(async account=>{
+    try { await reconcileBilling(env,account); }
+    catch (error) {
+      await env.DB.prepare('UPDATE reflection_accounts SET billing_checked=? WHERE id=? AND billing_checked=?').bind(time-86400+900,account.id,account.billing_checked).run();
+      throw error;
+    }
+  }));
+  const reconciled=outcomes.every(result=>result.status==='fulfilled');
+  const bucket=Math.floor(time/86400);
+  const pressure=await env.DB.prepare(
+    'SELECT used_bytes>=? OR EXISTS (SELECT 1 FROM rate_limits WHERE (key=? AND count>=160) OR (key=? AND count>=16000) OR (key=? AND count>=3)) '+
+    'OR EXISTS (SELECT 1 FROM reflection_accounts WHERE customer IS NOT NULL AND billing_checked<?) AS elevated FROM sync_capacity WHERE id=1'
+  ).bind(Number(env.SYNC_CAPACITY_BYTES??134217728)*0.8,'mail-total:'+bucket,'sync-writes:'+bucket,'mail-failed:'+Math.floor(time/3600),time-2*86400).first<{elevated:number}>();
+  await env.DB.prepare('INSERT OR REPLACE INTO maintenance_status(id,checked,healthy) VALUES(1,?,?)')
+    .bind(time,Number(reconciled && pressure?.elevated===0)).run();
+  if (!reconciled) throw new Error('billing_reconciliation_failed');
+}
+
 async function signedEvent(raw:string,header:string,secret:string) {
   const fields=header.split(','), stamp=fields.find(v=>v.startsWith('t='))?.slice(2);
   if (!stamp || !/^\d+$/.test(stamp) || Math.abs(now()-Number(stamp))>300) return false;
@@ -82,29 +129,26 @@ async function signedEvent(raw:string,header:string,secret:string) {
 }
 route.post('/webhook',async c=>{
   const raw=await c.req.text();
-  if (!c.env.STRIPE_WEBHOOK_SECRET || !await signedEvent(raw,c.req.header('Stripe-Signature')??'',c.env.STRIPE_WEBHOOK_SECRET)) return c.json({error:'Invalid signature.'},400);
+  if (!c.env.STRIPE_WEBHOOK_SECRET || !await signedEvent(raw,c.req.header('Stripe-Signature')??'',c.env.STRIPE_WEBHOOK_SECRET)) { console.warn('billing_signature_rejected'); return c.json({error:'Invalid signature.'},400); }
   const event=JSON.parse(raw);
   if (!['customer.subscription.created','customer.subscription.updated','customer.subscription.deleted','invoice.paid','invoice.payment_failed','checkout.session.completed'].includes(event.type)) return c.json({ok:true});
   const customer=event.data?.object?.customer;
   if (typeof customer!=='string') return c.json({ok:true});
   const account=await c.env.DB.prepare('SELECT * FROM reflection_accounts WHERE customer=?').bind(customer).first<Account>();
   if (!account) return c.json({ok:true});
-  const list=await stripe<Subscriptions>(c.env,'subscriptions?customer='+encodeURIComponent(customer)+'&status=all&limit=100');
-  const matching=list.data.filter(s=>s.items.data.some(i=>i.price.id===c.env.STRIPE_PRICE_ID));
-  const active=matching.filter(s=>s.status==='active').sort((a,b)=>b.current_period_end-a.current_period_end)[0];
-  const end=active ? Math.min(active.current_period_end,active.cancel_at??Infinity) : 0;
-  const state=active ? (active.cancel_at_period_end || active.cancel_at ? 'ending' : 'active') : matching[0]?.status??'none';
-  const write=await c.env.DB.prepare('UPDATE reflection_accounts SET paid_until=?,billing_state=?,billing_revision=billing_revision+1 WHERE id=? AND billing_revision=?').bind(end,state,account.id,account.billing_revision).run();
-  if (!write.meta.changes) throw unavailable();
+  await reconcileBilling(c.env,account);
   return c.json({ok:true});
 });
 route.use('*',async(c,next)=>{
-  let id,session;
-  try {const {payload}=await jwtVerify(getCookie(c,'lacuna_book')??'',encoder.encode(c.env.JWT_SECRET),{issuer:'lacuna-book',audience:'reflections',algorithms:['HS256']});id=payload.sub;session=payload.jti;} catch {return c.json({error:'Sign in to Lacuna.'},401);}
-  if(!session || !id)return c.json({error:'Sign in to Lacuna.'},401);
+  let id,session,authenticatedAt;
+  const device = getCookie(c,'__Host-lacuna-device') ?? '';
+  if (!/^[a-f0-9]{64}$/.test(device)) return c.json({error:'Sign in to Lacuna.'},401);
+  try {const {payload}=await jwtVerify(getCookie(c,'lacuna_book')??'',encoder.encode(c.env.JWT_SECRET),{issuer:'lacuna-book',audience:'reflections',algorithms:['HS256']});if(payload.device!==await hashToken(device)) return c.json({error:'Sign in again.'},401);
+    id=payload.sub;session=payload.jti;authenticatedAt=payload.iat;} catch {return c.json({error:'Sign in to Lacuna.'},401);}
+  if(!session || !id || !authenticatedAt)return c.json({error:'Sign in to Lacuna.'},401);
   const account=await c.env.DB.prepare('SELECT a.* FROM reflection_accounts a JOIN reflection_sessions s ON s.account=a.id WHERE a.id=? AND s.id=? AND s.expires>?').bind(id,session,now()).first<Account>();
   if (!account) return c.json({error:'Sign in to Lacuna.'},401);
-  c.set('account',account);c.set('session',session);await next();return;
+  c.set('authenticatedAt',authenticatedAt);c.set('account',account);c.set('session',session);await next();return;
 });
 route.get('/account',c=>c.json(publicStatus(c.get('account'))));
 route.post('/logout',async c=>{
@@ -113,6 +157,7 @@ route.post('/logout',async c=>{
 });
 route.post('/consent',async c=>{
   const {enabled}=await c.req.json(),a=c.get('account');
+  if (enabled === true && c.env.REFLECTIONS_ENABLED !== 'true') return c.json({error:'New reflections are paused.'},503);
   if (typeof enabled!=='boolean' || (enabled && !entitled(a))) return c.json({error:'An active subscription is required.'},403);
   const updated=await c.env.DB.prepare('UPDATE reflection_accounts SET consent=consent+CASE WHEN consent%2=? THEN 0 ELSE 1 END WHERE id=? RETURNING *').bind(Number(enabled),a.id).first<Account>();
   return c.json(publicStatus(updated!));
@@ -141,14 +186,21 @@ route.post('/checkout',async c=>{
   const open=await stripe<{data:{url:string;mode:string;automatic_tax?:{enabled:boolean};metadata?:{lacuna_price?:string}}[]}>(c.env,'checkout/sessions?status=open&customer='+encodeURIComponent(customer)+'&limit=10');
   const existing=open.data.find(s=>s.mode==='subscription' && s.url && s.automatic_tax?.enabled && s.metadata?.lacuna_price===c.env.STRIPE_PRICE_ID);
   if(existing)return c.json({url:existing.url});
+  const attempt = await c.env.DB.prepare(
+    'UPDATE reflection_accounts SET checkout_key=CASE WHEN checkout_key IS NULL OR checkout_started<=? THEN ? ELSE checkout_key END,'+
+    ' checkout_started=CASE WHEN checkout_key IS NULL OR checkout_started<=? THEN ? ELSE checkout_started END WHERE id=? RETURNING checkout_key'
+  ).bind(now()-86400,crypto.randomUUID(),now()-86400,now(),a.id).first<{checkout_key:string}>();
+  if (!attempt) throw unavailable();
   const session = await stripe(c.env, 'checkout/sessions', {
     customer, mode: 'subscription', 'line_items[0][price]': price, 'line_items[0][quantity]': '1',
     'automatic_tax[enabled]': 'true', billing_address_collection: 'required', 'customer_update[address]': 'auto',
     'metadata[lacuna_price]': price, success_url: url+'?billing=returned', cancel_url: url+'?billing=cancelled'
-  }, 'tax-checkout-'+a.id+'-'+price+'-'+Math.floor(now()/1800));
+  }, 'checkout-'+price+'-'+attempt.checkout_key);
   return c.json({url:session.url});
 });
 route.post('/portal',async c=>{
+  if(now()-c.get('authenticatedAt')>300) return c.json({code:'reauthenticate',error:'Verify your email again.'},403);
+  if (!await checkRateLimit(c.env.DB,'portal:'+c.get('account').id,10,600)) return c.json({error:'Try again later.'},429);
   const customer=c.get('account').customer;
   if (!customer) return c.json({error:'No billing account yet.'},400);
   return c.json({url:(await stripe(c.env,'billing_portal/sessions',{customer,return_url:c.env.FRONTEND_ORIGIN+'/?billing=managed'})).url});
@@ -164,20 +216,26 @@ route.post('/generate',async c=>{
   const reserve=Math.ceil((encoder.encode(content+instructions).length+256)*inputRate+maxOutput*outputRate);
   const month=new Date().toISOString().slice(0,7),id=crypto.randomUUID();
   const reservation=await c.env.DB.prepare(`INSERT INTO reflection_usage(id,account,month,micros,unit,started) SELECT ?,?,?,?,?,?
-    WHERE (SELECT COALESCE(SUM(micros),0) FROM reflection_usage WHERE month=? AND account=?) + ? <= ?
-    AND (SELECT COALESCE(SUM(micros),0) FROM reflection_usage WHERE month=?) + ? <= ?
+    WHERE EXISTS (SELECT 1 FROM reflection_accounts a JOIN reflection_sessions s ON s.account=a.id
+      WHERE a.id=? AND a.consent=? AND a.paid_until>? AND s.id=? AND s.expires>?)
+    AND (SELECT COALESCE(SUM(micros),0) FROM reflection_usage WHERE month=? AND account=?) + ? <= ?
+    AND (SELECT COALESCE(SUM(micros),0) FROM reflection_usage WHERE month=?) + COALESCE((SELECT micros FROM erased_usage_totals WHERE month=?),0) + ? <= ?
     AND NOT EXISTS(SELECT 1 FROM reflection_usage WHERE account=? AND unit=? AND started>?)
     AND (SELECT COUNT(*) FROM reflection_usage WHERE account=? AND month=? AND unit=?)<3`)
-    .bind(id,a.id,month,reserve,input.unit,now(),month,a.id,reserve,accountCap,month,reserve,globalCap,a.id,input.unit,now()-120,a.id,month,input.unit).run();
+    .bind(id,a.id,month,reserve,input.unit,now(),a.id,a.consent,now(),c.get('session'),now(),month,a.id,reserve,accountCap,month,month,reserve,globalCap,a.id,input.unit,now()-120,a.id,month,input.unit).run();
   if (!reservation.meta.changes) {
+    const authorized = await c.env.DB.prepare('SELECT 1 FROM reflection_accounts a JOIN reflection_sessions s ON s.account=a.id WHERE a.id=? AND a.consent=? AND a.paid_until>? AND s.id=? AND s.expires>?')
+      .bind(a.id,a.consent,now(),c.get('session'),now()).first();
+    if (!authorized) return c.json({error:'Reflection permission changed.'},403);
     const usage=await c.env.DB.prepare(`SELECT COALESCE(SUM(CASE WHEN account=? THEN micros END),0) AS personal,
-      COALESCE(SUM(micros),0) AS total, COUNT(CASE WHEN account=? AND unit=? THEN 1 END) AS attempts
-      FROM reflection_usage WHERE month=?`).bind(a.id,a.id,input.unit,month).first<{personal:number;total:number;attempts:number}>();
+      COALESCE(SUM(micros),0)+COALESCE((SELECT micros FROM erased_usage_totals WHERE month=?),0) AS total, COUNT(CASE WHEN account=? AND unit=? THEN 1 END) AS attempts
+      FROM reflection_usage WHERE month=?`).bind(a.id,month,a.id,input.unit,month).first<{personal:number;total:number;attempts:number}>();
     if (!usage) throw unavailable();
     const reset=new Date(month+'-01T00:00:00Z');
     reset.setUTCMonth(reset.getUTCMonth()+1);
     const retryAt=reset.getTime();
     if(usage.personal+reserve>accountCap)return c.json({code:'subscriber_limit',error:'Your monthly reflection allowance is used up.',retryAt},429);
+    if(usage.total+reserve>globalCap)console.warn('reflection_budget_exhausted');
     if(usage.total+reserve>globalCap)return c.json({code:'service_limit',error:'Lacuna has reached its shared monthly reflection limit.',retryAt},429);
     if(usage.attempts>=3)return c.json({code:'unit_limit',error:'Lacuna paused after several attempts on these pages.',retryAt},429);
     return c.json({code:'unit_busy',error:'These pages were recently requested. Lacuna will check again shortly.',retryAt:Date.now()+120000},429);

@@ -96,7 +96,7 @@
   </div>
   {#if searching}
     <div class="search-line" transition:fade={{ duration: 250 }}>
-      <input type="search" aria-label="Search all your thoughts" placeholder="a person, a place, a feeling…" bind:value={query} maxlength="200" />
+      <input spellcheck="false" autocorrect="off" writingsuggestions="false" autocomplete="off" type="search" aria-label="Search all your thoughts" placeholder="a person, a place, a feeling…" bind:value={query} maxlength="200" />
       {#if query}<button class="quiet-toggle" onclick={() => query = ''}>clear</button>{/if}
     </div>
   {/if}

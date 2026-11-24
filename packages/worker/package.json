@@ -10,12 +10,12 @@
     "db:migrate:remote": "wrangler d1 migrations apply lacuna-db --remote"
   },
   "dependencies": {
-    "hono": "^4.13.13",
+    "hono": "^4.13.21",
     "jose": "^6.2.12"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261006.1",
     "typescript": "^5.9.3",
-    "wrangler": "^4.151.1"
+    "wrangler": "^4.167.0"
   }
 }

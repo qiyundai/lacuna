@@ -1,0 +1,23 @@
+name: Production health
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  production-health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check scheduled maintenance and service capacity
+        run: curl --fail --silent --show-error --max-time 20 --retry 2 https://lacuna-api.pianoquin4126.workers.dev/health/maintenance
+      - name: Check signed-out billing
+        run: test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 20 https://lacuna.quietatlas.io/reflections/account)" = 401
+      - name: Check journal privacy headers and analytics
+        run: |
+          curl --fail --silent --show-error --max-time 20 --dump-header headers --output privacy https://lacuna.quietatlas.io/privacy
+          grep -qi '^content-security-policy:' headers
+          if grep -qi 'static.cloudflareinsights.com' privacy; then exit 1; fi

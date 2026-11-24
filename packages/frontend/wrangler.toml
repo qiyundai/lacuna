@@ -1,0 +1,11 @@
+name = "lacuna-app"
+pages_build_output_dir = "build"
+compatibility_date = "2026-04-22"
+
+[env.production.vars]
+VITE_API_URL = "https://lacuna-api.pianoquin4126.workers.dev"
+
+[[env.production.services]]
+binding = "BILLING"
+service = "lacuna-api"
+entrypoint = "BillingIngress"

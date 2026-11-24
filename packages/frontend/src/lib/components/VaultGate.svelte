@@ -60,5 +60,6 @@
     <button class="atlas-link" type="button" disabled={busy} onclick={() => { restoring = !restoring; error = ''; mismatch=false; passphrase = ''; confirmation = ''; backup = null; }}>{restoring ? 'Return to this device' : 'Restore from backup'}</button>
     {/if}
     </div>
+    <a class="atlas-link" href="/billing">Manage billing</a>
   </form>
 </TownWelcome>

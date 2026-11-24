@@ -14,12 +14,9 @@
   },
   "engines": {
     "pnpm": ">=9",
-    "node": ">=22.16"
+    "node": ">=22.17"
   },
   "devDependencies": {
     "esbuild": "0.28.1"
-  },
-  "pnpm": {
-    "overrides": { "@sveltejs/kit>cookie": "^0.7.2" }
   }
 }
