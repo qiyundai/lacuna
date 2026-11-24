@@ -6,7 +6,27 @@ import { processBookUnit } from '../packages/frontend/src/lib/reflection-service
 import { sourceReadings } from '../packages/worker/src/ai/book-prompts.ts';
 import { createTestDatabase } from './database.mjs';
 import { maintainAccounts } from '../packages/worker/src/routes/reflections.ts';
+import { operationsSummary } from '../packages/worker/src/operations.ts';
 import app from '../packages/worker/src/index.ts';
+
+test('private operations reports fixed aggregates and distinguishes missing maintenance',async t=>{
+  const DB=await createTestDatabase();t.after(()=>DB.sqlite.close());
+  const time=new Date('2026-11-01T12:00:00Z'),seconds=time.getTime()/1000;
+  const env={DB,REFLECTION_GLOBAL_MICROS:'15000000'};
+  const empty=await operationsSummary(env,time);
+  assert.equal(empty.lastMaintenance,null);
+  assert.equal(empty.healthy,false);
+  await DB.prepare('INSERT INTO maintenance_status VALUES(1,?,1)').bind(seconds-30).run();
+  await DB.prepare('INSERT INTO reflection_accounts(id,email,paid_until) VALUES(?,?,?)').bind('private-id','private@example.invalid',seconds+60).run();
+  await DB.prepare('INSERT INTO erased_usage_totals VALUES(?,?)').bind('2026-11',8000).run();
+  await DB.prepare('INSERT INTO rate_limits(key,count,window_end) VALUES(?,?,?)').bind('mail-total:'+Math.floor(seconds/86400),4,seconds+43200).run();
+  assert.deepEqual(await operationsSummary(env,time),{
+    version:1,checkedAt:time.toISOString(),healthy:true,lastMaintenance:seconds-30,
+    paidAccounts:1,syncBytes:0,syncLimitBytes:134217728,signInAttempts:4,budgetMicros:8000,budgetLimitMicros:15000000
+  });
+  assert.equal((await operationsSummary(env,new Date(time.getTime()+3600000))).healthy,false);
+  assert.equal((await app.request('https://lacuna.example/summary',{},env)).status,404);
+});
 
 test('published reflection endpoints are coming soon before auth, billing or provider work',async()=>{
   for(const path of ['checkout','generate']){
