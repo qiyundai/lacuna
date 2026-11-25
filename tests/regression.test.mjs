@@ -493,6 +493,32 @@ test('browser devices pair privately, converge offline additions and preserve bo
 });
 
 
+test('merging two journals from before the census preserves their original residents',async t=>{
+  const {residentHomes}=await import('../packages/frontend/src/lib/town/resident-lives.ts');
+  const DB=await createTestDatabase();t.after(()=>DB.sqlite.close());
+  const origin='https://lacuna.example',env={DB,JWT_SECRET:'fixture',FRONTEND_ORIGIN:origin};
+  const send=(url,init)=>app.request(new Request(new URL(url,origin),{...init,headers:{...init.headers,Origin:origin}}),undefined,env);
+  const first=new WebVault(webStorage()),second=new WebVault(webStorage()),code=newPairingCode();
+  await first.unlock(samplePassphrase,true);
+  await first.update(journal=>{delete journal.census;});
+  await webRequest('/entries','POST',{...thought(1,'morning walk'),city:true},first);
+  await first.setPairing(undefined,{code,enabled:true,version:0,syncedRevision:-1,syncedPages:0});
+  await syncJournal(first,send);
+  await linkDevice(second,code,samplePassphrase,send);
+  await webRequest('/entries','POST',{...thought(2,'evening tide'),city:true},first);
+  await webRequest('/entries','POST',{...thought(3,'night sky'),city:true},second);
+  await syncJournal(first,send);
+  await syncJournal(second,send);
+  const journal=second.read();
+  const pilots=residentHomes(paintedCoast(journal.entries),journal.entries);
+  assert.ok(pilots.length>0);
+  for(const pilot of pilots){
+    const person=journal.census.people.find(p=>p.id===pilot.resident);
+    assert.equal(person?.name,pilot.life.name);
+    assert.equal(person.arrival,pilot.arrival);
+  }
+});
+
 test('a recovery passkey finds the online journal again after this browser loses it',async t=>{
   const DB=await createTestDatabase();t.after(()=>DB.sqlite.close());
   const origin='https://lacuna.example', env={DB,JWT_SECRET:'fixture',FRONTEND_ORIGIN:origin};

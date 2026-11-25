@@ -3,6 +3,8 @@ import { validPacket, syncLimit, type SyncPacket } from '../../../shared/sync-pa
 import { apiBase } from './api.js';
 import { base64, bytes, browserVault, announceBrowserLock, forgetWebPage, type WebVault, type WebEnvelope, type WebJournal } from './web-vault.js';
 
+import { emptyCensus, settleCity } from './town/citizens.js';
+
 const utf8=new TextEncoder();
 export const pairingCode=(secret:Uint8Array)=>base64(secret).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
 export const newPairingCode=()=>pairingCode(crypto.getRandomValues(new Uint8Array(32)));
@@ -64,7 +66,6 @@ export async function removeOnline(vault:WebVault,send:Transport=fetch) {
   await vault.setPairing(pairing,undefined);
 }
 
-import { emptyCensus, settleCity } from './town/citizens.js';
 
 function journalContent(data:WebJournal) {
   const {deviceSync,reflectionConsent,acceptedTerms,revision,...journal}=data;
@@ -88,7 +89,8 @@ function combineNewPages(local:WebJournal,cloud:WebJournal,baseCount:number) {
   }
   census.serial=Math.max(census.serial,localCast?.serial??0);
   census.people=[...people.values()];
-  const merged=settleCity(entries,cloud.forgotten??[],census,Math.floor(Date.now()/1000));
+  const previous=localCast || cloudCast ? census : undefined;
+  const merged=settleCity(entries,cloud.forgotten??[],previous,Math.floor(Date.now()/1000));
   if(!extra.length && JSON.stringify(merged)===JSON.stringify(cloudCast))return cloud;
   return {...cloud,revision:Math.max(local.revision,cloud.revision)+1,entries,census:merged};
 }
