@@ -28,6 +28,7 @@
   cursor: pointer;
 }
 .scene-control > svg { filter: drop-shadow(0 1px 2px var(--scene-shade)); }
+.unread-postcard { position: absolute; inset-block-start: 3px; inset-inline-end: 3px; width: 8px; height: 8px; border-radius: 50%; background: white; box-shadow: 0 0 0 1.5px #24473b; pointer-events: none; }
 .scene-control.solid { background: var(--scene-control); }
 .scene-control.raised { background: var(--scene-raised); color: var(--scene-on-raised); }
 .scene-control:is(.solid, .raised) > svg { filter: none; }

@@ -68,7 +68,7 @@ export async function removeOnline(vault:WebVault,send:Transport=fetch) {
 
 
 function journalContent(data:WebJournal) {
-  const {deviceSync,reflectionConsent,acceptedTerms,revision,...journal}=data;
+  const {deviceSync,reflectionConsent,acceptedTerms,revision,postcardRead,...journal}=data;
   return journal;
 }
 function combineNewPages(local:WebJournal,cloud:WebJournal,baseCount:number) {
@@ -138,6 +138,9 @@ export async function syncJournal(vault:WebVault,send:Transport=fetch,acceptClou
       data=combined;
     }
     const checkpoint={...pairing,version:packet.version,syncedRevision:cloud.revision,syncedPages:cloud.entries.length};
+    if ((local.postcardRead??0)>(data.postcardRead??0)) {
+      data={...data,postcardRead:local.postcardRead,revision:Math.max(data.revision,local.revision)+1};
+    }
     preserveForgottenPages(data,local);
     await vault.setPairing(pairing,checkpoint,
       {data,expectedRevision:local.revision,backup:diverged && acceptCloud});

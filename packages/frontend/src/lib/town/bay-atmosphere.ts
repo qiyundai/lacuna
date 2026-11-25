@@ -16,12 +16,12 @@ const screenVertex=`
 `;
 
 export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camera:T.PerspectiveCamera,
-  sun:T.DirectionalLight,direction:T.Vector3,mist:ReturnType<typeof createLowCloud>,afterglow:boolean,daylight:T.IUniform<number>){
+  sun:T.DirectionalLight,direction:T.Vector3,mist:ReturnType<typeof createLowCloud>,afterglow:boolean,daylight:T.IUniform<number>,beamLimit:number){
   const hdr=renderer.extensions.has('EXT_color_buffer_float');
   const targetType=hdr?T.HalfFloatType:T.UnsignedByteType;
   const beauty=new T.WebGLRenderTarget(1,1,{type:targetType,samples:Math.min(2,renderer.capabilities.maxSamples)});
   beauty.depthTexture=new T.DepthTexture(1,1,T.UnsignedIntType);
-  const windows=windowShafts(beauty.depthTexture,camera);
+  const windows=windowShafts(beauty.depthTexture,camera,beamLimit);
   const air=new T.WebGLRenderTarget(1,1,{type:targetType,depthBuffer:false});
   const vapor=new T.WebGLRenderTarget(1,1,{type:targetType,depthBuffer:false});
   const clearColor=new T.Color();
@@ -137,7 +137,7 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
       combine.uniforms.aspect!.value=w/h;
       composer.setSize(w,h);
     },
-    render(seconds:number,sources:RoomSource[],light:CityLight,skip?:number){
+    render(seconds:number,sources:RoomSource[],light:CityLight,dt:number,skip?:number){
       output.uniforms.daylight!.value=light.daylight;
       uniforms.seconds.value=seconds;
       if(pollen){
@@ -155,8 +155,9 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
       const facing=sunUv.z<1;
       sunUv.set(sunUv.x*.5+.5,sunUv.y*.5+.5,Number(facing));
       uniforms.shadowDepth.value=sun.shadow.map?.depthTexture??null;
-      renderer.setRenderTarget(air);shafts.render(renderer);windows.render(renderer,sources,light,seconds,skip);
-      renderer.setRenderTarget(null);composer.render();
+      renderer.setRenderTarget(air);shafts.render(renderer);
+      const fading=windows.render(renderer,sources,light,seconds,dt,skip);
+      renderer.setRenderTarget(null);composer.render();return fading;
     },
     dispose(){
       if(pollen){scene.remove(pollen.points);pollen.dispose();}

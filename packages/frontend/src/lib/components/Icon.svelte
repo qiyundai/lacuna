@@ -9,6 +9,7 @@
   const glyphs = {
     // Navigation and scene
     search: 'M16.5 10.5a6 6 0 1 1-12 0 6 6 0 0 1 12 0Zm-1.8 4.3L21 21',
+    postcard: 'M2.5 5.5h19v13h-19ZM15 8h4v4h-4ZM5 12h5m-5 3h7',
     pages: 'M7 3.5h11a1.5 1.5 0 0 1 1.5 1.5v13H8a2 2 0 0 0 0 4h11.5M6 20V5a1.5 1.5 0 0 1 1.5-1.5M10 8h6M10 11h4',
     city: 'M2 20h20M4 20V9l4-3 4 3v11m0-8h7v8M7 11v2m2 3v3m6-4v2',
     resident: 'M14 5a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM8 13l2-4 3-1 2 4 3 1M12 10l-1 5 4 3 1 4m-5-7-2 4-3 3',
