@@ -6,6 +6,8 @@ import './river-venues.test.mjs';
 import './citizens.test.mjs';
 import './harbor-residents.test.mjs';
 import './city-clock.test.mjs';
+import './monument-world.test.mjs';
+import { monuments, postcardEdition, writingWeeks } from '../packages/shared/monuments.ts';
 import './valley-sound.test.mjs';
 import { journalDetails } from '../packages/frontend/src/lib/town/journal-details.ts';
 import { paintedCoast } from '../packages/frontend/src/lib/town/painted-coast.ts';
@@ -223,6 +225,38 @@ test('slow pointer movement cancels a hold based on total distance and destroy r
 const samplePassphrase = 'sample only long vault passphrase';
 const thought = (n, body = `sample thought ${n}`) => ({ entry_id: n.toString(16).padStart(32, '0'), body, solidified_at: 123 });
 
+test('postcard editions follow distinct Monday writing weeks and survive forgetting and unlocking', async () => {
+  const start=Date.UTC(2025,0,6)/86400000;
+  const sunday={created_at:(start+7)*86400,writingDay:start+6};
+  assert.equal(writingWeeks([sunday,{created_at:start*86400}]),1);
+  assert.equal(writingWeeks([sunday,{created_at:(start+7)*86400}]),2);
+  assert.equal(postcardEdition(0),0);
+  for(const [i,m] of monuments.entries()){
+    assert.equal(postcardEdition(m.weeks-1),i+1);
+    assert.equal(postcardEdition(m.weeks),i+2);
+  }
+  const vault=new WebVault(webStorage());
+  await vault.unlock(samplePassphrase,true);
+  const request=(path,method='GET',body)=>webRequest(path,method,body,vault);
+  for(let i=0;i<5;i++)await request('/entries','POST',thought(i));
+  await vault.update(journal=>journal.entries.forEach((entry,i)=>{
+    entry.created_at=(start+14*i)*86400;
+    entry.writingDay=start+14*i;
+  }));
+  assert.equal(await request('/city/postcard','POST',{edition:3}),3);
+  assert.equal(await request('/city/postcard','POST',{edition:1}),3);
+  await assert.rejects(request('/city/postcard','POST',{edition:4}));
+  await request('/entries/'+thought(2).entry_id,'DELETE');
+  vault.lock();
+  await vault.unlock(samplePassphrase);
+  const city=await request('/city');
+  assert.equal(city.postcardRead,3);
+  await vault.update(journal=>{journal.postcardRead=7;});
+  vault.lock();await vault.unlock(samplePassphrase);
+  assert.equal((await request('/city')).postcardRead,7);
+  assert.equal(writingWeeks([...city.entries,...city.forgotten]),5);
+});
+
 test('forgetting keeps only address metadata in the vault after reopening', async t => {
   const vault = new WebVault(webStorage());
   await vault.unlock(samplePassphrase, true);
@@ -237,7 +271,8 @@ test('forgetting keeps only address metadata in the vault after reopening', asyn
     const {address} = await forget(last.entry.id);
     assert.equal(address.position, 2);
     const receipt = await forget(entry.id);
-    assert.deepEqual(receipt.address, {id:entry.id, created_at:entry.created_at, riverEdition:4, position:0, forgottenAfter:3});
+    assert.deepEqual(receipt.address, {id:entry.id, created_at:entry.created_at,
+      ...(entry.writingDay!==Math.floor(entry.created_at/86400) && {writingDay:entry.writingDay}),riverEdition:5, position:0, forgottenAfter:3});
     assert.deepEqual(await forget(entry.id), receipt);
     await assert.rejects(request('/entries', 'POST', thought(1, secret)), /forgotten/);
     vault.lock();
@@ -725,7 +760,7 @@ test('city saves preserve words and skip the story classifier',async t=>{
     const {entry,created}=await send(value);
     assert.equal(created,true);
     assert.equal(entry.body,value.body);
-    assert.equal(entry.riverEdition,4);
+    assert.equal(entry.riverEdition,5);
     assert.equal(entry.presence,undefined);
     assert.deepEqual(await send(value),{entry,created:false});
   }
@@ -854,7 +889,8 @@ test('mixed river editions keep archived addresses and append neighborhoods dete
     assert.ok(full.ports.length>=4);
     assert.deepEqual(full.ports.slice(0,early.ports.length).map(s=>s.id),early.ports.map(s=>s.id));
     assert.deepEqual(full.ports,full.sites.filter(s=>s.ferryTerminal&&!s.quiet));
-    assert.deepEqual(early,paintedCoast([...past,...pages.slice(0,80)].map(p=>({...p,body:'Different words',created_at:p.created_at*86400}))));
+    const laterCalendar=paintedCoast([...past,...pages.slice(0,80)].map(p=>({...p,body:'Different words',created_at:p.created_at*86400})));
+    assert.deepEqual({...early,monumentPlots:[]},{...laterCalendar,monumentPlots:[]});
   }
 });
 

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import MonumentPostcard from './MonumentPostcard.svelte';
+  import { postcardEdition, writingWeeks } from '../../../../shared/monuments.js';
   import IconAction from './IconAction.svelte';
   import Icon from './Icon.svelte';
   import SoundToggle from './SoundToggle.svelte';
@@ -13,8 +15,9 @@
   import { prependEntry } from '$lib/stores/entries.svelte.js';
   import { resetJournalData } from '$lib/stores/session.svelte.js';
   import { currentRiverEdition, forgetAddress, type ForgottenAddress } from '../../../../shared/city-address.js';
-  import { hashPage } from '$lib/town/city-growth.js';
   import { siteName } from '$lib/town/architecture-catalog.js';
+  import { exampleJournal } from '$lib/town/example-journal.js';
+  import type { LightBudget } from '$lib/town/light-budget.js';
   import { paintedCoast, type Site } from '$lib/town/painted-coast.js';
   import { journalDetails } from '$lib/town/journal-details.js';
   import type { SceneCues } from '$lib/town/journal-scenes.js';
@@ -26,34 +29,30 @@
   import { lifeStories } from '$lib/town/life-stories.js';
   import { emptyCensus, housedResidents, citizenLife, type Census } from '$lib/town/citizens.js';
   let census=$state.raw<Census>(emptyCensus()), now=$state(Math.floor(Date.now()/1000)), query=$state('');
-  let {guest=false,readOnly=false,exampleHomes=residentHomes,afterglow=false,fixedHour,onExit,navigation,draft=$bindable(''),draftId=$bindable(''),busy=$bindable(false)}:{guest?:boolean;readOnly?:boolean;exampleHomes?:typeof residentHomes;afterglow?:boolean;fixedHour?:number;onExit?:()=>void;navigation?:Snippet;draft?:string;draftId?:string;busy?:boolean}=$props();
-  const notes = [
-    'The light was still on across the street.', 'Made tea before the alarm.', 'The morning train was nearly empty.',
-    'I borrowed a blue bowl and forgot to give it back.', 'We walked home slowly.', 'There was a postcard in the mail.',
-    'The rain let up at lunch.', 'I can hear the ferry from here.', 'Washed the window over the sink.',
-    'Bought peaches even though we had enough.', 'The library stayed open late.', 'I kept the ticket.',
-    'A long conversation on the stairs.', 'Someone planted thyme by the gate.', 'We took the last bus.',
-    'The book fell open to the same page.', 'I went down to the water before work.', 'Dinner on the landing.',
-    'I woke up early and stayed there listening.', 'The sky was the color of a plum.', 'We made too much rice.',
-    'The old radio still works.', 'My shoes dried in the sun.', 'I mailed the letter on the way home.',
-    'The kettle was already on.', 'I heard a song I used to know.', 'We watched the weather change.',
-    'Another chair by the window.', 'I finally fixed that loose hinge.', 'A gull slept on the roof.',
-    'The bread was warm all the way home.', 'Walked the long way for once.'
-  ];
-  function examples():EntryData[] {
-    return notes.map((body,i)=>({id:hashPage('lacuna-coast-'+i).toString(16).padStart(32,'0'),riverEdition:currentRiverEdition,user_id:'guest',body,
-      created_at:1609459200+i*49171,solidified_at:1609459200+i*49171,kept_at:null}));
-  }
+  let {guest=false,readOnly=false,exampleHomes=residentHomes,lightBudget,afterglow=false,fixedHour,onExit,navigation,draft=$bindable(''),draftId=$bindable(''),busy=$bindable(false)}:{guest?:boolean;readOnly?:boolean;exampleHomes?:typeof residentHomes;lightBudget?:LightBudget;afterglow?:boolean;fixedHour?:number;onExit?:()=>void;navigation?:Snippet;draft?:string;draftId?:string;busy?:boolean}=$props();
   let canvas:HTMLCanvasElement,dialog:HTMLDialogElement;
+  let postcard=$state<MonumentPostcard>();
+  let postcardRead=$state(0), postcardOpen=$state(false);
+  async function markPostcardRead(){
+    const seen=edition,version=sessionVersion.value;
+    if(postcardRead>=seen)return;
+    if(guest){postcardRead=seen;return;}
+    try{
+      const read=await api.city.readPostcard(seen);
+      if(alive && sessionVersion.value===version)postcardRead=Math.max(postcardRead,read);
+    }catch{if(alive && sessionVersion.value===version)notice='Could not mark the postcard as read.';}
+  }
   let pageOpen=$state(false),closing=$state(false);
   let dialogRevision=0;
   let opener:HTMLElement|null=null;
   let pageTurn:Animation|undefined;
   function syncSound(){
-    scene?.setSound(valleyAudioContext(),valleyPlayback.ambience&&!valleyPlayback.muted,pageOpen);
+    scene?.setSound(valleyAudioContext(),valleyPlayback.ambience&&!valleyPlayback.muted,pageOpen||postcardOpen);
   }
   let entries=$state.raw<EntryData[]>([]),scene=$state.raw<Awaited<ReturnType<typeof createHarbor>>|null>(null);
   let forgotten=$state.raw<ForgottenAddress[]>([]);
+  const weeks=$derived(writingWeeks([...entries,...forgotten]));
+  const edition=$derived(postcardEdition(weeks));
   let ready=$state(false),paused=$state(false),graphicsError=$state(false),error=$state(''),notice=$state('');
   let readId=$state('');
   let markers=$state.raw<PageMarker[]>([]),writingDate=$state(new Date());
@@ -111,9 +110,9 @@
   async function read(){
     const request=++readRequest, version=sessionVersion.value;
     try{
-      const journal=guest?{entries:examples(),forgotten:[],census:emptyCensus()}:await api.city.get();
+      const journal=guest?{entries:exampleJournal(),postcardRead,forgotten:[],census:emptyCensus()}:await api.city.get();
       if(!alive || request!==readRequest || version!==sessionVersion.value)return;
-      entries=journal.entries;forgotten=journal.forgotten;census=journal.census;now=Math.floor(Date.now()/1000);
+      entries=journal.entries;forgotten=journal.forgotten;postcardRead=Math.max(postcardRead,journal.postcardRead??0);census=journal.census;now=Math.floor(Date.now()/1000);
       ready=true;error='';
       if(readId && !entries.some(e=>e.id===readId)){readId='';dialog?.close();}
     }
@@ -128,7 +127,7 @@
     try{
       const {createHarbor}=await import('$lib/town/harbor.js');
       if(!alive)return;
-      const city=await createHarbor(canvas,readPage,afterglow,next=>{if(alive)markers=next;},fixedHour,visit=>{if(alive)resident=visit;},meet);
+      const city=await createHarbor(canvas,readPage,afterglow,next=>{if(alive)markers=next;},fixedHour,visit=>{if(alive)resident=visit;},meet,lightBudget);
       if(alive)scene=city;else city.destroy();
     }catch{if(alive)graphicsError=true;}
   }
@@ -272,8 +271,9 @@
   {#if opening}<ValleyLoading audio label={ready?'Opening the valley…':'Opening your journal…'} onExit={guest?onExit:undefined}/>{/if}
   <h1 class="visually-hidden" tabindex="-1">{guest?'Example city':'Your city'}</h1>
   {#if !opening}
-    <Masthead floating audio journalMenu sound={soundToggles} disabled={busy} world={guest?'Example city':'Your city'} pageCount={entries.length}>
+    <Masthead floating audio journalMenu unread={ready && edition>postcardRead} sound={soundToggles} disabled={busy} world={guest?'Example city':'Your city'} pageCount={entries.length}>
       <IconAction icon="pages" label="Pages" onclick={()=>open('pages')} disabled={!ready}/>
+      {#if ready && edition}<IconAction icon="postcard" label="A postcard" unread={edition>postcardRead} onclick={()=>postcard?.show()}/>{/if}
       {#if scene}
         {#each valleyViews as view}
           <IconAction icon={view==='City'?'city':'overlook'} label={view==='City'?'City view':view} onclick={()=>scene?.visit(view)}/>
@@ -302,6 +302,7 @@
       </div>
     </div>
   {/if}
+  {#if ready && edition}<MonumentPostcard bind:this={postcard} {weeks} canVisit={!!scene} onopen={value=>postcardOpen=value} onread={markPostcardRead} onvisit={id=>scene?.visitMonument(id)}/>{/if}
   <dialog bind:this={dialog} class:closing class:browsing={panel==='pages'||panel==='read'} aria-labelledby="journal-heading" oncancel={e=>{e.preventDefault();if(!busy)void dismiss();}}
     onclose={restoreFocus}>
     <div class="folio" class:directory-sheet={panel==='directory'} class:reading={panel==='read'||panel==='forget'||panel==='resident'}>

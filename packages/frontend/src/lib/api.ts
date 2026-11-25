@@ -30,7 +30,8 @@ export const api = {
       request<{ ok: boolean }>('/auth/account', { method: 'DELETE' }),
   },
   city: {
-    get: () => request<{entries:EntryData[];forgotten:ForgottenAddress[];census:import('./town/citizens.js').Census}>('/city'),
+    get: () => request<{entries:EntryData[];forgotten:ForgottenAddress[];postcardRead?:number;census:import('./town/citizens.js').Census}>('/city'),
+    readPostcard: (edition:number) => request<number>('/city/postcard',{method:'POST',body:JSON.stringify({edition})}),
     write: (body:string, solidified_at:number, entry_id:string) => request<{entry:EntryData;created:boolean}>('/entries', {method:'POST',body:JSON.stringify({body,solidified_at,entry_id,city:true})}),
   },
   entries: {

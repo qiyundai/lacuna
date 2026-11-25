@@ -8,8 +8,10 @@ import { forgetPageAt, validCityHistory, type ForgottenAddress } from '../../../
 
 import { emptyCensus, validCensus, settleCity, type Census } from './town/citizens.js';
 
+
 export interface WebJournal {
   census?:Census;
+  postcardRead?: number;
   deviceOnly?: true;
   acceptedTerms?: string;
   deviceSync?: DeviceSync;
@@ -86,6 +88,7 @@ async function open(envelope: WebEnvelope, key: CryptoKey): Promise<WebJournal> 
   if (data?.format !== 'lacuna.web-journal.v1' || !Number.isSafeInteger(data.revision) || !Array.isArray(data.entries) || !Array.isArray(data.memoirs) || !data.graph || !Array.isArray(data.graph.nodes) || !data.weights || typeof data.weights !== 'object' || Array.isArray(data.weights)) throw new Error('Invalid journal');
   if (!data.entries.every((e: EntryData) => e && typeof e.id === 'string' && /^[a-f0-9]{32}$/.test(e.id) && typeof e.user_id === 'string' && typeof e.body === 'string' && e.body.length <= 500 && Number.isSafeInteger(e.created_at) && e.created_at >= 0 && e.created_at < 1e12 && (e.solidified_at === null || Number.isSafeInteger(e.solidified_at)) && (e.kept_at === null || Number.isSafeInteger(e.kept_at))) || !data.memoirs.every((m: MemoirEdition) => m && typeof m.id === 'string' && typeof m.prose === 'string' && m.prose.length <= 30000 && Number.isSafeInteger(m.generated_at))) throw new Error('Invalid journal records');
   if(data.census!==undefined && !validCensus(data.census))throw new Error('Invalid resident records');
+  if(data.postcardRead!==undefined && (!Number.isSafeInteger(data.postcardRead) || data.postcardRead<0))throw new Error('Invalid postcard edition');
   if(!validCityHistory(data.entries,data.forgotten))throw new Error('Invalid city addresses');
   if(data.entries.some((e:EntryData)=>e.writingDay!==undefined &&
       (!Number.isSafeInteger(e.writingDay) || Math.abs(e.writingDay-Math.floor(e.created_at/86400))>1)))throw new Error('Invalid writing day');

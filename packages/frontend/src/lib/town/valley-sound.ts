@@ -110,6 +110,30 @@ export function createValleySound(context: AudioContext, refresh: () => void) {
     start({key:'settling',clip:'dock-a',position,range:180,level:.34,score:1},buffer,false,.027);
   }
 
+  const resonances=new Set<OscillatorNode>();
+  let lastResonance=-Infinity;
+  function resonate(kind:'bell-yard'|'tide-organ',position:Vector3,daylight:number){
+    const now=context.currentTime;
+    if(!enabled || context.state!=='running' || now-lastResonance<3)return;
+    lastResonance=now;
+    const bell=kind==='bell-yard';
+    const tones=bell?[174.61,347.1,466.2,724.7]:daylight>.5?[130.81,196,293.66]:[110,164.81,246.94];
+    const pan=context.createPanner();
+    pan.distanceModel='inverse';pan.refDistance=38;pan.rolloffFactor=.7;
+    pan.setPosition(position.x,position.y,position.z);pan.connect(master);
+    let remaining=tones.length;
+    for(const [i,hz] of tones.entries()){
+      const osc=context.createOscillator(),amp=context.createGain(),end=now+(bell?4.5:3.4)-i*.24;
+      osc.frequency.value=hz;osc.type='sine';
+      amp.gain.setValueAtTime(.0001,now);
+      amp.gain.exponentialRampToValueAtTime((bell?.11:.08)/(1+i),now+(bell?.018:.78));
+      amp.gain.exponentialRampToValueAtTime(.0001,end);
+      osc.connect(amp).connect(pan);resonances.add(osc);
+      osc.onended=()=>{osc.disconnect();amp.disconnect();resonances.delete(osc);if(--remaining===0)pan.disconnect();};
+      osc.start(now);osc.stop(end+.02);
+    }
+  }
+
   function update(camera: Camera, daylight: number, paused: boolean, places: readonly SoundPlace[],
     ferries: readonly SoundFerry[], flocks: readonly Vector3[], terrain: (x:number,z:number)=>number,
     cover: (x:number,z:number,y:number)=>number) {
@@ -200,7 +224,8 @@ export function createValleySound(context: AudioContext, refresh: () => void) {
     }
   }
   let callingGull: Vector3 | undefined;
-  return { mix, update, settle, destroy() {
+  return { mix, update, settle, resonate, destroy() {
+    for(const oscillator of resonances)oscillator.stop();
     abort.abort();
     for (const voice of live) {
       voice.node.onended = null; voice.node.stop(); voice.node.disconnect();

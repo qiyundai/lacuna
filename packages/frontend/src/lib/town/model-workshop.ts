@@ -7,8 +7,8 @@ import { finishBuilding } from './surface-relief.js';
 
 export const colors = {
   stone: '#c4a78a', lintel: '#dfcbb0', shade: '#9a7969', plaster: '#bd8162',
-  copper: '#487c77', seam: '#78a19a', gold: '#b29461',
-  iron: '#3e5457', glass: '#50666c', seaGlass: '#8da9a7', amber: '#d59b56', glow: '#f2c88a', lantern: '#f2c88a',
+  bronze: '#71694d', copper: '#487c77', seam: '#78a19a', gold: '#b29461',
+  iron: '#3e5457', glass: '#50666c', honeyGlass: '#b5996f', seaGlass: '#8da9a7', amber: '#d59b56', glow: '#f2c88a', lantern: '#f2c88a',
   wood: '#674b3c', recess: '#363a39', slate: '#505b5a', clay: '#a96450',
   ochre: '#cd9d66', sage: '#93a797', chalk: '#d5c1a6', oxblood: '#97594e',
   foliage: '#526d55', zinc: '#6d8390', verdigris: '#92aba0', crystal: '#b3d4c9'
@@ -48,7 +48,7 @@ function sculpt(width: number, depth: number, boxShape: T.BufferGeometry, rodSha
     const tint = new T.Color(colors[roomWindows&&warmPane?'seaGlass':color]);
     const rgb = new Float32Array(geometry.getAttribute('position').count * 3);
     const positions = shape.getAttribute('position');
-    const glazing = color === 'glass' || color === 'seaGlass';
+    const glazing = color === 'glass' || color === 'seaGlass' || color === 'honeyGlass';
     const pane = glazing || warmPane;
     for (let i = 0; i < positions.count; i++) {
       const lift = pane ? 1 - .32 * (positions.getY(i) + .5) + .12 * positions.getX(i) : 1;
@@ -58,7 +58,7 @@ function sculpt(width: number, depth: number, boxShape: T.BufferGeometry, rodSha
     }
     geometry.setAttribute('color', new T.BufferAttribute(rgb, 3));
     const finish = color==='foliage'?'leaves':color === 'lantern' || (!roomWindows&&warmPane) ? 'light'
-      : pane ? 'glazing' : color === 'crystal' ? 'crystal' : ['copper', 'seam', 'gold', 'iron'].includes(color) ? 'metal' : 'mineral';
+      : pane ? 'glazing' : color === 'crystal' ? 'crystal' : ['copper', 'bronze', 'seam', 'gold', 'iron'].includes(color) ? 'metal' : 'mineral';
     if(roomWindows&&(finish==='glazing'||finish==='crystal')){
       geometry.computeBoundingBox();
       const center=geometry.boundingBox!.getCenter(new T.Vector3());
@@ -103,6 +103,12 @@ function sculpt(width: number, depth: number, boxShape: T.BufferGeometry, rodSha
     place(g, c, new T.Matrix4().makeTranslation(x, y, z));
     g.dispose();
   }
+  function at(x:number,y:number,z:number,angle:number,draw:()=>void) {
+    const previous=frame;
+    frame=previous.clone().multiply(new T.Matrix4().makeRotationY(angle).setPosition(x,y,z));
+    draw();
+    frame=previous;
+  }
   function face(side: number, fn: () => void, reach = side % 2 ? width / 2 : depth / 2) {
     const previous = frame;
     const angle = side * Math.PI / 2;
@@ -111,7 +117,7 @@ function sculpt(width: number, depth: number, boxShape: T.BufferGeometry, rodSha
     fn();
     frame = previous;
   }
-  return { batches, markers, room, mark, entrance, clock, vec, box, rod, orb, relief, face, place };
+  return { batches, markers, room, mark, entrance, clock, at, vec, box, rod, orb, relief, face, place };
 }
 
 export type ModelTools = ReturnType<typeof sculpt>;
@@ -167,7 +173,7 @@ export function createModelWorkshop(width: number, depth: number, paint?: Gouach
     return group;
   }
 
-  return { module, boxShape,
+  return { module, boxShape, glazing:finishes.glazing, bulbs:finishes.light,
     dispose() {
       for (const g of [boxShape, rodShape, sphere, ...meshes]) g.dispose();
       for (const material of Object.values(finishes)) material.dispose();

@@ -16,7 +16,7 @@ export type Chapter = { id: string; pages: string[]; passages: Passage[]; repair
 export type Book = { version: 1; notes: Record<string, Note[]>; chapters: Chapter[]; lastEdition?:number };
 export type BookTask = { kind: 'observe'|'write'; primary: string[]; evidence: Evidence[]; chapter?: string };
 export const emptyBook = (): Book => ({ version: 1, notes: {}, chapters: [] });
-export const writingDay = (page: Page) => page.writingDay??Math.floor(page.created_at / 86400);
+export const writingDay = (page: Pick<Page,'created_at'|'writingDay'>) => page.writingDay??Math.floor(page.created_at / 86400);
 const day=writingDay;
 export function localWritingDay(date:Date){
   return Date.UTC(date.getFullYear(),date.getMonth(),date.getDate())/86400000;

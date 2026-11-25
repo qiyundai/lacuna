@@ -1,8 +1,9 @@
+import { fadingLightSlots } from './fading-light-slots.js';
 import * as T from 'three';
 import { roomGlow,type CityLight } from './city-clock.js';
 
 export type WindowEmitter={center:T.Vector3;normal:T.Vector3;threshold:number};
-export type RoomSource=WindowEmitter & {workplace:boolean;address:number};
+export type RoomSource=WindowEmitter & {workplace:boolean;address:number;fixture?:{reach:number;width:number}};
 
 export function floorSeed(address:number,matrix:T.Matrix4){
   const e=matrix.elements;
@@ -60,8 +61,8 @@ export function roomLighting(){
   },dispose(){glazing.dispose();crystal.dispose();proxy.dispose();}};
 }
 
-export function windowShafts(depth:T.DepthTexture,camera:T.PerspectiveCamera){
-  const limit=12,screen=new T.Vector2(),scene=new T.Scene();
+export function windowShafts(depth:T.DepthTexture,camera:T.PerspectiveCamera,limit:number){
+  const screen=new T.Vector2(),scene=new T.Scene();
   const material=new T.ShaderMaterial({uniforms:{depth:{value:depth},screen:{value:screen},invProjection:{value:camera.projectionMatrixInverse}},
     side:T.BackSide,transparent:true,depthTest:false,depthWrite:false,blending:T.AdditiveBlending,
     vertexShader:`
@@ -93,37 +94,46 @@ export function windowShafts(depth:T.DepthTexture,camera:T.PerspectiveCamera){
       }`});
   const mesh=new T.InstancedMesh(new T.BoxGeometry(),material,limit);
   mesh.frustumCulled=false;mesh.count=0;scene.add(mesh);
-  const transform=new T.Object3D(),axis=new T.Vector3(0,0,1),aim=new T.Vector3(),view=new T.Frustum(),clip=new T.Matrix4();
+  const bounds=new T.Sphere(),transform=new T.Object3D(),axis=new T.Vector3(0,0,1),aim=new T.Vector3(),view=new T.Frustum(),clip=new T.Matrix4();
   const lastEye=new T.Vector3(Infinity,0,0),lastRotation=new T.Quaternion(),intensity=new T.Color();
-  let previous=-Infinity,previousLight:CityLight|undefined;
+  const fades=fadingLightSlots(limit);
+  let previous=-Infinity,previousLight:CityLight|undefined,changing=false;
   function select(sources:RoomSource[],light:CityLight,time:number,skip?:number){
-    mesh.count=0;
-    if(light.daylight>.94)return;
+
     view.setFromProjectionMatrix(clip.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
-    const nearby=sources.flatMap(source=>{
+    const nearby=light.daylight>=1?[]:sources.flatMap(source=>{
       const distance=camera.position.distanceToSquared(source.center);
-      return distance<52*52 && source.address!==skip && roomGlow(source.threshold,source.workplace,light)>.1
-        && view.containsPoint(source.center)?[{source,distance}]:[];
-    }).sort((a,b)=>a.distance-b.distance);
-    const budget=screen.x<290?3:limit;
-    for(const {source} of nearby){
-      if(mesh.count>=budget)break;
-      aim.copy(source.normal);aim.y-=.17;aim.normalize();
-      transform.position.copy(source.center).addScaledVector(aim,1.32);
+      const reach=source.fixture?.reach??2.6,range=source.fixture?175+reach*3:52;
+      return distance<range*range && source.address!==skip && (source.fixture || roomGlow(source.threshold,source.workplace,light)>.1)
+        && view.intersectsSphere(bounds.set(source.center,reach))?[{source,score:distance/(source.fixture?reach*.85:1),strength:source.fixture?1.35:roomGlow(source.threshold,source.workplace,light)}]:[];
+    });
+    fades.select(nearby,screen.x<290?limit/2:limit);
+    previous=time;previousLight=light;lastEye.copy(camera.position);lastRotation.copy(camera.quaternion);
+  }
+  function place(light:CityLight){
+    mesh.count=0;
+    for(const {source,gain} of fades.slots){
+      if(!source||gain<=0||light.daylight>=1)continue;
+      const reach=source.fixture?.reach??2.6,width=source.fixture?.width??1.3;
+      aim.copy(source.normal);if(!source.fixture)aim.y-=.17;aim.normalize();
+      transform.position.copy(source.center).addScaledVector(aim,reach*.5);
       transform.quaternion.setFromUnitVectors(axis,aim);
-      transform.scale.set(1.3,1.2,2.6);transform.updateMatrix();
-      mesh.setColorAt(mesh.count,intensity.setScalar(roomGlow(source.threshold,source.workplace,light)*(1-light.daylight)));
+      transform.scale.set(width,width*.93,reach);transform.updateMatrix();
+      mesh.setColorAt(mesh.count,intensity.setScalar(gain*(1-light.daylight)));
       mesh.setMatrixAt(mesh.count++,transform.matrix);
     }
     mesh.instanceMatrix.needsUpdate=true;
     if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
-    previous=time;previousLight=light;lastEye.copy(camera.position);lastRotation.copy(camera.quaternion);
   }
-  return {screen,invalidate(){previous=-Infinity;},render(renderer:T.WebGLRenderer,sources:RoomSource[],light:CityLight,time:number,skip?:number){
-    if(light.daylight>.94)return;
-    if(time-previous>.7 || previousLight!==light || lastEye.distanceToSquared(camera.position)>1 || Math.abs(lastRotation.dot(camera.quaternion))<.9998)
-      select(sources,light,time,skip);
-    if(!mesh.count)return;
+  return {screen,invalidate(){previous=-Infinity;},render(renderer:T.WebGLRenderer,sources:RoomSource[],light:CityLight,time:number,dt:number,skip?:number){
+    const refresh=time-previous>.7 || previousLight!==light || lastEye.distanceToSquared(camera.position)>1 || Math.abs(lastRotation.dot(camera.quaternion))<.9998;
+    if(refresh)select(sources,light,time,skip);
+    if(refresh||changing){
+      changing=fades.advance(dt);
+      place(light);
+    }
+    if(!mesh.count)return changing;
     const clear=renderer.autoClear;renderer.autoClear=false;renderer.render(scene,camera);renderer.autoClear=clear;
+    return changing;
   },dispose(){mesh.dispose();mesh.geometry.dispose();material.dispose();}};
 }

@@ -1,5 +1,6 @@
 import { attachPresence, remember, reviseThread } from '../../../shared/village.js';
 import { currentRiverEdition } from '../../../shared/city-address.js';
+import { postcardEdition, writingWeeks } from '../../../shared/monuments.js';
 import { localWritingDay } from '../../../shared/living-book.js';
 import { browserVault, WebVault, WebVaultError, announceBrowserLock, forgetWebPage } from './web-vault.js';
 import type { EntryData } from './api.js';
@@ -25,12 +26,19 @@ export async function webRequest(path: string, method = 'GET', value?: unknown, 
   if (path === '/village' && method === 'GET') return {entries:data.entries};
   if (path === '/city' && method === 'GET') {
     const census=settleCity(data.entries,data.forgotten??[],data.census,timestamp);
-    if(JSON.stringify(census)===JSON.stringify(data.census))return {entries:data.entries,forgotten:data.forgotten??[],census};
+    if(JSON.stringify(census)===JSON.stringify(data.census))return {entries:data.entries,forgotten:data.forgotten??[],census,postcardRead:data.postcardRead};
     return vault.update(journal=>{
       journal.census=settleCity(journal.entries,journal.forgotten??[],journal.census,timestamp);
-      return {entries:journal.entries,forgotten:journal.forgotten??[],census:journal.census};
+      return {entries:journal.entries,forgotten:journal.forgotten??[],census:journal.census,postcardRead:journal.postcardRead};
     });
   }
+  if (path === '/city/postcard' && method === 'POST') return vault.update(journal=>{
+    const edition=body?.edition;
+    const available=postcardEdition(writingWeeks([...journal.entries,...journal.forgotten??[]]));
+    if(typeof edition!=='number' || !Number.isInteger(edition) || edition<1 || edition>available)throw new WebVaultError('BAD_POSTCARD','Reopen the postcard.');
+    journal.postcardRead=Math.max(journal.postcardRead??0,edition);
+    return journal.postcardRead;
+  });
   if (path === '/village/thread' && method === 'POST') return vault.update(journal => reviseThread(journal.entries,body));
   if (path === '/village/encounter' && method === 'POST') return vault.update(journal => remember(journal.entries, body));
   if(path === '/town' && method === 'GET') {

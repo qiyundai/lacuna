@@ -1,12 +1,12 @@
-export const currentRiverEdition = 4 as const;
-export type CityPage = { id:string; created_at:number; riverEdition?:2|3|4 };
+export const currentRiverEdition = 5 as const;
+export type CityPage = { id:string; created_at:number; writingDay?:number; riverEdition?:2|3|4|5 };
 export type ForgottenAddress = CityPage & { position:number; forgottenAfter:number };
 
 export function forgetAddress(entries:readonly CityPage[],forgotten:readonly ForgottenAddress[],index:number):ForgottenAddress {
-  const {id,created_at,riverEdition}=entries[index]!;
+  const {id,created_at,riverEdition,writingDay}=entries[index]!;
   let position=index;
   for(const address of forgotten)if(address.position<=position)position++;
-  return {id,created_at,...(riverEdition && {riverEdition}),position,forgottenAfter:entries.length+forgotten.length};
+  return {id,created_at,...(writingDay!==undefined && writingDay!==Math.floor(created_at/86400) && {writingDay}),...(riverEdition && {riverEdition}),position,forgottenAfter:entries.length+forgotten.length};
 }
 
 export function citySequence(entries:readonly CityPage[],forgotten:readonly ForgottenAddress[]):CityPage[]{
@@ -38,10 +38,11 @@ export function validCityHistory(entries:readonly CityPage[],addresses?:Forgotte
   return addresses.every(a=>{
     if(!a || typeof a.id!=='string' || !/^[a-f0-9]{32}$/.test(a.id) || ids.has(a.id) ||
       !Number.isSafeInteger(a.created_at) || a.created_at<0 ||
-      (a.riverEdition!==undefined && a.riverEdition!==2 && a.riverEdition!==3 && a.riverEdition!==4) ||
+      (a.writingDay!==undefined && (!Number.isSafeInteger(a.writingDay) || Math.abs(a.writingDay-Math.floor(a.created_at/86400))>1)) ||
+      (a.riverEdition!==undefined && a.riverEdition!==2 && a.riverEdition!==3 && a.riverEdition!==4 && a.riverEdition!==5) ||
       !Number.isSafeInteger(a.position) || a.position<=previous || !Number.isSafeInteger(a.forgottenAfter) ||
       a.forgottenAfter<=a.position || a.forgottenAfter>length ||
-      Object.keys(a).some(k=>!['id','created_at','riverEdition','position','forgottenAfter'].includes(k)))return false;
+      Object.keys(a).some(k=>!['id','created_at','writingDay','riverEdition','position','forgottenAfter'].includes(k)))return false;
     previous=a.position;ids.add(a.id);return true;
   });
 }

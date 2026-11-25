@@ -1,3 +1,5 @@
+import { monuments, writingWeek } from '../../../../shared/monuments.js';
+import { reserveMonument, reservation, parcelReserved, type MonumentPlot } from './monument-placement.js';
 import { hashPage, type CityPage } from './city-growth.js';
 import { citySequence, type ForgottenAddress } from '../../../../shared/city-address.js';
 
@@ -7,7 +9,7 @@ import { venueKinds, riverVenues, isRiverVenue, type Architecture } from './arch
 export { frontage } from './architecture-catalog.js';
 export type Bank = 0 | 1;
 export type Site = { id:string; kind:Architecture; elevation?:number; bank:Bank; ferryTerminal?:boolean; setback?:number; district?:RiverDistrict; x:number; y:number; width:number; mirror:boolean; lane:number; lights:number; quiet?:boolean; readableId?:string; litAdditions?:number; predecessor?:Site };
-export type Coast = { neighborhoods:Neighborhoods; ports:Site[]; sites:Site[]; addresses:Map<string,Site>; rooms:Map<string,number>; latest?:Site; service:number; start:number; end:number };
+export type Coast = { monumentPlots?:MonumentPlot[]; neighborhoods:Neighborhoods; ports:Site[]; sites:Site[]; addresses:Map<string,Site>; rooms:Map<string,number>; latest?:Site; service:number; start:number; end:number };
 
 const lanes:readonly Architecture[][] = [
   ['terraces','houses','steps','pines','apartments'],
@@ -55,9 +57,34 @@ export function paintedCoast(entries:readonly CityPage[],forgotten:readonly Forg
     if(lane===3 && salt%4===0)pool.push('beacon');
     return pool;
   };
+  const monumentPlots:MonumentPlot[]=[],reserved:ReturnType<typeof reservation>=[],weeks=new Set<number>();
+  function offer(parcel:Parcel){
+    let {column,lane,bank}=parcel;
+    while(parcelReserved(reserved,column,lane,bank))column++;
+    const k=key(column,lane,bank);
+    if(!occupied.has(k))front.set(k,{column,lane,bank});
+  }
+  let reservesDuringGrowth=false;
+  const pending:{id:MonumentPlot['id'];page:CityPage;anchor:Site}[]=[];
+  function claim(id:MonumentPlot['id'],page:CityPage,anchor:Site){
+    const plot=reserveMonument(id,pages[0]!.id,page.id,anchor,sites,monumentPlots);
+    monumentPlots.push(plot);reserved.push(...reservation(plot));
+    const candidates=[...front.values()];front.clear();for(const parcel of candidates)offer(parcel);
+  }
+  function claimArchive(){
+    for(const {id,page,anchor} of pending)claim(id,page,anchor);
+    pending.length=0;
+  }
+  function settleMilestone(page:CityPage,anchor:Site){
+    weeks.add(writingWeek(page));
+    const next=monuments[monumentPlots.length+pending.length];
+    if(!next || weeks.size<next.weeks)return;
+    if(reservesDuringGrowth)claim(next.id,page,anchor);else pending.push({id:next.id,page,anchor});
+  }
   for(const page of pages){
     const salt=hashPage(page.id),last=sites.length;
-    const expanded = page.riverEdition === 4;
+    if(!reservesDuringGrowth && page.riverEdition===5){claimArchive();reservesDuringGrowth=true;}
+    const expanded = page.riverEdition === 4 || page.riverEdition === 5;
     const emerging = expanded || page.riverEdition === 3;
     const twoBanks = emerging || page.riverEdition === 2;
     const position=positions.get(page.id)!;
@@ -66,7 +93,7 @@ export function paintedCoast(entries:readonly CityPage[],forgotten:readonly Forg
     if(last>5 && salt%8===2 && recent.length){
       latest=recent[(salt>>>9)%recent.length]!;
       occupiedUntil.set(latest,Math.max(occupiedUntil.get(latest)!,until));
-      latest.lights++;rooms.set(page.id,latest.lights);influenceAround(neighborhoods,latest,true);addresses.set(page.id,latest);service++;continue;
+      latest.lights++;rooms.set(page.id,latest.lights);influenceAround(neighborhoods,latest,true);addresses.set(page.id,latest);service++;settleMilestone(page,latest);continue;
     }
     let choice:Parcel|undefined,score=-Infinity,adjacent=0;
     for(const parcel of front.values()){
@@ -142,15 +169,17 @@ export function paintedCoast(entries:readonly CityPage[],forgotten:readonly Forg
     sites.push(latest);addresses.set(page.id,latest);occupied.set(key(column,lane,bank),latest);front.delete(key(column,lane,bank));
     for(const [dc,dl] of neighbors){
       const c=column+dc,l=lane+dl,k=key(c,l,bank);
-      if(c>=0&&l>=0&&l<4&&!occupied.has(k))front.set(k,{column:c,lane:l,bank});
+      if(c>=0&&l>=0&&l<4&&!occupied.has(k))offer({column:c,lane:l,bank});
     }
     bankLots[bank]++;
     if(bank===1)farFounded=true;
     if(latest.ferryTerminal && !occupied.has(key(column,3,across)) && (!farFounded || twoBanks))
-      front.set(key(column,3,across),{column,lane:3,bank:across});
+      offer({column,lane:3,bank:across});
     edge[bank]=Math.max(edge[bank]!,column);end=Math.max(end,Math.ceil((x+latest.width*.5)/1800)*1800);
     if(latest.ferryTerminal)service++;
+    settleMilestone(page,latest);
   }
+  claimArchive();
   if(forgotten.length){
     const residents=new Map<Site,string[]>();
     for(const [id,site] of addresses){
@@ -167,5 +196,5 @@ export function paintedCoast(entries:readonly CityPage[],forgotten:readonly Forg
       service+=site.litAdditions+Number(site.ferryTerminal);
     }
   }
-  return {sites,latest,addresses,rooms,neighborhoods,ports:sites.filter(site=>site.ferryTerminal&&!site.quiet),service,start:0,end};
+  return {monumentPlots,sites,latest,addresses,rooms,neighborhoods,ports:sites.filter(site=>site.ferryTerminal&&!site.quiet),service,start:0,end};
 }

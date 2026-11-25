@@ -1,3 +1,7 @@
+import { monumentLightPool } from './monument-light.js';
+import { lightBudgets, type LightBudget } from './light-budget.js';
+import { cityMonuments } from './monument-models.js';
+import type { MonumentId } from '../../../../shared/monuments.js';
 import {lightAt,localHour,meteorClock,onLocalMinute} from './city-clock.js';
 import {floorSeed,roomLighting,type WindowEmitter} from './room-light.js';
 import { batchPlantings } from './tree-batches.js';
@@ -8,7 +12,7 @@ import { constrainValleyView } from './valley-camera.js';
 import * as T from 'three';
 import { cityPageMarkers, type CityParcel, type PageMarker } from './city-page-markers.js';
 import { valleyInput } from './valley-input.js';
-import { createGreenCorridor } from './green-corridor.js';
+import { createGreenCorridor, overlookHeight } from './green-corridor.js';
 import { bankEdge, inValley, overlookCrest, valleyOrigin,riverWidth } from './valley-river.js';
 import { createBayWater } from './bay-water.js';
 import { createBayAtmosphere } from './bay-atmosphere.js';
@@ -148,7 +152,7 @@ function streetDeck(shop:Workshop,points:T.Vector3[]){
   const mesh=new T.Mesh(g,[shop.materials.ashlar,shop.materials.gravel]);mesh.receiveShadow=true;mesh.castShadow=true;return mesh;
 }
 export type ValleyView='City'|'Overlook';
-export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=>void,afterglow=false,onMarkers?:(markers:PageMarker[])=>void,fixedHour?:number,onResident?:(visit?:ResidentVisit)=>void,onMeet?:(id:string)=>void){
+export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=>void,afterglow=false,onMarkers?:(markers:PageMarker[])=>void,fixedHour?:number,onResident?:(visit?:ResidentVisit)=>void,onMeet?:(id:string)=>void,lightBudget:LightBudget=lightBudgets.standard){
   const wind={value:0};
   const [shop,gardens,furniture]=await Promise.all([harborWorkshop(wind),loadGardenPlants(wind),loadJournalFurniture(wind)]);
   const courts=courtTemplates(shop,gardens.props);
@@ -165,9 +169,12 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   const camera=new T.PerspectiveCamera(47,1,.30,valley.far);
   scene.fog=new T.FogExp2('#66827f',.00014);
   const sea=createBayWater(world.sunDirection,world.sun,renderer.extensions.has('EXT_color_buffer_float'),afterglow,world.daylight),water=sea.water;
-  const atmosphere=createBayAtmosphere(renderer,scene,camera,world.sun,world.sunDirection,valley.mist,afterglow,world.daylight);
+  const atmosphere=createBayAtmosphere(renderer,scene,camera,world.sun,world.sunDirection,valley.mist,afterglow,world.daylight,lightBudget.beams);
   scene.add(water,valley.root);
   const city=new T.Group();city.position.set(valleyOrigin.x,0,valleyOrigin.z);city.rotation.y=Math.PI/2;scene.add(city);
+  const naturalGround=(station:number,across:number)=>overlookHeight(valleyOrigin.x+across,valleyOrigin.z-station);
+  const monuments=cityMonuments(shop,naturalGround),monumentLights=monumentLightPool(scene,lightBudget.points);
+  city.add(monuments.root);
   const localEye=new T.Vector3();
   const target=new T.Vector3();
   const scenery=new T.Group(),structures=new T.Group(),paths=new T.Group(),travel=new T.Group();
@@ -224,7 +231,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   let focusX=0,loadedInlet=0;
   let construction: {arrival:ReturnType<typeof buildingArrival>; start:number; site:Site} | undefined;
   let framing: {from:T.Vector3; to:T.Vector3; eye:T.Vector3; end:T.Vector3; start:number} | undefined;
-  let beamReady=false;
+  let beamReady=false,organInWake=false;
   let selectedPage:string|undefined;
   let residentLook:T.Vector3|undefined;
   let following:string|undefined,lastVisit:ResidentVisit|undefined;
@@ -279,6 +286,18 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     following=home.resident;
     return residents.visit(id,seconds);
   }
+  function visitMonument(id:MonumentId){
+    const destination=monuments.view(id);
+    if(!destination)return;
+    const inlet=T.MathUtils.clamp(Math.floor((destination.target.x+72)/144),plan.start/1800,plan.end/1800-1);
+    if(inlet!==loadedInlet)update(plan,undefined,inlet);
+    const center=inValley(destination.target);
+    const horizontal=destination.width*1.08/(2*Math.tan(T.MathUtils.degToRad(camera.fov)*.5)*camera.aspect);
+    const reach=Math.max(destination.distance,horizontal);
+    if(id==='bell-yard'||id==='tide-organ')sound?.resonate(id,center,light.daylight);
+    selectedPage=undefined;inspected=true;
+    moveTo({target:center,eye:center.clone().addScaledVector(destination.direction,reach)},true);
+  }
   function moveTo(pose:{eye:T.Vector3;target:T.Vector3},glide:boolean){
     leaveResident();
     input.reset();
@@ -291,7 +310,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     if(checkedEye.equals(camera.position)&&checkedTarget.equals(target))return;
     const halfHeight=camera.near*Math.tan(T.MathUtils.degToRad(camera.fov)*.5);
     const clearanceRadius=Math.hypot(camera.near,halfHeight,halfHeight*camera.aspect);
-    const upstream=valleyOrigin.z-(plan.end-900)/12.5;
+    const upstream=valleyOrigin.z-Math.max((plan.end-900)/12.5,...(plan.monumentPlots??[]).map(p=>p.lots[0]!.x+35));
     constrainValleyView(camera.position,target,valley.bounds,upstream,valley.ground,clearanceRadius,following!==undefined);
     camera.lookAt(target);camera.updateMatrixWorld();
     checkedEye.copy(camera.position);checkedTarget.copy(target);
@@ -359,6 +378,12 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       wake.sample(boat.position,tangent,time,boat.visible);
       sea.wakeCounts[i]=wake.count.value;
     }
+    const organ=monuments.view('tide-organ');
+    if(organ && !paused){
+      const near=fleet.some(({boat})=>boat.visible && Math.abs(boat.position.x-organ.target.x)<8);
+      if(near && !organInWake && !pageOpen)sound?.resonate('tide-organ',inValley(organ.target),light.daylight);
+      organInWake=near;
+    }
     if(now-clockCheck>=1000){
       clockCheck=now;
       const nextHour=fixedHour??localHour();
@@ -383,14 +408,16 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       const radius=Math.cos(altitude)/(1+Math.sin(altitude));
       world.meteorStart.set((Math.random()-.5)*.021,Math.sign(look.z)*radius);
     }
-    if (time - lastShadowTime >= 3 || shadowEye.distanceToSquared(camera.position)>2.25) {
+    if (time - lastShadowTime >= (movingMonumentNear() && !paused ? .45 : 3) || shadowEye.distanceToSquared(camera.position)>2.25) {
       renderer.shadowMap.needsUpdate = true;
       lastShadowTime = time;
     }
     if(renderer.shadowMap.needsUpdate)shadowEye.copy(camera.position);
     water.position.x=camera.position.x;
     water.position.z=camera.position.z;
-    shop.breezeTime.value=motionPreference.matches?0:time;
+    shop.breezeTime.value=time;
+    monuments.tick(shop.breezeTime.value,1-light.daylight);
+    const fadingSurfaces=monumentLights.update(monuments.sources,camera,1-light.daylight,dt);
     city.worldToLocal(localEye.copy(camera.position));meadow?.view();
     residentProjection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse).multiply(city.matrixWorld);
     residentFrustum.setFromProjectionMatrix(residentProjection);
@@ -399,11 +426,17 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     if(visit?.life!==lastVisit?.life || visit?.task!==lastVisit?.task || visit?.stops!==lastVisit?.stops){
       lastVisit=visit;onResident?.(visit);
     }
-    valley.tick(time,camera.position,shop.breezeTime.value);sea.clock.value=time;atmosphere.render(time,rooms.sources,light,construction?hashPage(construction.site.id):undefined);
+    valley.tick(time,camera.position,shop.breezeTime.value);sea.clock.value=time;
+    const fadingBeams=atmosphere.render(time,rooms.sources,light,dt,construction?hashPage(construction.site.id):undefined);
     sound?.update(camera,light.daylight,paused,soundPlaces,soundFerries,valley.flocks,valley.ground,valley.coverAt);
     const selected=selectedPage?plan.addresses.get(selectedPage):undefined;
     if(onMarkers && !atOverlook)pageTargets.update(selected??plan.latest,selected?selectedPage:undefined);
-    if(!paused||framing||input.active())schedule();
+    if(!paused||framing||input.active()||fadingSurfaces||fadingBeams)schedule();
+  }
+  function movingMonumentNear(){
+    const station=valleyOrigin.z-target.z;
+    return Math.abs((monuments.view('linen-exchange')?.target.x??Infinity)-station)<90 ||
+      Math.abs((monuments.view('post-office')?.target.x??Infinity)-station)<90;
   }
   function applyLight(){
     const onHill=camera.position.z>245;
@@ -424,7 +457,9 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   }
   function refreshTerrain(start:number,end:number){
     const left=(start-900)/12.5,right=(end-900)/12.5,key=left+','+right;
-    valley.followRiver(left,right,plan.end*.08);
+    const [near,far]=monuments.range(left,right);
+    const cliff=monuments.view('post-office')?.plot.lots[0];
+    valley.followRiver(near,far,plan.end*.08,cliff && cliff.x>=near && cliff.x<=far?valleyOrigin.x+cliff.z:undefined);
     if(camera.far!==valley.far){camera.far=valley.far;camera.updateProjectionMatrix();}
     if(rangeKey===key)return;rangeKey=key;sea.bounds.set(left,right);
     if(meadow){city.remove(meadow.group);meadow.dispose();}
@@ -433,8 +468,8 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     meadow=createMeadow(surface,shoreRows,localEye,shop.materials.heath.map!,shop.breezeTime);
     city.add(meadow.group);surface.dispose();
     const woods=new T.Group();
-    plantGroves(left,right,shoreline,landHeight,(x,y,z,h,seed)=>shop.tree(woods,x,y,z,h,seed));
-    plantGroves(left,right,x=>-bankEdge(x,1)-10,(x,z)=>landHeight(x,-z),(x,y,z,h,seed)=>shop.tree(woods,x,y,-z,h,seed));
+    plantGroves(left,right,shoreline,landHeight,(x,y,z,h,seed)=>{if(!monuments.cleared(x,z))shop.tree(woods,x,y,z,h,seed);});
+    plantGroves(left,right,x=>-bankEdge(x,1)-10,(x,z)=>landHeight(x,-z),(x,y,z,h,seed)=>{if(!monuments.cleared(x,-z))shop.tree(woods,x,y,-z,h,seed);});
     scenery.add(bake(woods,valley.plant));
   }
   function sailings(start:number,end:number){
@@ -473,6 +508,10 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     water.forceUpdate=true;
     plan=next;
     if(previous!==next)homes=next.homes??[];
+    if(monuments.update(next.monumentPlots??[])){
+      rangeKey='';
+      valley.clearMonumentSites(monuments.cleared);
+    }
     const focusSite=savedSite??next.latest;
     focusX=focusSite?sitePoint(focusSite).x:0;
     loadedInlet=viewInlet??Math.floor((focusX+72)/144);
@@ -485,7 +524,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     roomHighlight.visible=false;
     construction?.arrival.finish();
     construction=undefined;
-    refreshTerrain(start,end);releaseInstances(structures);rooms.sources.length=0;atmosphere.invalidateRooms();
+    refreshTerrain(start,end);releaseInstances(structures);rooms.sources.length=0;rooms.sources.push(...monuments.sources);atmosphere.invalidateRooms();
     bridge?.dispose();bridge=undefined;
     frontages.clear();roomTargets.clear();
     for(const p of paths.children)if(p instanceof T.Mesh)p.geometry.dispose();paths.clear();
@@ -668,7 +707,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     }
     for(const item of cluster.children)clearWalk(item);
     const grade=cutBuildingPlots(lots,reserved);
-    valley.gradeTown(grade);checkedEye.x=Infinity;
+    valley.gradeTown((x,z,height)=>grade(x,z,monuments.grade(x,z,height)),monuments.exposure);checkedEye.x=Infinity;
     const footprints=parcels.map(parcel=>parcel.box);
     for(const bank of [0,1] as const){
       landscapeWaterfront(shop,gardens.plants,courts,next.neighborhoods,bank,(start-900)/12.5-80,(end-900)/12.5+80,
@@ -758,8 +797,8 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   },options);
   world.setPainted(!!shop.paint);
   const observer=new ResizeObserver(resize);observer.observe(canvas);resize();
-  return {update,visit,visitResident,setSound,pause(value:boolean){paused=value;last=0;schedule();},destroy(){
-    residents.dispose();sound?.destroy();
+  return {update,visit,visitResident,visitMonument,setSound,pause(value:boolean){paused=value;last=0;schedule();},destroy(){
+    residents.dispose();sound?.destroy();monumentLights.dispose();monuments.dispose();
     construction?.arrival.finish();
     bridge?.dispose();meadow?.dispose();rooms.dispose();stopClock?.();
     dead=true;cancelAnimationFrame(frame);observer.disconnect();signals.abort();releaseInstances(structures);releaseInstances(scenery);releaseInstances(tunnel);bore.dispose();

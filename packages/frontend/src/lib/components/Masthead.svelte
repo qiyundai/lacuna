@@ -10,9 +10,9 @@
    *   sound    — sound toggles, grouped at the end of the menu with Music
    *   audio    — show the master sound switch beside the menu button
    */
-  let { children, sound, world, pageCount=0, floating=false, disabled=false, audio=false, journalMenu=false, showSignature=true }: {
+  let { children, sound, world, pageCount=0, floating=false, unread=false, disabled=false, audio=false, journalMenu=false, showSignature=true }: {
     children?:Snippet; sound?:Snippet; world?:string; pageCount?:number; floating?:boolean; disabled?:boolean; audio?:boolean
-    journalMenu?:boolean; showSignature?:boolean
+    journalMenu?:boolean; showSignature?:boolean; unread?:boolean
   } = $props();
   const menuId=$props.id();
   const calendar=new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric'});
@@ -52,10 +52,11 @@
       </div>
     {/if}
     {#if audio}<SoundToggle/>{/if}
-    <button type="button" class="scene-control solid trigger" class:raised={open} bind:this={trigger} popovertarget={menuId} aria-label={open?'Close menu':'Menu'} aria-expanded={open} disabled={disabled||!supported}>
+    <button type="button" class="scene-control solid trigger" class:raised={open} bind:this={trigger} popovertarget={menuId} aria-label={open?'Close menu':'Menu'} aria-describedby={unread && !open?menuId+'-unread':undefined} aria-expanded={open} disabled={disabled||!supported}>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true">
         <path class="top" d="M4 6h16"/><path class="middle" d="M4 12h16"/><path class="base" d="M4 18h16"/>
       </svg>
+      {#if unread && !open}<i class="unread-postcard" aria-hidden="true"></i><span class="visually-hidden" id={menuId+'-unread'}>Unread postcard</span>{/if}
       {#if !open}<span class="scene-caption" aria-hidden="true">Menu</span>{/if}
     </button>
   </div>
