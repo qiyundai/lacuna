@@ -1,6 +1,6 @@
 import * as T from 'three';
 import type { ModelTools as Parts } from './model-workshop.js';
-import { arch, around, chimneypot, foundation, lathe, roof, storey, tileCourses } from './architectural-parts.js';
+import { arch, around, chimneypot, foundation, lathe, roof, stoneFlight, storey, tileCourses } from './architectural-parts.js';
 
 export function market(p: Parts, bays: number, awning: 'ochre' | 'sage' | 'clay') {
   const span = bays * 1.44;
@@ -217,7 +217,8 @@ export function station(p: Parts) {
 export function civic(p: Parts) {
   foundation(p, 6.32, 3.64);
   storey(p, 6.12, 3.46, 2.82, 'chalk', 'pilasters', true, 'fanlight', 0, false);
-  p.entrance(0, .16, 2.98);
+  const firstTread=stoneFlight(p,3.27,3.01,-.20,0,.70,0);
+  p.entrance(0,firstTread,2.98);
   roof(p, 6.44, 3.73, 2.84, .65, 'clay');
   lathe(p, 'stone', 0, 3.10, 0, [[1.28, 0], [1.28, .24], [1.13, .27], [1.13, 1.26], [1.24, 1.31], [1.24, 1.45]], 24);
   for (let i = 0; i < 12; i++) {
@@ -233,8 +234,6 @@ export function civic(p: Parts) {
   }
   lathe(p, 'copper', 0, 4.53, 0, [[1.38, 0], [1.40, .09], [1.28, .20], [1.17, .57], [.94, .94], [.62, 1.23], [.26, 1.39], [.17, 1.41]], 24);
   lathe(p, 'gold', 0, 5.91, 0, [[.23, 0], [.18, .13], [.12, .15], [.12, .45], [.22, .49], [0, .80]], 12);
-  for (let i = 0; i < 4; i++)
-    p.box('stone', 0, .08 + i * .09, 2.88 - i * .22, 3.27, .16 + i * .18, .25);
   for (const x of [-1.34, -.45, .45, 1.34]) {
     lathe(p, 'chalk', x, .37, 2.11, [[.21, 0], [.21, .13], [.15, .17], [.13, 1.96], [.22, 2.05], [.22, 2.15]], 12);
   }

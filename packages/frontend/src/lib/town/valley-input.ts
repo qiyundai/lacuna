@@ -20,7 +20,7 @@ export function valleyInput(canvas:HTMLCanvasElement, camera:PerspectiveCamera, 
     if(key==='-')zoom+=dt*.85;
     if(key==='=')zoom-=dt*.85;
   }
-  function step(now:number){
+  function step(now:number,minRadius=7){
     for(const [key,since] of held){
       keyTravel(key,now-since);
       held.set(key,Math.max(since,now));
@@ -38,7 +38,7 @@ export function valleyInput(canvas:HTMLCanvasElement, camera:PerspectiveCamera, 
     target.z+=(sin*panX-cos*panY)*scale;
     angles.theta+=yaw;
     if(pitch)angles.phi=MathUtils.clamp(angles.phi+pitch,.22,1.84);
-    if(zoom)angles.radius=MathUtils.clamp(angles.radius*Math.exp(zoom),Math.min(7,angles.radius),valleyZoomLimit);
+    if(zoom)angles.radius=MathUtils.clamp(angles.radius*Math.exp(zoom),Math.min(minRadius,angles.radius),valleyZoomLimit);
     camera.position.copy(target).add(offset.setFromSpherical(angles));
     yaw=pitch=panX=panY=zoom=0;
   }

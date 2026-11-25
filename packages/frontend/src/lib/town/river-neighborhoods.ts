@@ -1,3 +1,4 @@
+import { siteDistrict } from './architecture-catalog.js';
 import type { Bank, Site } from './painted-coast.js';
 import { bankPosition, landHeight, laneDepth } from './valley-river.js';
 
@@ -5,11 +6,6 @@ export type RiverParcel = { column:number; lane:number; bank:Bank };
 const districts = ['residential','gardens','exchange','works','civic'] as const;
 export type RiverDistrict = typeof districts[number];
 export type SharedPlace = 'courtyard'|'allotment'|'marketCourt'|'goodsYard'|'waitingGarden';
-const character:Record<Site['kind'],RiverDistrict> = {
-  houses:'residential', steps:'residential', terraces:'residential', crescent:'residential', apartments:'residential',
-  pines:'gardens', glasshouse:'gardens', market:'exchange', wharf:'exchange', crane:'works', warehouse:'works',
-  station:'civic', civic:'civic', belfry:'civic', towers:'residential', arches:'civic', beacon:'works'
-};
 export const districtFrontage:Record<RiverDistrict,Site['kind'][]> = {
   residential:['crescent','houses','terraces'], gardens:['pines','glasshouse','terraces'],
   exchange:['market','warehouse','houses'], works:['warehouse','crane','steps'], civic:['civic','station','apartments']
@@ -20,7 +16,7 @@ export const districtKey=({column,lane,bank}:RiverParcel)=>column*10+bank*5+lane
 type Influence={column:number;lane:number;votes:Record<RiverDistrict,number>; density:number; access:number; anchors:Site[]};
 
 export function influenceAround(field:Map<number,Influence>,site:Site,addition=false){
-  const column=columnOf(site),district=character[site.kind];
+  const column=columnOf(site),district=siteDistrict(site.kind);
   const strength=site.ferryTerminal?3.6:district==='residential'?1:2.2;
   for(let dc=-3;dc<=3;dc++)for(let lane=-1;lane<=3;lane++){
     const distance=Math.hypot(dc,(site.lane-lane)*.88);
@@ -49,9 +45,9 @@ export function sharedPlace(cell:Influence|undefined){
   if(!cell || cell.anchors.length<2 || cell.density<1.15)return;
   const distance=(s:Site)=>(columnOf(s)-cell.column)**2+((s.lane-cell.lane)*.88)**2;
   const nearest=[...cell.anchors].sort((a,b)=>distance(a)-distance(b));
-  const first=character[nearest[0]!.kind];
-  const companion=nearest.find(s=>character[s.kind]!==first)??nearest[1]!;
-  const kinds=new Set([first,character[companion.kind]]);
+  const first=siteDistrict(nearest[0]!.kind);
+  const companion=nearest.find(s=>siteDistrict(s.kind)!==first)??nearest[1]!;
+  const kinds=new Set([first,siteDistrict(companion.kind)]);
   let place:SharedPlace;
   if(kinds.has('exchange') && kinds.has('works'))place='goodsYard';
   else if(kinds.has('civic') && (kinds.has('exchange') || kinds.has('residential')))place='waitingGarden';

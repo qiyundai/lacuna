@@ -1,5 +1,5 @@
 import type { Trace, VillageEntry } from '../../../shared/village.js';
-import type { ForgottenAddress } from '../../../shared/city-address.js';
+import type { CityPage, ForgottenAddress } from '../../../shared/city-address.js';
 import type { Book } from '../../../shared/living-book.js';
 import { sessionVersion } from './session-version.js';
 import { defaultApiOrigin } from '../../../shared/sync-packet.js';
@@ -30,7 +30,7 @@ export const api = {
       request<{ ok: boolean }>('/auth/account', { method: 'DELETE' }),
   },
   city: {
-    get: () => request<{entries:EntryData[];forgotten:ForgottenAddress[]}>('/city'),
+    get: () => request<{entries:EntryData[];forgotten:ForgottenAddress[];census:import('./town/citizens.js').Census}>('/city'),
     write: (body:string, solidified_at:number, entry_id:string) => request<{entry:EntryData;created:boolean}>('/entries', {method:'POST',body:JSON.stringify({body,solidified_at,entry_id,city:true})}),
   },
   entries: {
@@ -70,7 +70,7 @@ export const api = {
 
 export interface EntryData extends VillageEntry {
   writingDay?:number;
-  riverEdition?: 2 | 3;
+  riverEdition?: CityPage['riverEdition'];
   settlement?: Settlement;
   id: string;
   user_id: string;

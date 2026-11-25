@@ -2,6 +2,9 @@ import test from 'node:test';
 import './living-book.test.mjs';
 import './region.test.mjs';
 import './city-details.test.mjs';
+import './river-venues.test.mjs';
+import './citizens.test.mjs';
+import './harbor-residents.test.mjs';
 import './city-clock.test.mjs';
 import './valley-sound.test.mjs';
 import { journalDetails } from '../packages/frontend/src/lib/town/journal-details.ts';
@@ -10,6 +13,40 @@ import { emptyBook, nextBookTask, acceptBookResult } from '../packages/shared/li
 import assert from 'node:assert/strict';
 import { districts } from '../packages/frontend/src/lib/town/districts.ts';
 import { parseAlbum } from '../packages/frontend/src/lib/music-library.ts';
+
+test('landmark stair meshes keep walkable rises through the final landing', async () => {
+  const {Raycaster,Vector3}=await import('three');
+  const {createHarborBuildings}=await import('../packages/frontend/src/lib/town/harbor-buildings.ts');
+  const {createTideHouseKit}=await import('../packages/frontend/src/lib/town/tide-house.ts');
+  const {createFerryHallKit}=await import('../packages/frontend/src/lib/town/ferry-hall.ts');
+  const {maxStairRise,minStairGoing}=await import('../packages/frontend/src/lib/town/architectural-parts.ts');
+  const civic=createHarborBuildings(),tide=createTideHouseKit(),ferry=createFerryHallKit();
+  const down=new Raycaster(undefined,new Vector3(0,-1,0));
+  try {
+    for(const [model,x,start,end,initial,final] of [
+      [civic.build('civic',1,3,0),.02,3.009,1.64,0,.70],
+      [tide.build(1),.22,2.499,1.965,0,.292],
+      [ferry.build(3),.38,2.73,3.439,.145,-.21]
+    ]){
+      model.updateMatrixWorld(true);
+      let previous=initial,lastChange;
+      const samples=Math.ceil(Math.abs(end-start)/.005);
+      for(let i=0;i<=samples;i++){
+        const z=start+(end-start)*i/samples;
+        down.ray.origin.set(x,.95,z);
+        const hit=down.intersectObject(model,true)[0];
+        assert.ok(hit,'missing tread at '+z);
+        const rise=hit.point.y-previous;
+        if(Math.abs(rise)<.00001)continue;
+        assert.ok(Math.sign(rise)===Math.sign(final-initial) && Math.abs(rise)<=maxStairRise+.00001,'unexpected rise '+rise);
+        if(lastChange!==undefined)assert.ok(Math.abs(z-lastChange)>=minStairGoing-.005,'short tread at '+z);
+        lastChange=z;
+        previous=hit.point.y;
+      }
+      assert.ok(Math.abs(previous-final)<.00001,'final landing height');
+    }
+  }finally{civic.dispose();tide.dispose();ferry.dispose();}
+});
 
 test('playlist reprises keep distinct positions and preserve saved IDs for the first occurrence', () => {
   const address = new URL('https://lacuna.example/music/river/album.m3u8');
@@ -200,7 +237,7 @@ test('forgetting keeps only address metadata in the vault after reopening', asyn
     const {address} = await forget(last.entry.id);
     assert.equal(address.position, 2);
     const receipt = await forget(entry.id);
-    assert.deepEqual(receipt.address, {id:entry.id, created_at:entry.created_at, riverEdition:3, position:0, forgottenAfter:3});
+    assert.deepEqual(receipt.address, {id:entry.id, created_at:entry.created_at, riverEdition:4, position:0, forgottenAfter:3});
     assert.deepEqual(await forget(entry.id), receipt);
     await assert.rejects(request('/entries', 'POST', thought(1, secret)), /forgotten/);
     vault.lock();
@@ -406,11 +443,13 @@ test('browser devices pair privately, converge offline additions and preserve bo
   assert.equal((await second.status()).exists,false);
   await linkDevice(second,code,samplePassphrase,send);
   assert.deepEqual(second.read().entries,first.read().entries);
+  assert.deepEqual(second.read().census,first.read().census);
   const portableStorage=webStorage();
   portableStorage.current=await first.backup();
   const portable=new WebVault(portableStorage);
   await portable.unlock(samplePassphrase);
   assert.equal(portable.pairing,undefined);
+  assert.deepEqual(portable.read().census,first.read().census);
   await first.update(data=>{data.acceptedTerms='2026-11-24';});
   await webRequest('/entries','POST',{...thought(2,'on the train'),city:true},first);
   await webRequest('/entries','POST',{...thought(3,'at the station'),city:true},second);
@@ -420,6 +459,7 @@ test('browser devices pair privately, converge offline additions and preserve bo
   await syncJournal(first,send);
   assert.deepEqual(first.read().entries.map(p=>p.body),['an entirely private first page','on the train','at the station']);
   assert.deepEqual(first.read().entries,second.read().entries);
+  assert.deepEqual(first.read().census,second.read().census);
   const id=first.read().entries[0].id;
   await webRequest('/entries/'+id,'DELETE',undefined,first);
   await webRequest('/entries/'+id+'/keep','PATCH',{kept:true},second);
@@ -452,6 +492,32 @@ test('browser devices pair privately, converge offline additions and preserve bo
   assert.equal(first.read().entries.length,1);
 });
 
+
+test('merging two journals from before the census preserves their original residents',async t=>{
+  const {residentHomes}=await import('../packages/frontend/src/lib/town/resident-lives.ts');
+  const DB=await createTestDatabase();t.after(()=>DB.sqlite.close());
+  const origin='https://lacuna.example',env={DB,JWT_SECRET:'fixture',FRONTEND_ORIGIN:origin};
+  const send=(url,init)=>app.request(new Request(new URL(url,origin),{...init,headers:{...init.headers,Origin:origin}}),undefined,env);
+  const first=new WebVault(webStorage()),second=new WebVault(webStorage()),code=newPairingCode();
+  await first.unlock(samplePassphrase,true);
+  await first.update(journal=>{delete journal.census;});
+  await webRequest('/entries','POST',{...thought(1,'morning walk'),city:true},first);
+  await first.setPairing(undefined,{code,enabled:true,version:0,syncedRevision:-1,syncedPages:0});
+  await syncJournal(first,send);
+  await linkDevice(second,code,samplePassphrase,send);
+  await webRequest('/entries','POST',{...thought(2,'evening tide'),city:true},first);
+  await webRequest('/entries','POST',{...thought(3,'night sky'),city:true},second);
+  await syncJournal(first,send);
+  await syncJournal(second,send);
+  const journal=second.read();
+  const pilots=residentHomes(paintedCoast(journal.entries),journal.entries);
+  assert.ok(pilots.length>0);
+  for(const pilot of pilots){
+    const person=journal.census.people.find(p=>p.id===pilot.resident);
+    assert.equal(person?.name,pilot.life.name);
+    assert.equal(person.arrival,pilot.arrival);
+  }
+});
 
 test('a recovery passkey finds the online journal again after this browser loses it',async t=>{
   const DB=await createTestDatabase();t.after(()=>DB.sqlite.close());
@@ -659,7 +725,7 @@ test('city saves preserve words and skip the story classifier',async t=>{
     const {entry,created}=await send(value);
     assert.equal(created,true);
     assert.equal(entry.body,value.body);
-    assert.equal(entry.riverEdition,3);
+    assert.equal(entry.riverEdition,4);
     assert.equal(entry.presence,undefined);
     assert.deepEqual(await send(value),{entry,created:false});
   }
@@ -830,6 +896,31 @@ test('new inland addresses use the gentlest surveyed shelf and stay clear of the
     assert.ok((point.z-bankEdge(point.x,bank))*(bank?1:-1)>4);
   }
   assert.ok(offsets.has(1.4) && offsets.has(-1.4));
+});
+
+test('main city paths keep gentle grades and clear the ground across their width on both banks',async()=>{
+  const {streetLine,streetSide}=await import('../packages/frontend/src/lib/town/harbor-streets.ts');
+  const {bankPosition,laneDepth,landHeight}=await import('../packages/frontend/src/lib/town/valley-river.ts');
+  for (const bank of [0,1]) for (const lane of [0,1,2,3]) {
+    const lots=[-42,-15,0,16,38].map((x,i)=>{
+      const wharf=lane===3 && i===2;
+      const exit={x,z:bankPosition(x,bank,laneDepth(x,lane)-(i%2?2:6))};
+      return {site:{bank,lane,kind:wharf?'wharf':'houses',ferryTerminal:wharf},model:{position:{x}},doors:[{exit}]};
+    });
+    const line=streetLine(lots,lane,[-50,50]);
+    for (const offset of [-1,0,1]) {
+      let previous;
+      for (const [i,point] of line.entries()) {
+        const side=streetSide(line,i),x=point.x+offset*side.x,z=point.z+offset*side.y;
+        assert.ok(point.y>=landHeight(x,z)+.15999);
+        if (previous) {
+          const run=Math.hypot(x-previous.x,z-previous.z);
+          assert.ok(Math.abs(point.y-previous.y)<=.08*run+1e-8);
+        }
+        previous={x,z,y:point.y};
+      }
+    }
+  }
 });
 
 test('short waterfront passages follow gentle gaps and prioritize ferry access',async()=>{
@@ -1362,8 +1453,43 @@ test('valley gestures accumulate per frame and a two-finger gesture cannot open 
   send('keydown',{key:'+'});send('keyup',{key:'='});step();assert.ok(!input.active());
   send('keydown',{key:'ArrowLeft'});step();assert.ok(input.active());
   send('blur',{});assert.ok(!input.active());
+  camera.position.copy(target).z+=7;
+  send('wheel',{deltaY:-120,deltaMode:0});
+  input.step(performance.now()+100,2.5);
+  assert.ok(camera.position.distanceTo(target)<6.2);
   send('keydown',{key:'Home'});assert.equal(homes,1);
   events.abort();
+});
+
+test('page cameras face the entrance on either bank, including wharves and upstairs rooms',async()=>{
+  const {Box3,Group,Vector3}=await import('three');
+  const {buildingFront,facadeView}=await import('../packages/frontend/src/lib/town/facade-view.ts');
+  const {inValley}=await import('../packages/frontend/src/lib/town/valley-river.ts');
+  for(const rotation of [.24,Math.PI-.19]){
+    for(const kind of ['market','wharf']){
+      const model=new Group();
+      model.rotation.y=rotation;
+      const normal=model.getWorldDirection(new Vector3()).multiplyScalar(kind==='wharf'?-1:1);
+      const entry=normal.clone().multiplyScalar(4);
+      const box=new Box3(new Vector3(-5,0,-5),new Vector3(5,12,5));
+      for(const doors of [[],[{threshold:entry,landing:entry.clone().add(normal)}]]){
+        const front=buildingFront({model,site:{kind},doors},box);
+        for(const room of [undefined,new Vector3(1,9,-1)]){
+          const {eye,target}=facadeView(front,47,.65,room);
+          const aim=eye.sub(target);aim.y=0;
+          const outward=inValley(normal).sub(inValley(new Vector3()));
+          assert.ok(aim.normalize().dot(outward)>.99);
+          if(room)assert.equal(target.y,room.y);
+          const blockAt=front.target.clone().addScaledVector(normal,6);
+          const neighbor=new Box3(blockAt.clone().add(new Vector3(-2,-10,-2)),blockAt.clone().add(new Vector3(2,13,2)));
+          const clear=facadeView(front,47,.65,room,[neighbor]);
+          const worldBox=new Box3().setFromPoints([inValley(neighbor.min),inValley(neighbor.max)]);
+          for(let step=1;step<=20;step++)assert.ok(!worldBox.containsPoint(clear.target.clone().lerp(clear.eye,step/20)));
+          if(doors.length)assert.ok(Math.abs(front.target.clone().sub(entry).dot(normal))<1e-8);
+        }
+      }
+    }
+  }
 });
 
 test('valley orbit stays inside the forest and clears the graded slopes on its way to the eye',async()=>{

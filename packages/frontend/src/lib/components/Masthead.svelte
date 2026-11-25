@@ -64,7 +64,7 @@
     {#if journalMenu}
       <IconAction icon="info" label="About Lacuna" onclick={()=>showInfo=true}/>
       <IconAction icon="privacy" label="Privacy" href="/privacy"/>
-      <IconAction icon="pages" label="Terms of Service" href="/terms"/>
+      <IconAction icon="terms" label="Terms of Service" href="/terms"/>
     {/if}
     <span class="group-break" aria-hidden="true"></span>
     {@render sound?.()}

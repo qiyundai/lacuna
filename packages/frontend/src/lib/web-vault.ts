@@ -6,7 +6,10 @@ import type { RiverClock } from '../../../shared/river.js';
 import { forgetFromBook, validBook, type Book } from '../../../shared/living-book.js';
 import { forgetPageAt, validCityHistory, type ForgottenAddress } from '../../../shared/city-address.js';
 
+import { emptyCensus, validCensus, settleCity, type Census } from './town/citizens.js';
+
 export interface WebJournal {
+  census?:Census;
   deviceOnly?: true;
   acceptedTerms?: string;
   deviceSync?: DeviceSync;
@@ -28,6 +31,7 @@ export interface DeviceSync {
 }
 export function forgetWebPage(journal:WebJournal,index:number) {
   const address=forgetPageAt(journal,index);
+  if(journal.census)journal.census=settleCity(journal.entries,journal.forgotten??[],journal.census,Math.floor(Date.now()/1000));
   if(journal.book) forgetFromBook(journal.book,address.id);
   journal.memoirs=[];journal.weights={};journal.graph={nodes:[],processed_count:0};
   return address;
@@ -81,6 +85,7 @@ async function open(envelope: WebEnvelope, key: CryptoKey): Promise<WebJournal> 
   const data = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(plaintext));
   if (data?.format !== 'lacuna.web-journal.v1' || !Number.isSafeInteger(data.revision) || !Array.isArray(data.entries) || !Array.isArray(data.memoirs) || !data.graph || !Array.isArray(data.graph.nodes) || !data.weights || typeof data.weights !== 'object' || Array.isArray(data.weights)) throw new Error('Invalid journal');
   if (!data.entries.every((e: EntryData) => e && typeof e.id === 'string' && /^[a-f0-9]{32}$/.test(e.id) && typeof e.user_id === 'string' && typeof e.body === 'string' && e.body.length <= 500 && Number.isSafeInteger(e.created_at) && e.created_at >= 0 && e.created_at < 1e12 && (e.solidified_at === null || Number.isSafeInteger(e.solidified_at)) && (e.kept_at === null || Number.isSafeInteger(e.kept_at))) || !data.memoirs.every((m: MemoirEdition) => m && typeof m.id === 'string' && typeof m.prose === 'string' && m.prose.length <= 30000 && Number.isSafeInteger(m.generated_at))) throw new Error('Invalid journal records');
+  if(data.census!==undefined && !validCensus(data.census))throw new Error('Invalid resident records');
   if(!validCityHistory(data.entries,data.forgotten))throw new Error('Invalid city addresses');
   if(data.entries.some((e:EntryData)=>e.writingDay!==undefined &&
       (!Number.isSafeInteger(e.writingDay) || Math.abs(e.writingDay-Math.floor(e.created_at/86400))>1)))throw new Error('Invalid writing day');
@@ -200,7 +205,7 @@ export class WebVault {
         if (existing) validateEnvelope(existing);
         const salt = existing?.salt ?? random(32), key = await keyFor(passphrase, salt);
         const owner = existing?.owner ?? crypto.randomUUID().replace(/-/g, '');
-        const data: WebJournal = existing ? await open(existing, key) : { acceptedTerms: termsVersion, format: 'lacuna.web-journal.v1', revision: 0, entries: [], memoirs: [], weights: {}, graph: { nodes: [], processed_count: 0 } };
+        const data: WebJournal = existing ? await open(existing, key) : { census:emptyCensus(), acceptedTerms: termsVersion, format: 'lacuna.web-journal.v1', revision: 0, entries: [], memoirs: [], weights: {}, graph: { nodes: [], processed_count: 0 } };
         if (generation !== this.generation) throw new WebVaultError('VAULT_LOCKED', 'Opening was cancelled. Unlock again when you are ready.');
         const needsReview = existing && data.acceptedTerms !== termsVersion;
         if (needsReview && !acceptedTerms) throw new WebVaultError('TERMS_REVIEW_REQUIRED', 'Review the updated terms to open your journal.');

@@ -1,9 +1,12 @@
 import * as T from 'three';
+import { maxStairRise, minStairGoing, stoneFlight } from './architectural-parts.js';
 import type { Gouache } from './gouache.js';
 import { createModelWorkshop, type ModelTools, type Pigment } from './model-workshop.js';
 
 const bayWidth = 2.16;
 const arcadeDepth = 3.1;
+const quayLevel=.145,boardingLevel=-.21;
+const boardingEdge=3.44-Math.ceil((quayLevel-boardingLevel)/maxStairRise)*minStairGoing;
 
 
 function archBand(p: ModelTools, color: Pigment, x: number, y: number, z: number, radius: number, rise: number, band: number, thickness: number) {
@@ -14,12 +17,14 @@ function archBand(p: ModelTools, color: Pigment, x: number, y: number, z: number
   p.relief(color, path, thickness, x, y, z);
 }
 
-function platform(p: ModelTools) {
-  p.box('shade', 0, -.43, .3, bayWidth, 1, 5.2);
-  p.box('stone', 0, .085, .3, bayWidth, .12, 5.23);
-  p.box('lintel', 0, .12, 2.86, bayWidth - .016, .17, .20);
+function platform(p: ModelTools, boarding=false) {
+  const baseEnd=boarding?boardingEdge:2.9,deckEnd=boarding?boardingEdge:2.915;
+  p.box('shade',0,-.43,(baseEnd-2.3)/2,bayWidth,1,baseEnd+2.3);
+  p.box('stone',0,.085,(deckEnd-2.315)/2,bayWidth,.12,deckEnd+2.315);
   p.box('slate', 0, .152, 1.95, bayWidth, .028, .055);
   for (const x of [-.72, 0, .72]) p.box('shade', x, .148, 2.39, .013, .009, .78);
+  if(boarding)return;
+  p.box('lintel', 0, .12, 2.86, bayWidth - .016, .17, .20);
   p.box('wood', 0, -.34, 2.92, .19, 1.09, .18);
   p.box('iron', 0, .07, 3.01, .20, .12, .035);
 }
@@ -132,8 +137,7 @@ function clockGate(p: ModelTools) {
 }
 
 function boardingLanding(p: ModelTools) {
-  for (const [z, top] of [[3.02, .03], [3.18, -.09], [3.34, -.21]] as const)
-    p.box('stone', 0, top - .22, z, 1.54, .44, .20);
+  stoneFlight(p,1.54,boardingEdge,minStairGoing,quayLevel,boardingLevel,-.65);
   for (const x of [-.83, .83]) {
     p.rod('iron', p.vec(x, .12, 2.50), p.vec(x, .95, 2.50), .038);
     p.rod('iron', p.vec(x, -.20, 3.32), p.vec(x, .64, 3.32), .038);
@@ -205,6 +209,7 @@ function endScreen(p: ModelTools) {
 export function createFerryHallKit(paint?: Gouache,roomWindows=false,clockHour?:T.IUniform<number>) {
   const {module, dispose} = createModelWorkshop(bayWidth, arcadeDepth, paint,roomWindows,clockHour);
   const quay = module(platform);
+  const boardingQuay = module(p=>platform(p,true));
   const bay = module(roofBay);
   const supports = module(p => {
     for (const z of [-1.55, 1.55]) pier(p, 0, z);
@@ -247,7 +252,7 @@ export function createFerryHallKit(paint?: Gouache,roomWindows=false,clockHour?:
       }
       for (let i = 0; i < bays; i++) {
         const x = (i - (bays - 1) / 2) * bayWidth;
-        add(quay, 'Quay ' + (i + 1), x);
+        add(i===entry?boardingQuay:quay, 'Quay ' + (i + 1), x);
         add(bay, 'Arcade bay ' + (i + 1), x);
         add(supports, 'Piers ' + (i + 1), x - bayWidth / 2);
         if (i === entry) {

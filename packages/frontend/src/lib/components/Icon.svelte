@@ -8,13 +8,16 @@
   type Glyph = string | { d: string; solid?: true; weight?: number };
   const glyphs = {
     // Navigation and scene
+    search: 'M16.5 10.5a6 6 0 1 1-12 0 6 6 0 0 1 12 0Zm-1.8 4.3L21 21',
     pages: 'M7 3.5h11a1.5 1.5 0 0 1 1.5 1.5v13H8a2 2 0 0 0 0 4h11.5M6 20V5a1.5 1.5 0 0 1 1.5-1.5M10 8h6M10 11h4',
     city: 'M2 20h20M4 20V9l4-3 4 3v11m0-8h7v8M7 11v2m2 3v3m6-4v2',
+    resident: 'M14 5a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM8 13l2-4 3-1 2 4 3 1M12 10l-1 5 4 3 1 4m-5-7-2 4-3 3',
     overlook: 'm2 18 7-11 5 8 3-5 5 8H2Zm4.5-7 2.5 2 2.3-2',
     town: 'm3 11 9-8 9 8M5 10v11h14V10M10 21v-7h4v7',
     journal: 'M12 6c-3-2-6-2-10-1v14c4-1 7-1 10 1 3-2 6-2 10-1V5c-4-1-7-1-10 1Zm0 0v14',
     quiet: 'M4 21 17 8M6 18c-1-7 3-14 14-15 .5 8-3 14-9 14H7',
     settings: 'M4 6h8m5 0h3M4 12h2m5 0h9M4 18h9m5 0h2M12 4v4M7 10v4M14 16v4',
+    terms: 'M12 3v17m-5 1h10M4 7l8-2 8 2M5 7l-3 7h6L5 7Zm14 0-3 7h6l-3-7ZM2 14q3 5 6 0m8 0q3 5 6 0',
     privacy: 'M12 2.8 20 6v5c0 5-3.4 8.4-8 11-4.6-2.6-8-6-8-11V6ZM8.5 12l2.5 2.5 4.8-5',
     info: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM12 11v6m0-10v.2',
     leave: 'M10 4H4v16h6m-1-8h12m-5-5 5 5-5 5',

@@ -1,6 +1,8 @@
+import { buildRiverVenue, buildVenueSkyline } from './river-venue-models.js';
+import { isRiverVenue, type RiverVenue } from './architecture-catalog.js';
 import * as T from 'three';
 import { createModelWorkshop, type ModelTools, type Pigment } from './model-workshop.js';
-import { arch, around, chimneypot, foundation, roof, storey, tileCourses, type WindowStyle } from './architectural-parts.js';
+import { arch, around, chimneypot, foundation, maxStairRise, roof, storey, tileCourses, type WindowStyle } from './architectural-parts.js';
 import * as landmarks from './harbor-landmarks.js';
 import type { Gouache } from './gouache.js';
 import type { Site } from './painted-coast.js';
@@ -21,17 +23,19 @@ const upperWindows: Record<Street, readonly [WindowStyle, WindowStyle]> = {
 };
 
 function stair(p: ModelTools) {
-  for (let i = 0; i < 10; i++) {
-    const h = (i + 1) * floorHeight / 10;
-    p.box('stone', 0, h / 2, 1.61 - i * .265, .89, h, .28);
-    p.box('lintel', 0, h - .03, 1.69 - i * .265, .95, .06, .17);
+  const count=Math.ceil(floorHeight/maxStairRise),rise=floorHeight/count,going=2.65/count;
+  const center=(step:number)=>1.75-(step+.5)*going;
+  for (let i=0;i<count;i++) {
+    const h=(i+1)*rise,z=center(i);
+    p.box('stone',0,h/2,z,.89,h,going+.012);
+    p.box('lintel',0,h-.018,z+going*.30,.95,.036,going*.63);
   }
   for (const x of [-.49, .49]) {
-    for (const i of [0, 3, 6, 9]) {
-      const z = 1.61 - i * .265, y = (i + 1) * floorHeight / 10;
-      p.box('iron', x, y + .28, z, .044, .56, .044);
+    for (let post=0;post<4;post++) {
+      const i=Math.round((count-1)*post/3);
+      p.box('iron',x,(i+1)*rise+.28,center(i),.044,.56,.044);
     }
-    p.rod('iron', p.vec(x, .70, 1.61), p.vec(x, 2.02, -.775), .034);
+    p.rod('iron',p.vec(x,rise+.56,center(0)),p.vec(x,floorHeight+.56,center(count-1)),.034);
   }
 }
 
@@ -184,7 +188,8 @@ export function createHarborBuildings(paint?: Gouache,clockHour?:T.IUniform<numb
     }
     return g;
   }
-  function build(kind: Building, seed: number, width: number, additions=0,district?:RiverDistrict) {
+  function build(kind: Building, seed: number, width: number, additions=0,district?:RiverDistrict,elevation=seed%6) {
+    if (isRiverVenue(kind)) return buildRiverVenue(kind,elevation,additions,part);
     const g = new T.Group();
     switch (kind) {
       case 'houses':
@@ -232,5 +237,8 @@ export function createHarborBuildings(paint?: Gouache,clockHour?:T.IUniform<numb
     if(kind==='shed')return part('warehouse',landmarks.warehouse);
     return dwelling('houses',1,1,2);
   }
-  return { build, outbuilding, dispose() { templates.clear(); workshop.dispose(); } };
+  function skyline(kind:RiverVenue,elevation:number,additions:number,windows?:T.Material){
+    return buildVenueSkyline(kind,elevation,additions,part,windows);
+  }
+  return { build, skyline, outbuilding, dispose() { templates.clear(); workshop.dispose(); } };
 }

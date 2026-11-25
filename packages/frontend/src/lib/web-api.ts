@@ -1,8 +1,11 @@
 import { attachPresence, remember, reviseThread } from '../../../shared/village.js';
+import { currentRiverEdition } from '../../../shared/city-address.js';
 import { localWritingDay } from '../../../shared/living-book.js';
 import { browserVault, WebVault, WebVaultError, announceBrowserLock, forgetWebPage } from './web-vault.js';
 import type { EntryData } from './api.js';
 import { canSettle, isSettlement, morning, nextMorning, population } from '../../../shared/river.js';
+
+import { settleCity } from './town/citizens.js';
 
 function page<T extends { id: string }>(items: T[], cursor: string | null, kind: string, limit: number) {
   let offset = 0;
@@ -20,7 +23,14 @@ export async function webRequest(path: string, method = 'GET', value?: unknown, 
   const data = vault.read(), url = new URL(path, 'https://local.invalid'), body = value as Record<string, unknown>;
   const timestamp = Math.floor(Date.now() / 1000);
   if (path === '/village' && method === 'GET') return {entries:data.entries};
-  if (path === '/city' && method === 'GET') return {entries:data.entries,forgotten:data.forgotten??[]};
+  if (path === '/city' && method === 'GET') {
+    const census=settleCity(data.entries,data.forgotten??[],data.census,timestamp);
+    if(JSON.stringify(census)===JSON.stringify(data.census))return {entries:data.entries,forgotten:data.forgotten??[],census};
+    return vault.update(journal=>{
+      journal.census=settleCity(journal.entries,journal.forgotten??[],journal.census,timestamp);
+      return {entries:journal.entries,forgotten:journal.forgotten??[],census:journal.census};
+    });
+  }
   if (path === '/village/thread' && method === 'POST') return vault.update(journal => reviseThread(journal.entries,body));
   if (path === '/village/encounter' && method === 'POST') return vault.update(journal => remember(journal.entries, body));
   if(path === '/town' && method === 'GET') {
@@ -52,14 +62,16 @@ export async function webRequest(path: string, method = 'GET', value?: unknown, 
       if(journal.forgotten?.some(a=>a.id===body.entry_id))throw new WebVaultError('ENTRY_CONFLICT','This page has already been forgotten.');
       const existing = journal.entries.find(e => e.id === body.entry_id);
       if (existing) { if (existing.body !== body.body) throw new WebVaultError('ENTRY_CONFLICT', 'This thought ID already belongs to a different thought.'); return { entry: existing, created:false }; }
-      const entry: EntryData = { id: body.entry_id as string, riverEdition: 3, user_id: owner, body: body.body as string, created_at: timestamp, writingDay:localWritingDay(new Date(timestamp*1000)), solidified_at: body.solidified_at as number, kept_at: null };
+      const entry: EntryData = { id: body.entry_id as string, riverEdition: currentRiverEdition, user_id: owner, body: body.body as string, created_at: timestamp, writingDay:localWritingDay(new Date(timestamp*1000)), solidified_at: body.solidified_at as number, kept_at: null };
       if(body.settlement !== undefined){
         if(!isSettlement(body.settlement) || !canSettle(population(journal.entries),body.settlement)) throw new WebVaultError('SITE_TAKEN','Choose a site with room for this trade.');
         entry.settlement = {site:body.settlement.site,trade:body.settlement.trade};
       }
       journal.river=morning(journal,timestamp);
       if(body.city !== true)attachPresence(journal.entries, entry);
-      journal.entries.push(entry); return { entry, created:true };
+      journal.entries.push(entry);
+      if(journal.census)journal.census=settleCity(journal.entries,journal.forgotten??[],journal.census,timestamp);
+      return { entry, created:true };
     });
   }
   const entry = /^\/entries\/([a-f0-9]{32})(\/keep)?$/.exec(path);

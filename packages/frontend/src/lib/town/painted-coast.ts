@@ -3,10 +3,10 @@ import { citySequence, type ForgottenAddress } from '../../../../shared/city-add
 
 import { districtFrontage, districtKey, districtOf, influenceAround, parcelShelf, type Neighborhoods, type RiverDistrict, type RiverParcel } from './river-neighborhoods.js';
 
-export const frontage = ['houses','steps','terraces','crescent','apartments','market','warehouse','crane','pines','glasshouse','station','civic','belfry','towers','arches','wharf','beacon'] as const;
+import { venueKinds, riverVenues, isRiverVenue, type Architecture } from './architecture-catalog.js';
+export { frontage } from './architecture-catalog.js';
 export type Bank = 0 | 1;
-type Architecture = typeof frontage[number];
-export type Site = { id:string; kind:Architecture; bank:Bank; ferryTerminal?:boolean; setback?:number; district?:RiverDistrict; x:number; y:number; width:number; mirror:boolean; lane:number; lights:number; quiet?:boolean; readableId?:string; litAdditions?:number; predecessor?:Site };
+export type Site = { id:string; kind:Architecture; elevation?:number; bank:Bank; ferryTerminal?:boolean; setback?:number; district?:RiverDistrict; x:number; y:number; width:number; mirror:boolean; lane:number; lights:number; quiet?:boolean; readableId?:string; litAdditions?:number; predecessor?:Site };
 export type Coast = { neighborhoods:Neighborhoods; ports:Site[]; sites:Site[]; addresses:Map<string,Site>; rooms:Map<string,number>; latest?:Site; service:number; start:number; end:number };
 
 const lanes:readonly Architecture[][] = [
@@ -30,6 +30,7 @@ const key=(column:number,lane:number,bank:Bank)=>column*8+bank*4+lane;
 
 export function paintedCoast(entries:readonly CityPage[],forgotten:readonly ForgottenAddress[]=[]):Coast {
   const sites:Site[]=[],addresses=new Map<string,Site>(),occupied=new Map<number,Site>(),front=new Map<number,Parcel>();
+  const occurrences = new Map<Architecture, number>();
   const rooms=new Map<string,number>();
   const neighborhoods:Neighborhoods=new Map(),shelves=new Map<number,ReturnType<typeof parcelShelf>>();
   const sequence=citySequence(entries,forgotten);
@@ -56,8 +57,9 @@ export function paintedCoast(entries:readonly CityPage[],forgotten:readonly Forg
   };
   for(const page of pages){
     const salt=hashPage(page.id),last=sites.length;
-    const twoBanks=page.riverEdition===2 || page.riverEdition===3;
-    const emerging=page.riverEdition===3;
+    const expanded = page.riverEdition === 4;
+    const emerging = expanded || page.riverEdition === 3;
+    const twoBanks = emerging || page.riverEdition === 2;
     const position=positions.get(page.id)!;
     const until=forgottenAfter.get(page.id)??Infinity;
     const recent=sites.slice(-14).filter(site=>site.lights<3 && site.kind!=='pines' && occupiedUntil.get(site)!>position);
@@ -104,7 +106,20 @@ export function paintedCoast(entries:readonly CityPage[],forgotten:readonly Forg
     if(district)options.push(...districtFrontage[district],...districtFrontage[district]);
     const landmarks:Architecture[]=['station','civic','belfry','beacon','wharf','arches','towers'];
     const available=options.filter(k=>!landmarks.includes(k)||!block.some(s=>s.kind===k));
-    const selection=available.length?available:options;
+    let selection=available.length?available:options;
+    if (expanded) {
+      for (const kind of venueKinds) {
+        const venue = riverVenues[kind];
+        if (last < venue.after || !venue.lanes.includes(lane)) continue;
+        selection.push(kind);
+        if (venue.district === district) selection.push(kind, kind);
+      }
+      const recentKinds = new Set(sites.slice(-5).map(site => site.kind));
+      const fresh = selection.filter(kind => !recentKinds.has(kind));
+      const pool = fresh.length ? fresh : selection;
+      const fewest = Math.min(...pool.map(kind => occurrences.get(kind) ?? 0));
+      selection = pool.filter(kind => (occurrences.get(kind) ?? 0) === fewest);
+    }
     const highStreet=last>14 && lane<2 && adjacent>1 && !block.some(s=>s.kind==='towers') && salt%4!==0;
     const across:Bank=bank===0?1:0;
     const firstLanding=twoBanks && lane===3 &&
@@ -117,6 +132,9 @@ export function paintedCoast(entries:readonly CityPage[],forgotten:readonly Forg
     else if(highStreet && (!emerging || (district==='civic' || district==='residential') && adjacent>=3))kind='towers';
     const x=132+column*157+((salt>>>12)%19)-9+lane*8;
     latest={id:page.id,kind,lane,bank,x,y:0,width:101+(salt>>>18)%45,mirror:!!(salt&1),lights:0,ferryTerminal:kind==='wharf'};
+    const visits = occurrences.get(kind) ?? 0;
+    if (isRiverVenue(kind)) latest.elevation = (visits + hashPage(seed + '/' + kind)) % 6;
+    occurrences.set(kind, visits + 1);
     if(district)latest.district=district;
     occupiedUntil.set(latest,until);
     if(emerging && lane!==3)latest.setback=shelves.get(districtKey(choice!))!.setback;

@@ -262,7 +262,7 @@ export function createBayWorld(scene: T.Scene, throughCorridor=false) {
   const daySun=sun.color.clone(),nightSun=new T.Color('#9fb6ff'),duskSun=new T.Color('#ffa884');
   const daySky=ambient.color.clone(),nightSky=new T.Color('#94a0cd'),duskSky=new T.Color('#eebed1');
   const dayGround=ambient.groundColor.clone(),nightGround=new T.Color('#666280');
-  function setTime(seconds: number, focusX: number, cameraX: number, focusZ=0,light:CityLight=lightAt(12),starSeconds=seconds) {
+  function setTime(seconds: number, focusX: number, cameraX: number, focusZ=0,light:CityLight=lightAt(12),starSeconds=seconds,focusY=4) {
     const sector = Math.floor(cameraX/sectorWidth);
     if (centerSector!==sector) {
       for (let i=sector-3;i<=sector+3;i++) {
@@ -283,7 +283,7 @@ export function createBayWorld(scene: T.Scene, throughCorridor=false) {
     const elevation = T.MathUtils.lerp(.63,.12+(throughCorridor?.40:.71)*light.solarHeight,light.daylight);
     sunDirection.set(Math.sin(bearing),elevation,-Math.cos(bearing)).normalize();
     skyMaterial.uniforms.seconds!.value=seconds*cloudDriftRate;
-    sun.target.position.set(focusX,4,focusZ);
+    sun.target.position.set(focusX,focusY,focusZ);
     sun.position.copy(sun.target.position).addScaledVector(sunDirection,112);
     daylight.value=light.daylight;
     twilight.value=light.twilight;

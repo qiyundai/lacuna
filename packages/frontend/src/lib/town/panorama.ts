@@ -28,13 +28,17 @@ export async function createPanorama(canvas:HTMLCanvasElement){
   }
   function imageOf(kind:typeof names[number]){return images.get(kind)!;}
   function drawSite(c:CanvasRenderingContext2D,site:Site,left:number){
-    const img=imageOf(site.kind),w=site.width,h=w*img.height/img.width,x=site.x-left;
+    const img=imageOf(site.kind),w=site.width,h=site.elevation === undefined ? w*img.height/img.width : w,x=site.x-left;
     c.save();c.translate(x,site.y);
     const shadow=c.createRadialGradient(0,0,0,0,0,w*.54);
     shadow.addColorStop(0,'rgba(43,33,48,.59)');shadow.addColorStop(1,'rgba(43,33,48,0)');
     c.save();c.scale(1,.16);c.fillStyle=shadow;c.fillRect(-w*.55,-w*.55,w*1.1,w*1.1);c.restore();
     if(site.mirror)c.scale(-1,1);
-    c.drawImage(img,-w/2,-h,w,h);
+    if (site.elevation === undefined) c.drawImage(img,-w/2,-h,w,h);
+    else {
+      const size=img.width/3;
+      c.drawImage(img,(site.elevation%3)*size,Math.floor(site.elevation/3)*size,size,size,-w/2,-h,w,h);
+    }
     for(let i=0;i<site.lights;i++){
       const lx=(i-1)*w*.20,ly=-h*(.16+i*.055),r=w*.105;
       const lamp=c.createRadialGradient(lx,ly,0,lx,ly,r);

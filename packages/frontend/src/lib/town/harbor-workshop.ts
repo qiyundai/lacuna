@@ -1,3 +1,4 @@
+import { isRiverVenue, siteDistrict } from './architecture-catalog.js';
 import { publicFixtures } from './public-fixtures.js';
 import {landHeight,bankPosition,laneDepth,bankEdge} from './valley-river.js';
 export {landHeight,shoreline} from './valley-river.js';
@@ -31,6 +32,7 @@ export function mooring(site:Site){
   return {station,bank:site.bank,offset:Math.abs(z-bankEdge(station,site.bank)),slope:-Math.tan(heading)};
 }
 export function isWorkplace(kind:Site['kind']){
+  if (isRiverVenue(kind)) return siteDistrict(kind) !== 'residential';
   return ['market','warehouse','crane','station','civic','wharf','glasshouse','arches','belfry'].includes(kind);
 }
 export async function harborWorkshop(breezeTime={value:0}){
@@ -194,7 +196,7 @@ export async function harborWorkshop(breezeTime={value:0}){
     }else if(k==='pines'){
       for(let i=0;i<6;i++)tree(g,Math.sin(i*2.4)*w*.33,0,Math.cos(i*2.4)*2,3.1+i%3,seed+i);
     }else{
-      g.add(buildings.build(k, seed, w,s.lights,s.district));
+      g.add(buildings.build(k, seed, w,s.lights,s.district,s.elevation));
       if (k === 'terraces' || k === 'crescent' || k === 'glasshouse' || k === 'houses') {
         tree(g,w*.46,0,-2.04,2.36+(seed%10)*.09,seed);
       }
@@ -228,7 +230,7 @@ export async function harborWorkshop(breezeTime={value:0}){
     });
     return g;
   }
-  return {paint,breezeTime,clockHour,fixtures,materials,piece,box,pole,tree,treeModels,site,ferry,outbuilding:buildings.outbuilding,lantern,geometries,dispose(){
+  return {paint,breezeTime,clockHour,fixtures,materials,piece,box,pole,tree,treeModels,site,ferry,skyline:buildings.skyline,outbuilding:buildings.outbuilding,lantern,geometries,dispose(){
     for(const skin of hullPaint.values())skin.dispose();
     fixtures.dispose();forest.dispose();
     paint?.dispose();

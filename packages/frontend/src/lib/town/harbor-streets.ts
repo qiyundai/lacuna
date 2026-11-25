@@ -3,9 +3,18 @@ import * as T from 'three';
 import { landHeight, type Workshop } from './harbor-workshop.js';
 import type { Bank, Site } from './painted-coast.js';
 import { columnOf } from './river-neighborhoods.js';
+import { maxStairRise, minStairGoing } from './architectural-parts.js';
 
 export type DoorApproach = { threshold: T.Vector3; landing: T.Vector3; exit: T.Vector3 };
 export type WaterfrontLot = { site: Site; model: T.Group; doors: DoorApproach[]; gallery: T.Vector3[] };
+
+export const streetWidth = 1.34;
+const maxStreetGrade = .08;
+
+export function streetSide(line: T.Vector3[], i: number) {
+  const before = line[Math.max(0,i-1)]!, after = line[Math.min(line.length-1,i+1)]!;
+  return new T.Vector2(before.z-after.z,after.x-before.x).normalize().multiplyScalar(streetWidth/2);
+}
 
 function reserveBridgeFrontage(model:T.Group,station:number){
   const gap=model.position.x-station;
@@ -90,7 +99,6 @@ export function streetLine(lots: WaterfrontLot[], lane: number, junctions: numbe
   for (let i=0; i<=segments; i++) {
     const x = first+i*dx;
     let offset = -laneDepth(x,lane)+4.6;
-    const elevation = .95;
     for (const {exit} of doors) {
       const distance = Math.abs(x-exit.x);
       offset = Math.max(offset, outward*(exit.z-bankEdge(exit.x,bank))+1.42-distance*.55);
@@ -102,11 +110,25 @@ export function streetLine(lots: WaterfrontLot[], lane: number, junctions: numbe
       offset=Math.min(offset,-4.75+end*.85);
     }
     const z = bankPosition(x,bank,-offset);
-    const ground = Math.max(landHeight(x,z-.73),landHeight(x,z),landHeight(x,z+.73));
-    line.push(new T.Vector3(x,Math.max(elevation,ground+.16),z));
+    line.push(new T.Vector3(x,0,z));
   }
-  for (let i=1;i<line.length;i++) line[i]!.y = Math.max(line[i]!.y,line[i-1]!.y-dx*.43);
-  for (let i=line.length-2;i>=0;i--) line[i]!.y = Math.max(line[i]!.y,line[i+1]!.y-dx*.43);
+  const riseLimits: number[] = [];
+  let previousSide = streetSide(line,0);
+  for (const [i,point] of line.entries()) {
+    const side = streetSide(line,i);
+    const {x,z} = point;
+    const ground = Math.max(landHeight(x,z),landHeight(x-side.x,z-side.y),landHeight(x+side.x,z+side.y));
+    point.y = Math.max(.95,ground+.16);
+    if (i>0) {
+      const previous = line[i-1]!, dz = z-previous.z;
+      const sx = side.x-previousSide.x, sz = side.y-previousSide.y;
+      const run = Math.min(Math.hypot(dx,dz),Math.hypot(dx+sx,dz+sz),Math.hypot(dx-sx,dz-sz));
+      riseLimits.push(run*maxStreetGrade);
+      point.y = Math.max(point.y,previous.y-riseLimits[i-1]!);
+    }
+    previousSide = side;
+  }
+  for (let i=line.length-2;i>=0;i--) line[i]!.y = Math.max(line[i]!.y,line[i+1]!.y-riseLimits[i]!);
   return line;
 }
 
@@ -260,9 +282,9 @@ export function pavedRun(shop: Workshop, group: T.Group, a: T.Vector3, b: T.Vect
   const side = new T.Vector3(direction.z,0,-direction.x).multiplyScalar(walkWidth*.46);
   const rise = b.y-a.y;
   const vaulted=length>1.42 && Math.abs(rise)<.55 && landingArcade(shop,group,a,b,walkWidth);
-  const count = Math.max(1, Math.ceil(length/.72), steps ? Math.ceil(Math.abs(rise)/.145) : 1);
+  const count = Math.max(1, Math.ceil(length/.72), Math.ceil(Math.abs(rise)/maxStairRise));
   const rests = steps ? Math.floor((count-1)/12) : 0;
-  const extra = Math.min(.63, Math.max(0,(length-count*.245)/Math.max(1,rests)));
+  const extra = Math.min(.63, Math.max(0,(length-count*minStairGoing)/Math.max(1,rests)));
   const going=(length-rests*extra)/count;
   let distance=0;
   const handrail: T.Vector3[]=[a.clone().add(side)];
@@ -296,8 +318,8 @@ export function doorRoute(exit: T.Vector3, street: T.Vector3[]) {
   function approachCost(point:T.Vector3){
     const run=horizontal(exit,point);
     const rise=Math.abs(exit.y-point.y);
-    const steps=Math.ceil(rise/.145);
-    const steepness=Math.max(0,steps*.255+Math.max(0,Math.floor((steps-1)/12))*.63-run);
+    const steps=Math.ceil(rise/maxStairRise);
+    const steepness=Math.max(0,steps*minStairGoing+Math.max(0,Math.floor((steps-1)/12))*.63-run);
     let buried=0;
     for(let t=.16;t<1;t+=.16) {
       const x=T.MathUtils.lerp(exit.x,point.x,t), z=T.MathUtils.lerp(exit.z,point.z,t);
@@ -331,6 +353,7 @@ export function connectDoors(shop: Workshop, group: T.Group, lot: WaterfrontLot,
   const last=ordered.length>1?doorRoute(ordered[ordered.length-1]!,street):first;
   const chosen=first.cost<=last.cost?first:last;
   pavedRun(shop,group,chosen.origin,chosen.target,true,.79,clearance);
+  return chosen;
 }
 
 export function streetFurniture(shop: Workshop, group: T.Group, line: T.Vector3[],clearance?:RailClearance) {
@@ -384,4 +407,5 @@ export function hillsidePassage(shop: Workshop, group: T.Group, a: T.Vector3, b:
   }
   route[0]=a;route[route.length-1]=b;
   for(let i=1;i<route.length;i++) pavedRun(shop,group,route[i-1]!,route[i]!,true,1.08,clearance);
+  return route;
 }
