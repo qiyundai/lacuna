@@ -4,7 +4,131 @@ import { readFile } from 'node:fs/promises';
 import { residentMotion } from '../packages/frontend/src/lib/town/harbor-residents.ts';
 import { residentHomes } from '../packages/frontend/src/lib/town/resident-lives.ts';
 import { shopperRounds } from '../packages/frontend/src/lib/town/shopper-rounds.ts';
-import { Vector3 } from 'three';
+import { overlookPose } from '../packages/frontend/src/lib/town/overlook-pose.ts';
+import { CurvePath, LineCurve3, Object3D, PerspectiveCamera, PropertyBinding, Vector3 } from 'three';
+import { hillTrail, hillVisits, overlookView, planHillWalk } from '../packages/frontend/src/lib/town/overlook-walk.ts';
+import { overlookHeight } from '../packages/frontend/src/lib/town/green-corridor.ts';
+import { bankPosition, inValley, riverGround, valleyOrigin } from '../packages/frontend/src/lib/town/valley-river.ts';
+
+test('hill parties fit a full round trip between errands and keep their seats across reloads',()=>{
+  const trail=new CurvePath();
+  trail.add(new LineCurve3(new Vector3(),new Vector3(540,0,0)));
+  const date=new Date(2026,10,25),walkers=Array.from({length:12},(_,i)=>({
+    id:'resident-'+i,bank:0,arrival:0,shift:(i%3-1)/2,stride:1,period:1800,path:()=>trail
+  }));
+  const visits=hillVisits(walkers,date);
+  assert.deepEqual([...visits.keys()],[...hillVisits(walkers.toReversed(),date).keys()]);
+  assert.deepEqual([...new Set([...visits.values()].map(v=>v.session))],[7,14]);
+  const poses=new Set();
+  for(const [id,trip] of visits){
+    const walker=walkers.find(w=>w.id===id),start=(trip.session+walker.shift)*3600;
+    const cycle=walker.period/8;
+    assert.ok(trip.breakStart>=start+cycle && trip.resume<=start+5*3600-cycle);
+    assert.equal((trip.breakStart-start)%cycle,0);
+    assert.equal((trip.resume-start)%cycle,0);
+    assert.equal(trip.sample(trip.breakStart-.125),undefined);
+    assert.equal(trip.sample(trip.depart).motion.distance,0);
+    assert.ok(trip.sample(trip.meet-.125).motion.distance>539.9);
+    const pause=trip.sample(trip.meet+10);
+    assert.equal(pause.motion.distance,540);
+    assert.equal(pause.motion.strength,1);
+    poses.add(pause.motion.posture);
+    assert.ok(trip.sample(trip.leave).motion.turning);
+    assert.ok(trip.sample(trip.back-.125).motion.distance<.01);
+    assert.equal(trip.sample(trip.resume),undefined);
+    for(const hour of [3,12.9,22])assert.equal(trip.sample(hour*3600),undefined);
+  }
+  assert.ok(poses.size>=3);
+  assert.equal(hillVisits(walkers.map(w=>({...w,arrival:new Date(2026,10,25,20).getTime()/1000})),date).size,0);
+  assert.equal(planHillWalk(trail,5*3600*8,0,1,7,9*3600,600,'standing'),undefined);
+  const visitors=new Set();
+  for(let d=1;d<=30;d++)for(const id of hillVisits(walkers,new Date(2026,10,d)).keys())visitors.add(id);
+  assert.equal(visitors.size,walkers.length);
+});
+
+test('hikers take turns pointing and responding only while their companions are at the crest',()=>{
+  const trail=new CurvePath();
+  trail.add(new LineCurve3(new Vector3(),new Vector3(540,0,0)));
+  const walkers=Array.from({length:8},(_,i)=>({id:String(i),bank:0,arrival:0,shift:0,stride:1,period:1800,path:()=>trail}));
+  const trips=[...hillVisits(walkers,new Date(2026,10,25)).values()];
+  const group=trips.filter(t=>t.session===7),solo=trips.find(t=>t.session===14);
+  assert.equal(group.length,3);
+  const start=group.at(-1).meet+3;
+  for(const [i,speaker] of group.entries()){
+    const listener=group[(i+1)%group.length],time=start+i*22;
+    const message=(trip,tick)=>trip.sample(time+tick/8).motion.exchange;
+    assert.equal(message(speaker,17).look,-message(listener,17).look);
+    assert.equal(message(speaker,40).point,1);
+    assert.equal(message(listener,40).nod,1);
+    assert.equal(message(group[(i+2)%3],40),undefined);
+  }
+  assert.equal(group[0].sample(group[0].meet+2).motion.exchange,undefined);
+  assert.equal(solo.sample(solo.meet+10).motion.exchange,undefined);
+});
+
+test('every resident rig lowers its elbows, gestures with the free arm and releases its walking pose',async()=>{
+  const {readdir}=await import('node:fs/promises');
+  const dir=new URL('../packages/frontend/static/city/residents/',import.meta.url);
+  for(const file of (await readdir(dir)).filter(f=>f.endsWith('.glb'))){
+    const bytes=await readFile(new URL(file,dir));
+    const gltf=JSON.parse(bytes.toString('utf8',20,20+bytes.readUInt32LE(12)));
+    const model=new Object3D();
+    const nodes=gltf.nodes.map(n=>{
+      const o=new Object3D();o.name=PropertyBinding.sanitizeNodeName(n.name??'');
+      if(n.translation)o.position.fromArray(n.translation);
+      if(n.rotation)o.quaternion.fromArray(n.rotation);
+      if(n.scale)o.scale.fromArray(n.scale);
+      return o;
+    });
+    gltf.nodes.forEach((n,i)=>n.children?.forEach(child=>nodes[i].add(nodes[child])));
+    for(const i of gltf.scenes[gltf.scene??0].nodes)model.add(nodes[i]);
+    const pose=overlookPose(model,0),cuff=model.getObjectByName('CuffR');
+    const shoulder=model.getObjectByName('SleeveR'),original=shoulder.quaternion.clone();
+    const elbowDirection=()=>cuff.position.clone().normalize().applyQuaternion(shoulder.quaternion);
+    pose.apply('standing',1,0);
+    assert.ok(elbowDirection().y<-.95,file);
+    const head=model.getObjectByName('Head'),gaze=head.quaternion.clone();
+    pose.reset();pose.apply('standing',1,20);
+    assert.ok(head.quaternion.angleTo(gaze)>.05,file);
+    pose.reset();pose.apply('standing',1,20,{point:1,look:0,nod:0});
+    assert.ok(elbowDirection().z>.8,file);
+    pose.reset();
+    assert.ok(shoulder.quaternion.equals(original),file);
+  }
+});
+
+test('both hill trails stay grounded, face down-valley and frame separate seats on desktop and phone',()=>{
+  for(const bank of [0,1]){
+    const gate=new Vector3(-70,0,bankPosition(-70,bank,18));
+    gate.y=riverGround(valleyOrigin.x+gate.z,valleyOrigin.z-gate.x);
+    for(const slot of [-1,0,1]){
+      const trail=hillTrail(gate,bank,slot,overlookHeight),length=trail.getLength();
+      assert.ok(trail.getPoint(0).distanceTo(gate)<.001);
+      for(let step=0;step<=500;step++){
+        const p=inValley(trail.getPoint(step/500));
+        assert.ok(p.y>.5);
+        assert.ok(Math.abs(p.y-overlookHeight(p.x,p.z))<.09);
+      }
+      const foot=inValley(trail.getPoint(1)),behind=inValley(trail.getPoint(1-.2/length));
+      assert.ok(behind.z>foot.z+.16 && Math.abs(foot.x-behind.x)<.02);
+      for(const aspect of [390/844,16/9]){
+        const camera=new PerspectiveCamera(47,aspect,.3,20000),view=overlookView();
+        assert.deepEqual(view.eye.toArray(),[70,165,493]);
+        assert.deepEqual(view.target.toArray(),[73,132,263]);
+        camera.position.copy(view.eye);camera.lookAt(view.target);camera.updateMatrixWorld();
+        const screen=foot.clone().project(camera);
+        assert.ok(Math.abs(screen.x)<.72 && screen.y<-.55 && screen.y>-.95);
+        let ridge=-Infinity;
+        for(let z=420;z<view.eye.z;z+=.5){
+          const x=view.eye.x+(foot.x-view.eye.x)*(z-view.eye.z)/(foot.z-view.eye.z);
+          ridge=Math.max(ridge,new Vector3(x,overlookHeight(x,z),z).project(camera).y);
+        }
+        const shoulders=foot.clone().add(new Vector3(0,.55,0)).project(camera);
+        assert.ok(shoulders.y>ridge && ridge-screen.y<.015);
+      }
+    }
+  }
+});
 
 test('the shopper visits connected front doors, pauses to do errands, and walks home without a jump',()=>{
   const street=[0,1,2,3].map(x=>new Vector3(x,0,0));

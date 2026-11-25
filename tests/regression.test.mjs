@@ -1427,8 +1427,43 @@ test('valley gestures accumulate per frame and a two-finger gesture cannot open 
   send('keydown',{key:'+'});send('keyup',{key:'='});step();assert.ok(!input.active());
   send('keydown',{key:'ArrowLeft'});step();assert.ok(input.active());
   send('blur',{});assert.ok(!input.active());
+  camera.position.copy(target).z+=7;
+  send('wheel',{deltaY:-120,deltaMode:0});
+  input.step(performance.now()+100,2.5);
+  assert.ok(camera.position.distanceTo(target)<6.2);
   send('keydown',{key:'Home'});assert.equal(homes,1);
   events.abort();
+});
+
+test('page cameras face the entrance on either bank, including wharves and upstairs rooms',async()=>{
+  const {Box3,Group,Vector3}=await import('three');
+  const {buildingFront,facadeView}=await import('../packages/frontend/src/lib/town/facade-view.ts');
+  const {inValley}=await import('../packages/frontend/src/lib/town/valley-river.ts');
+  for(const rotation of [.24,Math.PI-.19]){
+    for(const kind of ['market','wharf']){
+      const model=new Group();
+      model.rotation.y=rotation;
+      const normal=model.getWorldDirection(new Vector3()).multiplyScalar(kind==='wharf'?-1:1);
+      const entry=normal.clone().multiplyScalar(4);
+      const box=new Box3(new Vector3(-5,0,-5),new Vector3(5,12,5));
+      for(const doors of [[],[{threshold:entry,landing:entry.clone().add(normal)}]]){
+        const front=buildingFront({model,site:{kind},doors},box);
+        for(const room of [undefined,new Vector3(1,9,-1)]){
+          const {eye,target}=facadeView(front,47,.65,room);
+          const aim=eye.sub(target);aim.y=0;
+          const outward=inValley(normal).sub(inValley(new Vector3()));
+          assert.ok(aim.normalize().dot(outward)>.99);
+          if(room)assert.equal(target.y,room.y);
+          const blockAt=front.target.clone().addScaledVector(normal,6);
+          const neighbor=new Box3(blockAt.clone().add(new Vector3(-2,-10,-2)),blockAt.clone().add(new Vector3(2,13,2)));
+          const clear=facadeView(front,47,.65,room,[neighbor]);
+          const worldBox=new Box3().setFromPoints([inValley(neighbor.min),inValley(neighbor.max)]);
+          for(let step=1;step<=20;step++)assert.ok(!worldBox.containsPoint(clear.target.clone().lerp(clear.eye,step/20)));
+          if(doors.length)assert.ok(Math.abs(front.target.clone().sub(entry).dot(normal))<1e-8);
+        }
+      }
+    }
+  }
 });
 
 test('valley orbit stays inside the forest and clears the graded slopes on its way to the eye',async()=>{

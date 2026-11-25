@@ -1,6 +1,7 @@
 import * as T from 'three';
 import type { Bank } from './painted-coast.js';
 
+export const overlookCrest = {x:72,z:455};
 export const valleyOrigin = {x:64,z:117};
 
 export function shoreline(station:number){

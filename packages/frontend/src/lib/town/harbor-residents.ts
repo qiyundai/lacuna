@@ -1,6 +1,9 @@
 import * as T from 'three';
 import { clone as cloneRig } from 'three/addons/utils/SkeletonUtils.js';
 import type { Site } from './painted-coast.js';
+import { overlookCrest, valleyOrigin } from './valley-river.js';
+import { hillTrail, hillVisits, type HillMotion } from './overlook-walk.js';
+import { overlookPose } from './overlook-pose.js';
 import { hashPage } from './city-growth.js';
 import { lifeStories } from './life-stories.js';
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
@@ -22,7 +25,7 @@ export function residentMotion(resident:HarborResident,seconds:number,length:num
   return {frame,distance:direction===1?stride.distance:length-stride.distance,direction,turning};
 }
 
-type ResidentMotion = ReturnType<typeof residentMotion> & {gesture?:ShopperGesture;beat?:number;strength?:number};
+type ResidentMotion = ReturnType<typeof residentMotion> & HillMotion & {gesture?:ShopperGesture;beat?:number;strength?:number};
 
 function releaseShopper(model:GLTF){
   const materials=new Set<T.Material>(),skeletons=new Set<T.Skeleton>();
@@ -84,7 +87,7 @@ function shopperFigure(home:ResidentHome,assets:ReturnType<typeof figures>,redra
   const note=new T.Mesh(new T.BoxGeometry(.12,.009,.085),new T.MeshStandardMaterial({color:0xf2ddaa,roughness:1}));
   note.name=home.life.tomas?'Nell’s recipe card':'Pocket notebook';note.visible=false;note.castShadow=note.receiveShadow=true;
   note.position.set(0,.245,.027);note.rotation.z=.21;
-  let beat=-1;
+  let beat=-1,resting:ReturnType<typeof overlookPose>|undefined,heldPosture:ResidentMotion['posture'];
   const fabric=new Map<T.Material,T.MeshStandardMaterial>();
   const style=lifeStories.findIndex(s=>s.key===home.life.family);
   const file=assets.acquire(home.life.model ?? 'market-shopper.glb');
@@ -110,6 +113,7 @@ function shopperFigure(home:ResidentHome,assets:ReturnType<typeof figures>,redra
       };
       part.material=Array.isArray(part.material)?part.material.map(dyed):dyed(part.material);
     });
+    resting=overlookPose(loaded.scene,hashPage(home.resident));
     root.add(loaded.scene);
     head=loaded.scene.getObjectByName('Head');
     arm=loaded.scene.getObjectByName('SleeveR');
@@ -132,9 +136,10 @@ function shopperFigure(home:ResidentHome,assets:ReturnType<typeof figures>,redra
       const next=motion.turning?turn:walk;
       if(!next || !mixer)return false;
       const time=motion.frame/8;
-      const tick=motion.gesture?motion.beat??0:-1;
-      if(active===next && next.time===time && beat===tick)return false;
-      if(beat>=0 && head && arm && elbow && bagArm){
+      const tick=motion.gesture||motion.posture?motion.beat??0:-1;
+      if(active===next && next.time===time && beat===tick && heldPosture===motion.posture)return false;
+      if(heldPosture)resting?.reset();
+      if(beat>=0 && !heldPosture && head && arm && elbow && bagArm){
         head.quaternion.copy(rest[0]!);arm.quaternion.copy(rest[1]!);elbow.quaternion.copy(rest[2]!);
         bagArm.quaternion.copy(rest[3]!);
       }
@@ -146,6 +151,8 @@ function shopperFigure(home:ResidentHome,assets:ReturnType<typeof figures>,redra
       }
       next.time=time;
       mixer.update(0);
+      heldPosture=motion.posture;
+      if(motion.posture)resting?.apply(motion.posture,motion.strength??1,tick,motion.exchange);
       beat=tick;
       note.visible=motion.gesture==='read';
       if(motion.gesture && head && arm && elbow && bagArm){
@@ -202,7 +209,7 @@ function routeByDoor(lot:WaterfrontLot,street:T.Vector3[],front?:ShopFront) {
   return path.getLength()>.05?path:undefined;
 }
 
-export function createHarborResidents(redraw:()=>void,weekday:number) {
+export function createHarborResidents(redraw:()=>void,ground:(x:number,z:number)=>number) {
   const layer=new T.Group();layer.name='Harbor residents';
   const actors=new Map<string,ReturnType<typeof shopperFigure>>();
   const assets=figures();
@@ -210,10 +217,31 @@ export function createHarborResidents(redraw:()=>void,weekday:number) {
   const eyeAtSelection=new T.Vector3(Infinity,0,0),directionAtSelection=new T.Vector3(),bounds=new T.Sphere(new T.Vector3(),1.2);
   type Route={home:ResidentHome;path:T.CurvePath<T.Vector3>;street:T.Vector3[];stops:string[];memory?:string;task:string;location?:Site;rounds?:ReturnType<typeof shopperRounds>};
   const routes=new Map<string,Route>();
+  let visits=hillVisits([],new Date()),plannedDay='',nextMidnight=0;
+  const awayFromDistrict=new Set<string>();
+  let walkers:Parameters<typeof hillVisits>[0]=[];
+  function planDay(now:number){
+    const today=new Date(now*1000),date=today.toDateString();
+    if(date!==plannedDay){
+      for(const id of awayFromDistrict)routes.delete(id);
+      awayFromDistrict.clear();
+      visits=hillVisits(walkers,today);plannedDay=date;lastSelection=-Infinity;
+    }
+    today.setHours(24,0,0,0);nextMidnight=today.getTime()/1000;
+  }
+  const hillStation=valleyOrigin.z-overlookCrest.z;
   const position=new T.Vector3(),tangent=new T.Vector3(),behind=new T.Vector3();
   function place(homes:readonly ResidentHome[],lots:WaterfrontLot[],streets:Map<number,T.Vector3[][]>,fronts:ShopFront[],walkways:T.Vector3[][]){
+    const today=new Date(),weekday=today.getDay();
+    const previous=today.toDateString()===plannedDay?[...visits].flatMap(([id,trip])=>{
+      const route=routes.get(id);
+      return route && homes.some(h=>h.resident===id && h.site.id===route.home.site.id)?[{id,trip,route}]:[];
+    }):[];
+    awayFromDistrict.clear();
     routes.clear();lastSelection=-Infinity;
     const network=streetNetwork(fronts,walkways);
+    walkers=[];plannedDay='';
+    const trails=new Map<T.Vector3,Map<number,T.CurvePath<T.Vector3>>>();
     for(const actor of actors.values())actor.root.visible=false;
     const now=Date.now()/1000;
     for(const home of homes){
@@ -224,6 +252,23 @@ export function createHarborResidents(redraw:()=>void,weekday:number) {
       const path=lot && street && routeByDoor(lot,street,front);
       if(!path || !street)continue;
       const rounds=front?shopperRounds(front,fronts,walkways,weekday,home.life,network):undefined;
+      if(rounds){
+        const origin=rounds.visits[0]!.point;
+        const distance=network.pathsFrom(origin).distance;
+        const gates=(streets.get(home.site.bank)??[]).flatMap(line=>line.length?[line[0]!]:[])
+          .filter(p=>distance.has(p)).sort((a,b)=>a.x-b.x || distance.get(a)!-distance.get(b)!);
+        const gate=gates[0];
+        if(gate && walkingTicks(Math.abs(origin.x-hillStation))/8<2.5*3600)walkers.push({id:home.resident,arrival:home.arrival,bank:home.site.bank,period:rounds.period,shift:home.life.shift,stride:home.life.stride??1,path(slot){
+          const street=network.between(origin,gate);
+          if(!street)return;
+          const seats=trails.get(gate)??new Map<number,T.CurvePath<T.Vector3>>();
+          if(!seats.has(slot))seats.set(slot,hillTrail(gate,home.site.bank,slot,ground));
+          trails.set(gate,seats);
+          const path=new T.CurvePath<T.Vector3>();
+          path.curves=street.curves.concat(seats.get(slot)!.curves);
+          return path;
+        }});
+      }
       const stops=rounds?.visits.flatMap(v=>v.site?[siteName(v.site.kind)+' · '+v.activity.task]:[])??[];
       const remembered=rounds?.visits.find(v=>v.site && v.memory);
       const memory=remembered?.site?'At '+siteName(remembered.site.kind).replace(/^The /,'the ')+', '+remembered.memory:undefined;
@@ -233,6 +278,13 @@ export function createHarborResidents(redraw:()=>void,weekday:number) {
         existing.root.removeFromParent();existing.dispose();actors.delete(home.resident);
       }
     }
+    planDay(now);
+    const travellingSessions=new Set(previous.filter(p=>!routes.has(p.id)).map(p=>p.trip.session));
+    for(const [id,trip] of visits)if(travellingSessions.has(trip.session))visits.delete(id);
+    for(const {id,trip,route} of previous)if(travellingSessions.has(trip.session)){
+      visits.set(id,trip);
+      if(!routes.has(id)){routes.set(id,route);awayFromDistrict.add(id);}
+    }
     for(const [id,actor] of actors)if(!routes.has(id)){
       actor.root.removeFromParent();actor.dispose();actors.delete(id);
     }
@@ -240,10 +292,11 @@ export function createHarborResidents(redraw:()=>void,weekday:number) {
   }
 
   function sample(route:Route,seconds:number){
-    return route.rounds?.sampleDay(seconds)??{path:route.path,indoors:false,
+    return visits.get(route.home.resident)?.sample(seconds%86400)??route.rounds?.sampleDay(seconds)??{path:route.path,indoors:false,
       location:undefined,motion:residentMotion('shopper',seconds,route.path.getLength()),task:route.home.life.anchor.task};
   }
   function update(seconds:number,now:number,eye:T.Vector3,frustum:T.Frustum,following?:string){
+    if(now>=nextMidnight)planDay(now);
     let changed=shadowDirty;shadowDirty=false;
     if(seconds<lastSelection || seconds-lastSelection>=1 || eye.distanceToSquared(eyeAtSelection)>9 || directionAtSelection.distanceToSquared(frustum.planes[4]!.normal)>.005 || following!==lastFollow){
       lastSelection=seconds;eyeAtSelection.copy(eye);directionAtSelection.copy(frustum.planes[4]!.normal);lastFollow=following;
@@ -286,15 +339,13 @@ export function createHarborResidents(redraw:()=>void,weekday:number) {
     if(!route)return;
     const {path,motion}=sample(route,seconds),length=path.getLength();
     const point=path.getPoint(motion.distance/length);
-    if(route.rounds){
-      const eye=path.getPoint(T.MathUtils.clamp((motion.distance+(motion.distance>length/2?-3.5:3.5))/length,0,1));
-      eye.y+=2.35;eye.z+=route.home.site.bank===0?.75:-.75;
-      return {point,eye};
-    }
-    const street=route.street;
-    const eyeX=point.x+(street.at(-1)!.x-point.x>=4?4:-4);
-    const vantage=street.reduce((best,p)=>Math.abs(p.x-eyeX)<Math.abs(best.x-eyeX)?p:best);
-    return {point,eye:vantage.clone().add(new T.Vector3(0,2.35,route.home.site.bank===0?.38:-.38))};
+    const ahead=motion.distance+(motion.distance>length/2?-7:7);
+    const offset=path.getPoint(T.MathUtils.clamp(ahead/length,0,1)).sub(point);
+    offset.y=0;
+    if(offset.lengthSq()<.01)offset.set(1,0,0);
+    offset.setLength(7).z+=route.home.site.bank===0?.6:-.6;
+    offset.y=3.6;
+    return {point,eye:point.clone().add(offset)};
   }
   function positionOf(id:string){return actors.get(id)?.root.position;}
   function visit(id:string,seconds?:number):ResidentVisit|undefined{

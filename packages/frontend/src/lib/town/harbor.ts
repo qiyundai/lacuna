@@ -3,12 +3,13 @@ import {floorSeed,roomLighting,type WindowEmitter} from './room-light.js';
 import { batchPlantings } from './tree-batches.js';
 import type { WoodlandTree } from './woodland-boughs.js';
 import { groveCell } from './corridor-vegetation.js';
+import { buildingFront, facadeView } from './facade-view.js';
 import { constrainValleyView } from './valley-camera.js';
 import * as T from 'three';
 import { cityPageMarkers, type CityParcel, type PageMarker } from './city-page-markers.js';
 import { valleyInput } from './valley-input.js';
 import { createGreenCorridor } from './green-corridor.js';
-import { bankEdge, inValley, valleyOrigin,riverWidth } from './valley-river.js';
+import { bankEdge, inValley, overlookCrest, valleyOrigin,riverWidth } from './valley-river.js';
 import { createBayWater } from './bay-water.js';
 import { createBayAtmosphere } from './bay-atmosphere.js';
 import { harborWorkshop, landHeight, shoreline, siteHeading, sitePoint, mooring, isWorkplace, type Workshop } from './harbor-workshop.js';
@@ -17,6 +18,7 @@ import { buildingArrival } from './building-arrival.js';
 import { bridgeApproach, pavedRun, railClearance, doorRoute, connectDoors, hillsidePassage, neighborhoodPassages, placeLot, streetFurniture, streetLine, streetSide, streetWidth } from './harbor-streets.js';
 import { courtTemplates, cutBuildingPlots, gardenClearance, landscapeWaterfront, loadGardenPlants } from './waterfront-gardens.js';
 import { createBayWorld } from './bay-world.js';
+import { overlookView } from './overlook-walk.js';
 import { createHarborResidents } from './harbor-residents.js';
 import type { ResidentHome, ResidentVisit } from './resident-lives.js';
 import type { ShopFront } from './shopper-rounds.js';
@@ -170,7 +172,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   const target=new T.Vector3();
   const scenery=new T.Group(),structures=new T.Group(),paths=new T.Group(),travel=new T.Group();
   city.add(scenery,structures,paths,travel);
-  const residents=createHarborResidents(schedule,new Date().getDay());
+  const residents=createHarborResidents(schedule,valley.ground);
   function routineTime(){
     if(fixedHour!==undefined)return fixedHour*3600+time;
     const now=new Date();
@@ -226,15 +228,18 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   let selectedPage:string|undefined;
   let residentLook:T.Vector3|undefined;
   let following:string|undefined,lastVisit:ResidentVisit|undefined;
-  const followOffset=new T.Vector3(),followPoint=new T.Vector3();
+  const followPoint=new T.Vector3();
+  let atOverlook=false;
   function leaveResident(){
+    atOverlook=false;
     residentLook=undefined;following=undefined;
     if(lastVisit){lastVisit=undefined;onResident?.();}
   }
   const parcels:CityParcel[]=[];
   const pageTargets=cityPageMarkers(canvas,camera,city,parcels,markers=>onMarkers?.(markers));
   const v=(x:number,y:number,z:number)=>new T.Vector3(x,y,z);
-  const detailViews = new Map<string, {target:T.Vector3;eye:T.Vector3}>();
+  const frontages=new Map<string,ReturnType<typeof buildingFront>>();
+  const roomTargets=new Map<string,T.Vector3>();
   function cityPose(station:number){
     const visible=plan.sites.map(sitePoint).filter(p=>Math.abs(p.x-station)<90);
     const district=new T.Box3().setFromPoints(visible);
@@ -248,12 +253,17 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     pageTargets.invalidate();
     const site=id?plan.addresses.get(id):undefined;
     if(site && Math.abs(Math.floor(site.x/1800)-loadedInlet)>1)update(plan,undefined,Math.floor(site.x/1800));
-    const detail = id && detailViews.get(id);
-    const p=site?inValley(sitePoint(site)):undefined;
-    const pose=view==='Overlook'?{eye:v(70,165,493),target:v(73,132,263)}:
-      detail || (p?{eye:p.clone().add(v(11,8,13)),target:p.clone().add(v(0,2,0))}:cityPose(plan.latest?sitePoint(plan.latest).x:0));
+    const front=site && frontages.get(site.id);
+    let pose;
+    if(view==='Overlook')pose=overlookView();
+    else if(front){
+      const neighbors=parcels.filter(parcel=>parcel.site!==site).map(parcel=>parcel.box);
+      pose=facadeView(front,camera.fov,camera.aspect,id?roomTargets.get(id):undefined,neighbors);
+    }else pose=cityPose(plan.latest?sitePoint(plan.latest).x:0);
     selectedPage=id;
     inspected=true;moveTo(pose,true);
+    atOverlook=view==='Overlook';
+    if(atOverlook)onMarkers?.([]);
   }
   function visitResident(id:string){
     const home=homes.find(h=>h.resident===id && h.arrival<=Date.now()/1000);
@@ -265,9 +275,8 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     inspected=true;selectedPage=undefined;
     const subject=inValley(pose.point.add(v(0,.80,0)));
     moveTo({target:subject,eye:inValley(pose.eye)},true);
-    residentLook=subject;
+    residentLook=subject.clone();
     following=home.resident;
-    followOffset.copy(inValley(pose.eye)).sub(subject);
     return residents.visit(id,seconds);
   }
   function moveTo(pose:{eye:T.Vector3;target:T.Vector3},glide:boolean){
@@ -283,8 +292,8 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     const halfHeight=camera.near*Math.tan(T.MathUtils.degToRad(camera.fov)*.5);
     const clearanceRadius=Math.hypot(camera.near,halfHeight,halfHeight*camera.aspect);
     const upstream=valleyOrigin.z-(plan.end-900)/12.5;
-    constrainValleyView(camera.position,target,valley.bounds,upstream,valley.ground,clearanceRadius);
-    camera.lookAt(residentLook && !framing?residentLook:target);camera.updateMatrixWorld();
+    constrainValleyView(camera.position,target,valley.bounds,upstream,valley.ground,clearanceRadius,following!==undefined);
+    camera.lookAt(target);camera.updateMatrixWorld();
     checkedEye.copy(camera.position);checkedTarget.copy(target);
   }
   function schedule(){if(!frame&&!dead&&!document.hidden&&!skipped)frame=requestAnimationFrame(draw);}
@@ -292,7 +301,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     frame=0;if(dead||document.hidden||skipped)return;
     if(!paused&&!framing&&!input.active()&&last&&now-last<30){schedule();return;}
     const dt=last?Math.min(.1,(now-last)/1000):0;last=now;if(!paused)time+=dt;
-    input.step(now);
+    input.step(now,following?2.5:7);
     if (framing) {
       const t=paused?1:T.MathUtils.smootherstep((now-framing.start)/1250,0,1);
       target.lerpVectors(framing.from,framing.to,t);
@@ -303,8 +312,9 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       const p=residents.positionOf(following);
       if(p){
         inValley(p,followPoint);followPoint.y+=.80;
-        residentLook.lerp(followPoint,1-Math.exp(-8*dt));
-        target.copy(residentLook);camera.position.copy(target).add(followOffset);
+        followPoint.sub(residentLook).multiplyScalar(1-Math.exp(-8*dt));
+        residentLook.add(followPoint);
+        target.add(followPoint);camera.position.add(followPoint);
       }
     }
     constrainCamera();
@@ -392,11 +402,14 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     valley.tick(time,camera.position,shop.breezeTime.value);sea.clock.value=time;atmosphere.render(time,rooms.sources,light,construction?hashPage(construction.site.id):undefined);
     sound?.update(camera,light.daylight,paused,soundPlaces,soundFerries,valley.flocks,valley.ground,valley.coverAt);
     const selected=selectedPage?plan.addresses.get(selectedPage):undefined;
-    if(onMarkers)pageTargets.update(selected??plan.latest,selected?selectedPage:undefined);
+    if(onMarkers && !atOverlook)pageTargets.update(selected??plan.latest,selected?selectedPage:undefined);
     if(!paused||framing||input.active())schedule();
   }
   function applyLight(){
-    world.setTime(time,valleyOrigin.x+shoreline(focusX)-15,camera.position.x,valleyOrigin.z-focusX,light,motionPreference.matches?0:time);
+    const onHill=camera.position.z>245;
+    const x=atOverlook?overlookCrest.x:onHill?camera.position.x:valleyOrigin.x+shoreline(focusX)-15;
+    const z=atOverlook?overlookCrest.z:onHill?camera.position.z:valleyOrigin.z-focusX;
+    world.setTime(time,x,camera.position.x,z,light,motionPreference.matches?0:time,onHill?valley.ground(x,z):4);
     rooms.apply(light);shop.fixtures.apply(light);
     shop.clockHour.value=Math.floor(hour*60+.000001)/60;
     (scene.fog as T.FogExp2).color.copy(nightFog).lerp(dayFog,light.daylight).lerp(duskFog,light.twilight*.68);
@@ -474,7 +487,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     construction=undefined;
     refreshTerrain(start,end);releaseInstances(structures);rooms.sources.length=0;atmosphere.invalidateRooms();
     bridge?.dispose();bridge=undefined;
-    detailViews.clear();
+    frontages.clear();roomTargets.clear();
     for(const p of paths.children)if(p instanceof T.Mesh)p.geometry.dispose();paths.clear();
     const cluster=new T.Group(),visible=next.sites.filter(s=>s.x>=start&&s.x<end);
     const founded=bridgeStation(next.sites);
@@ -611,11 +624,12 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     const still=paused||motionPreference.matches;
     for(const lot of lots) {
       const {model,site,doors}=lot;
-      parcels.push({site,box:new T.Box3().setFromObject(model)});
+      const box=new T.Box3().setFromObject(model);
+      parcels.push({site,box});
+      frontages.set(site.id,buildingFront(lot,box));
       const residents = next.details?.addresses.get(site.id);
       if (residents) furnishAddress(model, residents, furniture, shop, (page, anchor) => {
-        detailViews.set(page, {target:inValley(anchor.localToWorld(v(0,.38,0))),
-          eye:inValley(anchor.localToWorld(v(2.4,2.7,7.8)))});
+        roomTargets.set(page,anchor.localToWorld(v(0,.38,0)));
       });
       const access=new T.Group();
       const entrance=connectDoors(shop,access,lot,streetsByBank.get(site.bank)![laneOf(site)]!,clearance);
@@ -642,9 +656,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
           roomHighlight.visible=!still;
           roomHighlight.material.uniforms.strength!.value=0;
           roomAge=0;
-          const cameraAnchor=ledge??model;
-          const eye=position.clone().add(v(2.4,2.7,8).applyQuaternion(cameraAnchor.getWorldQuaternion(new T.Quaternion())));
-          detailViews.set(savedPage,{target:inValley(position),eye:inValley(eye)});
+          roomTargets.set(savedPage,position);
         }
       }
       if(newBuilding && still && site.kind!=='pines')sound?.settle(inValley(model.position));
@@ -683,7 +695,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     sailings(start,end);
     renderer.shadowMap.needsUpdate=true;
     if(viewInlet===undefined){
-      if(savedSite && savedPage && detailViews.has(savedPage))visit('Page',savedPage);
+      if(savedSite && savedPage && roomTargets.has(savedPage))visit('Page',savedPage);
       else if(savedSite){
         const raised=inValley(sitePoint(savedSite));raised.y+=2;
         const screen=raised.project(camera);
@@ -716,7 +728,10 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   window.addEventListener('pageshow',visibility,options);
   const stopClock=fixedHour===undefined?onLocalMinute(()=>{if(paused&&!document.hidden&&!skipped){clockCheck=-Infinity;schedule();}}):undefined;
   const input=valleyInput(canvas,camera,target,signals.signal,schedule,
-    ()=>{inspected=true;framing=undefined;leaveResident();checkedEye.x=Infinity;},()=>{inspected=false;fit(true);},
+    () => {
+      if(framing && residentLook)residentLook.copy(target);
+      inspected=true;framing=undefined;atOverlook=false;checkedEye.x=Infinity;
+    },()=>{inspected=false;fit(true);},
     (x,y)=>{
       if(onMeet){
         const bounds=canvas.getBoundingClientRect();

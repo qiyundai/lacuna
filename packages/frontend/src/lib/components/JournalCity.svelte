@@ -23,6 +23,7 @@
   import type { PageMarker } from '$lib/town/city-page-markers.js';
   import { residentHomes, type ResidentVisit } from '$lib/town/resident-lives.js';
 
+  import { lifeStories } from '$lib/town/life-stories.js';
   import { emptyCensus, housedResidents, citizenLife, type Census } from '$lib/town/citizens.js';
   let census=$state.raw<Census>(emptyCensus()), now=$state(Math.floor(Date.now()/1000)), query=$state('');
   let {guest=false,readOnly=false,exampleHomes=residentHomes,afterglow=false,fixedHour,onExit,navigation,draft=$bindable(''),draftId=$bindable(''),busy=$bindable(false)}:{guest?:boolean;readOnly?:boolean;exampleHomes?:typeof residentHomes;afterglow?:boolean;fixedHour?:number;onExit?:()=>void;navigation?:Snippet;draft?:string;draftId?:string;busy?:boolean}=$props();
@@ -74,10 +75,13 @@
     const timer=setTimeout(()=>{now=Math.floor(Date.now()/1000);if(!guest)void read();},Math.min(2147483000,Math.max(0,next*1000-Date.now()+50)));
     return ()=>clearTimeout(timer);
   });
+  const portrait=(model?:string)=>model && model!=='market-shopper.glb'
+    ? '/city/residents/portraits/'+model.replace(/\.glb$/,'.webp') : '/city/residents/tomas.webp';
   const directory=$derived.by(()=>{
     const housed=new Map(plan.homes.map(h=>[h.resident,h]));
-    const people=guest?plan.homes.map(h=>({id:h.resident,name:h.life.name,arrival:h.arrival})):census.people;
-    return people.filter(p=>p.arrival<=now).map(p=>({id:p.id,name:p.name,place:housed.get(p.id)?.site})).sort((a,b)=>a.name.localeCompare(b.name));
+    const people=guest?plan.homes.map(h=>({id:h.resident,name:h.life.name,arrival:h.arrival,model:h.life.model})):
+      census.people.map(p=>({id:p.id,name:p.name,arrival:p.arrival,model:lifeStories[p.family]?.model}));
+    return people.filter(p=>p.arrival<=now).map(p=>({...p,place:housed.get(p.id)?.site})).sort((a,b)=>a.name.localeCompare(b.name));
   });
   const searchKey=(s:string)=>s.normalize('NFD').replace(/\p{M}/gu,'').trim().toLocaleLowerCase();
   let directoryLimit=$state(60);
@@ -300,7 +304,8 @@
   {/if}
   <dialog bind:this={dialog} class:closing class:browsing={panel==='pages'||panel==='read'} aria-labelledby="journal-heading" oncancel={e=>{e.preventDefault();if(!busy)void dismiss();}}
     onclose={restoreFocus}>
-    <div class="folio" class:reading={panel==='read'||panel==='forget'||panel==='resident'}>
+    <div class="folio" class:directory-sheet={panel==='directory'} class:reading={panel==='read'||panel==='forget'||panel==='resident'}>
+      {#if panel!=='directory'}
       <aside class="cover" aria-label={site && (panel==='read'||panel==='forget')?'Page location':'Journal cover'}>
         {#if (panel==='read'||panel==='forget') && site}
           <div class="plate">
@@ -315,18 +320,14 @@
           <div class="imprint"><span>{site.bank===0?'West bank':'East bank'}</span><strong>{siteName(site.kind)}</strong></div>
         {:else if panel==='resident' && openedResident}
           <div class="plate">
-            {#if openedResident.life.tomas}<img src="/city/residents/tomas.webp" alt="Tomás in his flat cap and short red scarf." width="544" height="544"/>
-            {:else if openedResident.site?.elevation!==undefined}
-              <svg viewBox={`${openedResident.site.elevation%3} ${Math.floor(openedResident.site.elevation/3)} 1 1`} aria-hidden="true">
-                <image href={'/city/paint/'+openedResident.site.kind+'.webp'} width="3" height="2"/>
-              </svg>
-            {:else if openedResident.site}<img src={'/city/paint/'+openedResident.site.kind+'.webp'} alt=""/>{/if}
+            <img src={portrait(openedResident.life.model)} alt="" width="384" height="384"/>
           </div>
           <div class="imprint"><span>{openedResident.life.tomas?'Harbor resident':openedResident.site?siteName(openedResident.site.kind):'Between homes'}</span><strong>{openedResident.life.name}</strong></div>
         {:else}
           <div class="imprint"><span>{guest?'Example journal':'City journal'}</span><strong>Lacuna</strong></div>
         {/if}
       </aside>
+      {/if}
       <div class="leaf">
         <header class="leaf-head">
           <span>{panel==='directory'?'City directory':panel==='resident'?openedResident?.life.heading:panel==='write'?'Page '+(folios.size+1):panel==='pages'?'Journal index':'Page '+(folios.get(readId)??'')}</span>
@@ -356,9 +357,12 @@
                 spellcheck="false" {...{autocorrect:'off'}} autocapitalize="none" bind:value={query} oninput={()=>directoryLimit=60}/>
             </div>
           </search>
-          <div class="index">
+          <div class="resident-grid">
             {#each matches.slice(0,directoryLimit) as person (person.id)}
-              <button class="index-entry" onclick={()=>meet(person.id)}><strong>{person.name}</strong><span>{person.place?siteName(person.place.kind):'Between homes'}</span></button>
+              <button class="directory-card" onclick={()=>meet(person.id)}>
+                <img src={portrait(person.model)} alt="" width="64" height="64" loading="lazy"/>
+                <span><strong>{person.name}</strong><small>{person.place?siteName(person.place.kind):'Between homes'}</small></span>
+              </button>
             {:else}<p>No residents match your search.</p>{/each}
             {#if matches.length>directoryLimit}<button class="atlas-link" onclick={()=>directoryLimit+=60}>Show more residents</button>{/if}
           </div>
@@ -469,6 +473,21 @@
   /* Pull the tools out by half the hit-area padding so the × lines up with the text edge */
   .leaf-tools{display:flex;margin-right:calc((var(--icon) - var(--control)) / 2)}
   .leaf h2{font:400 var(--display-2)/var(--lh-display) var(--font);letter-spacing:var(--ls-display);margin-bottom:var(--space-2)}
+  .folio.directory-sheet{display:block}
+  .directory-sheet .leaf{background:var(--paper);container:directory / inline-size}
+  .resident-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,13rem),1fr));gap:var(--space-2);margin-top:var(--space-4)}
+  .directory-card{display:flex;align-items:center;gap:.72rem;padding:.5rem;text-align:start;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-s)}
+  .directory-card img{display:block;flex:none;width:3.55rem;height:3.55rem;object-fit:cover;border-radius:var(--radius-s);background:var(--valley)}
+  .directory-card span{min-width:0;display:grid;gap:.18rem;overflow-wrap:anywhere}
+  .directory-card strong{font:600 var(--text-md)/1.16 var(--font)}
+  .directory-card small{font:400 var(--ui-sm)/1.25 var(--font);color:var(--ink-muted)}
+  .directory-card:is(:hover,:focus-visible){background:var(--field);border-color:var(--accent)}
+  .directory-card:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .resident-grid>.atlas-link,.resident-grid>p{grid-column:1/-1}
+  @container directory (max-width:29rem){
+    .resident-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,8rem),1fr))}
+    .directory-card{align-items:flex-start;flex-direction:column;padding:.72rem}
+  }
   .resident-search{position:relative}
   .resident-search span{position:absolute;inset-inline-start:0;top:50%;translate:0 -50%;display:flex;color:var(--ink-muted);pointer-events:none}
   .resident-search input{padding-inline-start:var(--space-6)}
