@@ -315,7 +315,7 @@
           <div class="imprint"><span>{site.bank===0?'West bank':'East bank'}</span><strong>{siteName(site.kind)}</strong></div>
         {:else if panel==='resident' && openedResident}
           <div class="plate">
-            {#if openedResident.life.tomas}<img src="/city/residents/tomas.webp" alt="Tomás with his market bag."/>
+            {#if openedResident.life.tomas}<img src="/city/residents/tomas.webp" alt="Tomás in his flat cap and short red scarf." width="544" height="544"/>
             {:else if openedResident.site?.elevation!==undefined}
               <svg viewBox={`${openedResident.site.elevation%3} ${Math.floor(openedResident.site.elevation/3)} 1 1`} aria-hidden="true">
                 <image href={'/city/paint/'+openedResident.site.kind+'.webp'} width="3" height="2"/>
@@ -348,8 +348,14 @@
           </div>
         {:else if panel==='directory'}
           <h2 id="journal-heading" tabindex="-1">Residents</h2>
-          <label for="resident-search">Name or building</label>
-          <input type="search" id="resident-search" bind:value={query} oninput={()=>directoryLimit=60}/>
+          <search class="field" aria-labelledby="journal-heading">
+            <label for="resident-search">Search residents</label>
+            <div class="resident-search">
+              <span aria-hidden="true"><Icon name="search" size={18}/></span>
+              <input type="search" id="resident-search" placeholder="Name or building" autocomplete="off"
+                spellcheck="false" {...{autocorrect:'off'}} autocapitalize="none" bind:value={query} oninput={()=>directoryLimit=60}/>
+            </div>
+          </search>
           <div class="index">
             {#each matches.slice(0,directoryLimit) as person (person.id)}
               <button class="index-entry" onclick={()=>meet(person.id)}><strong>{person.name}</strong><span>{person.place?siteName(person.place.kind):'Between homes'}</span></button>
@@ -455,7 +461,7 @@
   .reading .cover{background:var(--line);color:var(--ink);justify-content:center}
   .reading .cover::after{background:none}
   .plate svg{width:min(100%,15rem);aspect-ratio:1;margin-inline:auto}
-  .plate{margin:.8rem .5rem 0}.plate img{width:100%}.plate :is(img,svg){display:block;max-height:15rem;object-fit:contain;filter:drop-shadow(0 5px 3px color-mix(in srgb,var(--ink) 13%,transparent))}
+  .plate{margin:.8rem .5rem 0}.plate img{width:100%;height:auto}.plate :is(img,svg){display:block;max-height:15rem;object-fit:contain;filter:drop-shadow(0 5px 3px color-mix(in srgb,var(--ink) 13%,transparent))}
   .reading .imprint{padding:1rem 1.35rem 1.5rem}
   .leaf{min-width:0;display:flex;flex-direction:column;padding:var(--space-5) var(--sheet-inset) var(--space-6);background:linear-gradient(90deg,color-mix(in srgb,var(--line) 45%,transparent),transparent 15px)}
   .leaf-head,.leaf-foot{display:flex;justify-content:space-between;align-items:center;gap:var(--space-4)}
@@ -463,6 +469,9 @@
   /* Pull the tools out by half the hit-area padding so the × lines up with the text edge */
   .leaf-tools{display:flex;margin-right:calc((var(--icon) - var(--control)) / 2)}
   .leaf h2{font:400 var(--display-2)/var(--lh-display) var(--font);letter-spacing:var(--ls-display);margin-bottom:var(--space-2)}
+  .resident-search{position:relative}
+  .resident-search span{position:absolute;inset-inline-start:0;top:50%;translate:0 -50%;display:flex;color:var(--ink-muted);pointer-events:none}
+  .resident-search input{padding-inline-start:var(--space-6)}
   .leaf time,.count,.note{color:var(--ink-subtle)}
   form{display:flex;flex-direction:column;gap:var(--space-5);flex:1;margin-top:var(--space-6)}
   textarea{width:100%;min-height:7.5rem;resize:vertical;border:0;border-radius:0;padding:0 .2rem;color:var(--ink);caret-color:var(--accent);font:400 var(--text-lg)/2rem var(--font);background:repeating-linear-gradient(transparent 0 calc(2rem - 1px),color-mix(in srgb,var(--ink-subtle) 12%,transparent) calc(2rem - 1px) 2rem);scroll-padding:.25rem}
