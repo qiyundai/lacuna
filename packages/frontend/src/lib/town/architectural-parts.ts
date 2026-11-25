@@ -1,6 +1,18 @@
 import * as T from 'three';
 import type { ModelTools, Pigment } from './model-workshop.js';
 
+export const maxStairRise = .10;
+export const minStairGoing = .17;
+
+export function stoneFlight(p:ModelTools, width:number, edgeZ:number, going:number, start:number, end:number, bottom:number) {
+  const count=Math.ceil(Math.abs(end-start)/maxStairRise),rise=(end-start)/count;
+  for(let i=0;i<count;i++){
+    const top=start+(i+1)*rise;
+    p.box('stone',0,(bottom+top)/2,edgeZ+(i+.5)*going,width,top-bottom,Math.abs(going));
+  }
+  return start+rise;
+}
+
 export function around(p: ModelTools, width: number, depth: number, draw: (span: number, side: number) => void) {
   for (let side = 0; side < 4; side++) {
     p.face(side, () => draw(side % 2 ? depth : width, side), (side % 2 ? width : depth) / 2);

@@ -12,21 +12,17 @@
   import { sessionVersion } from '$lib/session-version.js';
   import { prependEntry } from '$lib/stores/entries.svelte.js';
   import { resetJournalData } from '$lib/stores/session.svelte.js';
-  import { forgetAddress, type ForgottenAddress } from '../../../../shared/city-address.js';
+  import { currentRiverEdition, forgetAddress, type ForgottenAddress } from '../../../../shared/city-address.js';
   import { hashPage } from '$lib/town/city-growth.js';
+  import { siteName } from '$lib/town/architecture-catalog.js';
   import { paintedCoast, type Site } from '$lib/town/painted-coast.js';
   import { journalDetails } from '$lib/town/journal-details.js';
   import type { SceneCues } from '$lib/town/journal-scenes.js';
   import type { createHarbor } from '$lib/town/harbor.js';
 
   import type { PageMarker } from '$lib/town/city-page-markers.js';
+  import { residentHomes, type ResidentVisit } from '$lib/town/resident-lives.js';
 
-  const buildings:Record<Site['kind'],string>={
-    houses:'Riverside houses',steps:'The steps',terraces:'The terraces',crescent:'The crescent',
-    apartments:'The apartments',market:'The market',warehouse:'The warehouse',crane:'The dock crane',
-    pines:'The pine grove',glasshouse:'The glasshouse',station:'The station',civic:'The town hall',
-    belfry:'The belfry',towers:'The towers',arches:'The arches',wharf:'The wharf',beacon:'The beacon'
-  };
   let {guest=false,readOnly=false,afterglow=false,fixedHour,onExit,navigation,draft=$bindable(''),draftId=$bindable(''),busy=$bindable(false)}:{guest?:boolean;readOnly?:boolean;afterglow?:boolean;fixedHour?:number;onExit?:()=>void;navigation?:Snippet;draft?:string;draftId?:string;busy?:boolean}=$props();
   const notes = [
     'The light was still on across the street.', 'Made tea before the alarm.', 'The morning train was nearly empty.',
@@ -42,7 +38,7 @@
     'The bread was warm all the way home.', 'Walked the long way for once.'
   ];
   function examples():EntryData[] {
-    return notes.map((body,i)=>({id:hashPage('lacuna-coast-'+i).toString(16).padStart(32,'0'),riverEdition:3 as const,user_id:'guest',body,
+    return notes.map((body,i)=>({id:hashPage('lacuna-coast-'+i).toString(16).padStart(32,'0'),riverEdition:currentRiverEdition,user_id:'guest',body,
       created_at:1609459200+i*49171,solidified_at:1609459200+i*49171,kept_at:null}));
   }
   let canvas:HTMLCanvasElement,dialog:HTMLDialogElement;
@@ -59,13 +55,24 @@
   let readId=$state('');
   let markers=$state.raw<PageMarker[]>([]),writingDate=$state(new Date());
   const valleyViews=['City','Overlook'] as const;
-  let panel=$state<'write'|'pages'|'read'|'forget'>('write'),alive=false;
+  let panel=$state<'write'|'pages'|'read'|'forget'|'resident'>('write'),alive=false;
+  let resident=$state.raw<ResidentVisit>(),openedResident=$state.raw<ResidentVisit>();
+  let recipeNote=$state(''),canFindResident=$state(false);
   let savedPage:string|undefined;
   const ordered=$derived([...entries].sort((a,b)=>b.created_at-a.created_at||b.id.localeCompare(a.id)));
   const seen = new WeakMap<EntryData, SceneCues>();
   const plan=$derived.by(()=>{
     const coast = paintedCoast(entries,forgotten);
-    return {...coast, details: journalDetails(coast,entries,seen)};
+    return {...coast, details: journalDetails(coast,entries,seen), homes:residentHomes(coast,entries,guest)};
+  });
+  $effect(()=>{
+    const first=Math.min(...plan.homes.map(h=>h.arrival));
+    const delay=first*1000-Date.now();
+    canFindResident=delay<=0;
+    if(delay>0 && Number.isFinite(delay)){
+      const timer=setTimeout(()=>canFindResident=true,delay);
+      return ()=>clearTimeout(timer);
+    }
   });
   const openedPage=$derived(entries.find(entry=>entry.id===readId));
   const site=$derived(plan.addresses.get(readId));
@@ -98,7 +105,7 @@
     try{
       const {createHarbor}=await import('$lib/town/harbor.js');
       if(!alive)return;
-      const city=await createHarbor(canvas,readPage,afterglow,next=>{if(alive)markers=next;},fixedHour);
+      const city=await createHarbor(canvas,readPage,afterglow,next=>{if(alive)markers=next;},fixedHour,visit=>{if(alive)resident=visit;});
       if(alive)scene=city;else city.destroy();
     }catch{if(alive)graphicsError=true;}
   }
@@ -161,6 +168,11 @@
     closing=false;
     pageTurn?.cancel();
     panel=which;error='';if(which==='write')writingDate=new Date();
+    if(which==='resident' && resident){
+      openedResident=resident;
+      const notes=resident.life.notes;
+      recipeNote=notes[new Date().getDay()%notes.length]!;
+    }
     await tick();if(!alive || revision!==dialogRevision)return;
     if(!dialog.open)dialog.showModal();
     if(turn && !matchMedia('(prefers-reduced-motion: reduce)').matches){
@@ -199,7 +211,7 @@
     const version=sessionVersion.value;busy=true;error='';
     try{
       const now=Math.floor(Date.now()/1000);
-      const {entry,created}=guest?{created:true,entry:{id:draftId,riverEdition:3 as const,body,user_id:'guest',created_at:now,solidified_at:now,kept_at:null}}:await api.city.write(body,now,draftId);
+      const {entry,created}=guest?{created:true,entry:{id:draftId,riverEdition:currentRiverEdition,body,user_id:'guest',created_at:now,solidified_at:now,kept_at:null}}:await api.city.write(body,now,draftId);
       if(!alive||version!==sessionVersion.value)return;
       if(!guest)prependEntry(entry);
       await dismiss();
@@ -208,7 +220,7 @@
       entries=[...entries.filter(e=>e.id!==entry.id),entry];draft='';draftId='';
       await tick();
       const home=plan.addresses.get(entry.id);
-      notice=home?'Page saved at '+buildings[home.kind].replace(/^The /,'the ')+'.':'Page saved.';
+      notice=home?'Page saved at '+siteName(home.kind).replace(/^The /,'the ')+'.':'Page saved.';
     }catch{if(alive)error='Your writing is still here. Try saving again.';}
     finally{if(alive)busy=false;}
   }
@@ -226,7 +238,7 @@
       {@const marked=plan.addresses.get(marker.id)}
       {#if marked}
         <button class="page-marker" class:featured={i===0} style:left={marker.x+'px'} style:top={marker.y+'px'}
-          data-page-marker aria-label={'Read page '+folios.get(marker.id)+' at '+buildings[marked.kind]} onclick={()=>readPage(marker.id)}>
+          data-page-marker aria-label={'Read page '+folios.get(marker.id)+' at '+siteName(marked.kind)} onclick={()=>readPage(marker.id)}>
           <span class="marker-face"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <path d="M10 6Q7 3 2 4v11q5-1 8 2 3-3 8-2V4q-5-1-8 2Zm0 0v11"/></svg><span class="marker-label">Read page</span></span>
         </button>
@@ -242,6 +254,7 @@
         {#each valleyViews as view}
           <IconAction icon={view==='City'?'city':'overlook'} label={view==='City'?'City view':view} onclick={()=>scene?.visit(view)}/>
         {/each}
+        {#if canFindResident}<IconAction icon="resident" label="Find resident" onclick={()=>scene?.visitResident()}/>{/if}
         <IconAction icon={paused?'play':'pause'} label={paused?'Resume ambient motion':'Pause ambient motion'} onclick={()=>paused=!paused}/>
       {/if}
       {@render navigation?.()}
@@ -251,7 +264,13 @@
     </Masthead>
     <div class="bottom">
       <!-- Bottom-left: a notice when there is one, otherwise the song that is playing -->
-      <div class="lead"><p class="status" role="status">{statusLine}</p>{#if !statusLine}<NowPlaying/>{/if}</div>
+      <div class="lead"><p class="status" role="status">{statusLine}</p>
+        {#if resident}
+          <button class="resident-card" onclick={()=>open('resident')} aria-label={'Read the story of '+resident.life.name}>
+            <Icon name="pages"/><span><strong>{resident.life.name}</strong><small>{resident.task}</small></span>
+          </button>
+        {:else if !statusLine}<NowPlaying/>{/if}
+      </div>
       <div class="actions">
         {#if graphicsError}<IconAction icon="retry" label="Retry city" onclick={graphics}/>{/if}
         {#if !ready&&error}<IconAction icon="retry" label="Retry journal" onclick={read}/>{/if}
@@ -261,24 +280,53 @@
   {/if}
   <dialog bind:this={dialog} class:closing class:browsing={panel==='pages'||panel==='read'} aria-labelledby="journal-heading" oncancel={e=>{e.preventDefault();if(!busy)void dismiss();}}
     onclose={restoreFocus}>
-    <div class="folio" class:reading={panel==='read'||panel==='forget'}>
+    <div class="folio" class:reading={panel==='read'||panel==='forget'||panel==='resident'}>
       <aside class="cover" aria-label={site && (panel==='read'||panel==='forget')?'Page location':'Journal cover'}>
         {#if (panel==='read'||panel==='forget') && site}
-          <div class="plate"><img src={'/city/paint/'+site.kind+'.webp'} alt=""/></div>
-          <div class="imprint"><span>{site.bank===0?'West bank':'East bank'}</span><strong>{buildings[site.kind]}</strong></div>
+          <div class="plate">
+            {#if site.elevation !== undefined}
+              <svg viewBox={`${site.elevation % 3} ${Math.floor(site.elevation / 3)} 1 1`} aria-hidden="true">
+                <image href={'/city/paint/'+site.kind+'.webp'} width="3" height="2"/>
+              </svg>
+            {:else}
+              <img src={'/city/paint/'+site.kind+'.webp'} alt=""/>
+            {/if}
+          </div>
+          <div class="imprint"><span>{site.bank===0?'West bank':'East bank'}</span><strong>{siteName(site.kind)}</strong></div>
+        {:else if panel==='resident' && openedResident}
+          <div class="plate">
+            {#if openedResident.life.tomas}<img src="/city/residents/tomas.webp" alt="Tomás with his market bag."/>
+            {:else if openedResident.site.elevation!==undefined}
+              <svg viewBox={`${openedResident.site.elevation%3} ${Math.floor(openedResident.site.elevation/3)} 1 1`} aria-hidden="true">
+                <image href={'/city/paint/'+openedResident.site.kind+'.webp'} width="3" height="2"/>
+              </svg>
+            {:else}<img src={'/city/paint/'+openedResident.site.kind+'.webp'} alt=""/>{/if}
+          </div>
+          <div class="imprint"><span>{openedResident.life.tomas?'Harbor resident':siteName(openedResident.site.kind)}</span><strong>{openedResident.life.name}</strong></div>
         {:else}
           <div class="imprint"><span>{guest?'Example journal':'City journal'}</span><strong>Lacuna</strong></div>
         {/if}
       </aside>
       <div class="leaf">
         <header class="leaf-head">
-          <span>{panel==='write'?'Page '+(folios.size+1):panel==='pages'?'Journal index':'Page '+(folios.get(readId)??'')}</span>
+          <span>{panel==='resident'?openedResident?.life.heading:panel==='write'?'Page '+(folios.size+1):panel==='pages'?'Journal index':'Page '+(folios.get(readId)??'')}</span>
           <div class="leaf-tools">
             <SoundToggle surface="paper"/>
             <button class="paper-control" aria-label="Close" disabled={busy} onclick={dismiss}><Icon name="close"/></button>
           </div>
         </header>
-        {#if panel==='write'}
+        {#if panel==='resident' && openedResident}
+          <h2 id="journal-heading" tabindex="-1">{openedResident.life.title}</h2>
+          <div class="resident-story">
+            {#each openedResident.life.paragraphs as paragraph}<p>{paragraph}</p>{/each}
+            {#if openedResident.memory}<p>{openedResident.memory}</p>{/if}
+            {#if !openedResident.life.tomas && openedResident.stops.length}
+              <h3>Regular stops</h3>
+              <ul>{#each openedResident.stops as stop}<li>{stop}</li>{/each}</ul>
+            {/if}
+            <blockquote>{recipeNote}</blockquote>
+          </div>
+        {:else if panel==='write'}
           <h2 id="journal-heading" tabindex="-1">A new page</h2>
           <time datetime={writingDate.toISOString()}>{weekday.format(writingDate)}, {fullDate.format(writingDate)}</time>
           <form onsubmit={event=>{event.preventDefault();void save();}}>
@@ -346,6 +394,11 @@
   button{min-height:var(--control);cursor:pointer}
   button:disabled{cursor:default}
   .lead{flex:0 1 auto;min-width:0;max-width:calc(100% - var(--control) - 8rem);pointer-events:none}
+  .lead:has(.resident-card){max-width:min(100%,23rem)}
+  .resident-card{pointer-events:auto;display:flex;align-items:center;gap:.75rem;text-align:left;padding:.55rem .9rem;color:var(--scene-ink);background:var(--scene-shade);border:1px solid var(--scene-focus);border-radius:var(--radius-s)}
+  .resident-card span{display:grid;gap:.15rem}.resident-card strong{font:500 var(--ui-md)/1.3 var(--font)}.resident-card small{font:var(--ui-sm)/1.4 var(--font)}
+  .resident-story p,.resident-story blockquote{margin:1em 0;line-height:1.55}
+  .resident-story blockquote{padding-inline-start:1em;border-inline-start:2px solid var(--line);font-style:italic}
   .status{margin:0;padding-block:.6rem;color:var(--scene-ink);text-shadow:var(--scene-type-shadow);font:var(--ui-md)/1.4 var(--font)}.status:empty{display:none}
 
   /* Page markers over the city */
@@ -371,7 +424,8 @@
   .imprint strong{font:400 var(--display-2)/var(--lh-display) var(--font);letter-spacing:var(--ls-display)}
   .reading .cover{background:var(--line);color:var(--ink);justify-content:center}
   .reading .cover::after{background:none}
-  .plate{margin:.8rem .5rem 0}.plate img{display:block;width:100%;max-height:15rem;object-fit:contain;filter:drop-shadow(0 5px 3px color-mix(in srgb,var(--ink) 13%,transparent))}
+  .plate svg{width:min(100%,15rem);aspect-ratio:1;margin-inline:auto}
+  .plate{margin:.8rem .5rem 0}.plate img{width:100%}.plate :is(img,svg){display:block;max-height:15rem;object-fit:contain;filter:drop-shadow(0 5px 3px color-mix(in srgb,var(--ink) 13%,transparent))}
   .reading .imprint{padding:1rem 1.35rem 1.5rem}
   .leaf{min-width:0;display:flex;flex-direction:column;padding:var(--space-5) var(--sheet-inset) var(--space-6);background:linear-gradient(90deg,color-mix(in srgb,var(--line) 45%,transparent),transparent 15px)}
   .leaf-head,.leaf-foot{display:flex;justify-content:space-between;align-items:center;gap:var(--space-4)}
@@ -416,7 +470,7 @@
     .browsing .cover{height:5.75rem;flex:none}
     .browsing .leaf{flex:1}
     .reading .cover{flex-direction:row-reverse;justify-content:space-between;align-items:center}
-    .plate{margin:.2rem 1rem;width:5.75rem}.plate img{max-height:4.65rem}
+    .plate{margin:.2rem 1rem;width:5.75rem}.plate :is(img,svg){max-height:4.65rem}.plate svg{width:min(100%,4.65rem)}
     .leaf{padding:var(--space-3) var(--sheet-inset) var(--space-5)}.leaf-head{margin-bottom:var(--space-4)}.leaf-foot{gap:var(--space-1)}
     .entry-body{margin:var(--space-4) 0 var(--space-5)}
   }

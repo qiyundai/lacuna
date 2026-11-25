@@ -1,4 +1,5 @@
-export type CityPage = { id:string; created_at:number; riverEdition?:2|3 };
+export const currentRiverEdition = 4 as const;
+export type CityPage = { id:string; created_at:number; riverEdition?:2|3|4 };
 export type ForgottenAddress = CityPage & { position:number; forgottenAfter:number };
 
 export function forgetAddress(entries:readonly CityPage[],forgotten:readonly ForgottenAddress[],index:number):ForgottenAddress {
@@ -37,7 +38,7 @@ export function validCityHistory(entries:readonly CityPage[],addresses?:Forgotte
   return addresses.every(a=>{
     if(!a || typeof a.id!=='string' || !/^[a-f0-9]{32}$/.test(a.id) || ids.has(a.id) ||
       !Number.isSafeInteger(a.created_at) || a.created_at<0 ||
-      (a.riverEdition!==undefined && a.riverEdition!==2 && a.riverEdition!==3) ||
+      (a.riverEdition!==undefined && a.riverEdition!==2 && a.riverEdition!==3 && a.riverEdition!==4) ||
       !Number.isSafeInteger(a.position) || a.position<=previous || !Number.isSafeInteger(a.forgottenAfter) ||
       a.forgottenAfter<=a.position || a.forgottenAfter>length ||
       Object.keys(a).some(k=>!['id','created_at','riverEdition','position','forgottenAfter'].includes(k)))return false;

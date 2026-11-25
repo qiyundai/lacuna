@@ -1,4 +1,5 @@
 import * as T from 'three';
+import { stoneFlight } from './architectural-parts.js';
 import type { Gouache } from './gouache.js';
 import { colors, createModelWorkshop, type ModelTools as Tools, type Pigment } from './model-workshop.js';
 
@@ -91,8 +92,8 @@ export function createTideHouseKit(paint?: Gouache,roomWindows=false) {
     p.box('shade', 0, lobbyHeight - .12, 0, width + .17, .16, depth + .17);
     p.box('lintel', 0, lobbyHeight - .025, 0, width + .29, .076, depth + .29);
     p.face(0, () => entranceCanopy(p));
-    p.entrance(0, .072, depth/2+.49);
-    for (let i = 0; i < 3; i++) p.box('stone', 0, .036 + i * .055, depth / 2 + .39 - i * .165, 1.58, .072 + i * .11, .25);
+    const firstTread=stoneFlight(p,1.58,depth/2+.52,-.18,0,.292,0);
+    p.entrance(0,firstTread,depth/2+.49);
   }
 
   function railing(p: Tools, x: number, y: number, extent: number, projection: number) {

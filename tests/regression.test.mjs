@@ -2,6 +2,8 @@ import test from 'node:test';
 import './living-book.test.mjs';
 import './region.test.mjs';
 import './city-details.test.mjs';
+import './river-venues.test.mjs';
+import './harbor-residents.test.mjs';
 import './city-clock.test.mjs';
 import './valley-sound.test.mjs';
 import { journalDetails } from '../packages/frontend/src/lib/town/journal-details.ts';
@@ -10,6 +12,40 @@ import { emptyBook, nextBookTask, acceptBookResult } from '../packages/shared/li
 import assert from 'node:assert/strict';
 import { districts } from '../packages/frontend/src/lib/town/districts.ts';
 import { parseAlbum } from '../packages/frontend/src/lib/music-library.ts';
+
+test('landmark stair meshes keep walkable rises through the final landing', async () => {
+  const {Raycaster,Vector3}=await import('three');
+  const {createHarborBuildings}=await import('../packages/frontend/src/lib/town/harbor-buildings.ts');
+  const {createTideHouseKit}=await import('../packages/frontend/src/lib/town/tide-house.ts');
+  const {createFerryHallKit}=await import('../packages/frontend/src/lib/town/ferry-hall.ts');
+  const {maxStairRise,minStairGoing}=await import('../packages/frontend/src/lib/town/architectural-parts.ts');
+  const civic=createHarborBuildings(),tide=createTideHouseKit(),ferry=createFerryHallKit();
+  const down=new Raycaster(undefined,new Vector3(0,-1,0));
+  try {
+    for(const [model,x,start,end,initial,final] of [
+      [civic.build('civic',1,3,0),.02,3.009,1.64,0,.70],
+      [tide.build(1),.22,2.499,1.965,0,.292],
+      [ferry.build(3),.38,2.73,3.439,.145,-.21]
+    ]){
+      model.updateMatrixWorld(true);
+      let previous=initial,lastChange;
+      const samples=Math.ceil(Math.abs(end-start)/.005);
+      for(let i=0;i<=samples;i++){
+        const z=start+(end-start)*i/samples;
+        down.ray.origin.set(x,.95,z);
+        const hit=down.intersectObject(model,true)[0];
+        assert.ok(hit,'missing tread at '+z);
+        const rise=hit.point.y-previous;
+        if(Math.abs(rise)<.00001)continue;
+        assert.ok(Math.sign(rise)===Math.sign(final-initial) && Math.abs(rise)<=maxStairRise+.00001,'unexpected rise '+rise);
+        if(lastChange!==undefined)assert.ok(Math.abs(z-lastChange)>=minStairGoing-.005,'short tread at '+z);
+        lastChange=z;
+        previous=hit.point.y;
+      }
+      assert.ok(Math.abs(previous-final)<.00001,'final landing height');
+    }
+  }finally{civic.dispose();tide.dispose();ferry.dispose();}
+});
 
 test('playlist reprises keep distinct positions and preserve saved IDs for the first occurrence', () => {
   const address = new URL('https://lacuna.example/music/river/album.m3u8');
@@ -200,7 +236,7 @@ test('forgetting keeps only address metadata in the vault after reopening', asyn
     const {address} = await forget(last.entry.id);
     assert.equal(address.position, 2);
     const receipt = await forget(entry.id);
-    assert.deepEqual(receipt.address, {id:entry.id, created_at:entry.created_at, riverEdition:3, position:0, forgottenAfter:3});
+    assert.deepEqual(receipt.address, {id:entry.id, created_at:entry.created_at, riverEdition:4, position:0, forgottenAfter:3});
     assert.deepEqual(await forget(entry.id), receipt);
     await assert.rejects(request('/entries', 'POST', thought(1, secret)), /forgotten/);
     vault.lock();
@@ -659,7 +695,7 @@ test('city saves preserve words and skip the story classifier',async t=>{
     const {entry,created}=await send(value);
     assert.equal(created,true);
     assert.equal(entry.body,value.body);
-    assert.equal(entry.riverEdition,3);
+    assert.equal(entry.riverEdition,4);
     assert.equal(entry.presence,undefined);
     assert.deepEqual(await send(value),{entry,created:false});
   }
@@ -830,6 +866,31 @@ test('new inland addresses use the gentlest surveyed shelf and stay clear of the
     assert.ok((point.z-bankEdge(point.x,bank))*(bank?1:-1)>4);
   }
   assert.ok(offsets.has(1.4) && offsets.has(-1.4));
+});
+
+test('main city paths keep gentle grades and clear the ground across their width on both banks',async()=>{
+  const {streetLine,streetSide}=await import('../packages/frontend/src/lib/town/harbor-streets.ts');
+  const {bankPosition,laneDepth,landHeight}=await import('../packages/frontend/src/lib/town/valley-river.ts');
+  for (const bank of [0,1]) for (const lane of [0,1,2,3]) {
+    const lots=[-42,-15,0,16,38].map((x,i)=>{
+      const wharf=lane===3 && i===2;
+      const exit={x,z:bankPosition(x,bank,laneDepth(x,lane)-(i%2?2:6))};
+      return {site:{bank,lane,kind:wharf?'wharf':'houses',ferryTerminal:wharf},model:{position:{x}},doors:[{exit}]};
+    });
+    const line=streetLine(lots,lane,[-50,50]);
+    for (const offset of [-1,0,1]) {
+      let previous;
+      for (const [i,point] of line.entries()) {
+        const side=streetSide(line,i),x=point.x+offset*side.x,z=point.z+offset*side.y;
+        assert.ok(point.y>=landHeight(x,z)+.15999);
+        if (previous) {
+          const run=Math.hypot(x-previous.x,z-previous.z);
+          assert.ok(Math.abs(point.y-previous.y)<=.08*run+1e-8);
+        }
+        previous={x,z,y:point.y};
+      }
+    }
+  }
 });
 
 test('short waterfront passages follow gentle gaps and prioritize ferry access',async()=>{
