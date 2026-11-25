@@ -2,7 +2,6 @@ import * as T from 'three';
 import type { Site } from './painted-coast.js';
 import { siteDistrict, siteName } from './architecture-catalog.js';
 
-import { strideByBuild } from './resident-builds.js';
 import { tomas, type Errand, type Gesture, type ResidentLife } from './resident-lives.js';
 
 export type ShopperGesture = Gesture;
@@ -114,7 +113,7 @@ export function shopperRounds(market:ShopFront,fronts:ShopFront[],walkways:Point
   }
   const home=visits.find(v=>v.place==='home')??(!life.tomas?visits[0]:undefined);
   if(home){visits.splice(visits.indexOf(home),1);visits.unshift(home);}
-  const strideScale=life.build?strideByBuild[life.build]:1;
+  const strideScale=life.stride??1;
   const legs:Leg[]=[];
   let period=0;
   for(const [i,from] of visits.entries()){

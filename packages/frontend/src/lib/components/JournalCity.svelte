@@ -25,7 +25,7 @@
 
   import { emptyCensus, housedResidents, citizenLife, type Census } from '$lib/town/citizens.js';
   let census=$state.raw<Census>(emptyCensus()), now=$state(Math.floor(Date.now()/1000)), query=$state('');
-  let {guest=false,readOnly=false,afterglow=false,fixedHour,onExit,navigation,draft=$bindable(''),draftId=$bindable(''),busy=$bindable(false)}:{guest?:boolean;readOnly?:boolean;afterglow?:boolean;fixedHour?:number;onExit?:()=>void;navigation?:Snippet;draft?:string;draftId?:string;busy?:boolean}=$props();
+  let {guest=false,readOnly=false,exampleHomes=residentHomes,afterglow=false,fixedHour,onExit,navigation,draft=$bindable(''),draftId=$bindable(''),busy=$bindable(false)}:{guest?:boolean;readOnly?:boolean;exampleHomes?:typeof residentHomes;afterglow?:boolean;fixedHour?:number;onExit?:()=>void;navigation?:Snippet;draft?:string;draftId?:string;busy?:boolean}=$props();
   const notes = [
     'The light was still on across the street.', 'Made tea before the alarm.', 'The morning train was nearly empty.',
     'I borrowed a blue bowl and forgot to give it back.', 'We walked home slowly.', 'There was a postcard in the mail.',
@@ -65,7 +65,7 @@
   const seen = new WeakMap<EntryData, SceneCues>();
   const plan=$derived.by(()=>{
     const coast = paintedCoast(entries,forgotten);
-    return {...coast, details: journalDetails(coast,entries,seen), homes:guest?residentHomes(coast,entries,true):housedResidents(census,coast,entries)};
+    return {...coast, details: journalDetails(coast,entries,seen), homes:guest?exampleHomes(coast,entries,true):housedResidents(census,coast,entries)};
   });
   $effect(()=>{
     const deadlines=guest?plan.homes.map(h=>h.arrival):census.people.flatMap(p=>p.slot && p.chapters.length<3?[p.arrival,p.next]:[p.arrival]);

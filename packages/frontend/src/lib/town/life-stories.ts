@@ -2,13 +2,14 @@ import type { Architecture } from './architecture-catalog.js';
 import type { RiverDistrict } from './river-neighborhoods.js';
 
 export interface LifeStory {
-  key:string; title:string; district:RiverDistrict; venues:Architecture[]; keepsake:string;
+  key:string; model:string; stride:number; title:string; district:RiverDistrict; venues:Architecture[]; keepsake:string;
   correspondent:string; recollection:string; detail:string; past:string; promise:string; errand:string; calls:{venues:Architecture[];task:string}[]; chapters:string[]; notes:string[];
 }
 
 export const lifeStories:LifeStory[] = [
   {
     "key": "seeds",
+    "model": "seed-gardener.glb", "stride": 1,
     "recollection": "The year the garden failed, one marigold flowered in the spout of an old kettle. The kettle spent the winter inside on the draining board.",
     "detail": "“Don't tell me the color,” the last birthday letter said. “I want to meet it when it opens.” A little space is left on each envelope now for whatever comes back.",
     "title": "The envelope garden",
@@ -44,6 +45,7 @@ export const lifeStories:LifeStory[] = [
   },
   {
     "key": "atlas",
+    "model": "cartographer.glb", "stride": 1.23,
     "recollection": "Childhood journeys were counted by the sounds of the streets. The longest road had a loose iron cover that rang in two different keys.",
     "detail": "There is already a perfectly serviceable map in the kitchen. Its blue line runs straight through the spot where footsteps suddenly sound as though they belong to somebody walking underneath.",
     "title": "The map you can hear",
@@ -80,6 +82,7 @@ export const lifeStories:LifeStory[] = [
   },
   {
     "key": "mending",
+    "model": "bench-repairer.glb", "stride": 0.83,
     "recollection": "The first repair job was a bread-bin catch. It took an afternoon and a bent teaspoon. That bread bin is still in use.",
     "detail": "The price of a loan is the story of the thing that broke. Yesterday someone described a cupboard door as “the stubborn one.” That went on the label alongside the size of its hinge.",
     "title": "The drawer of spare parts",
@@ -116,6 +119,7 @@ export const lifeStories:LifeStory[] = [
   },
   {
     "key": "table",
+    "model": "supper-host.glb", "stride": 0.92,
     "recollection": "A blue darn on the best tablecloth marks the place where a birthday candle once fell over. Every year somebody remembers whose birthday it was differently.",
     "detail": "Invitations have a space for a dish and a space for who taught you to make it. One came back with nothing in the first space and “ask my brother” written very firmly in the second.",
     "title": "One more chair",
@@ -152,6 +156,7 @@ export const lifeStories:LifeStory[] = [
   },
   {
     "key": "archive",
+    "model": "photo-archivist.glb", "stride": 1.16,
     "recollection": "A photograph in the hall always leaned to the left. When the frame finally came down, four more prints fell out. Only the dog's name was written on the backs.",
     "detail": "One print has a child's thumb over half the lens. Nobody wants to crop it. Whoever can remember being that height might also remember who handed them the camera.",
     "title": "Names on the backs",
@@ -188,6 +193,7 @@ export const lifeStories:LifeStory[] = [
   },
   {
     "key": "lights",
+    "model": "lamplighter.glb", "stride": 1.05,
     "recollection": "On night shifts a window lamp was the last thing visible when fog swallowed the quay. Its old glass chimney has a shallow chip shaped like a crescent moon.",
     "detail": "The first test put a bright spot on the ceiling and left the table dark. The next one will be at eye level, with someone across the street raising a hand when the flame appears.",
     "title": "The lamp at half tide",
@@ -224,6 +230,7 @@ export const lifeStories:LifeStory[] = [
   },
   {
     "key": "kite",
+    "model": "kite-maker.glb", "stride": 1.15,
     "recollection": "A childhood kite escaped over the roof, leaving only its ribbon behind. A dab of soup on the ribbon still marks its last indoor flight.",
     "detail": "A tally is drawn on the reel for every second the kite stays up. Twelve little strokes would go all the way round. So far the longest row ends just above the knot.",
     "title": "The kite with two tails",
@@ -260,6 +267,7 @@ export const lifeStories:LifeStory[] = [
   },
   {
     "key": "bells",
+    "model": "bell-ringer.glb", "stride": 0.96,
     "recollection": "A wooden music box survived a move in a flour sack. Its eighth bell did not. The little hook where it hung is still polished bright.",
     "detail": "Everyone remembers the lullaby at a different speed, but when they reach the missing note they pause for exactly the same length of time. That silence has become the measure.",
     "title": "The missing eighth note",
@@ -296,6 +304,7 @@ export const lifeStories:LifeStory[] = [
   },
   {
     "key": "cloth",
+    "model": "quilt-mender.glb", "stride": 0.93,
     "recollection": "Six addresses were sewn into a rain cape because the paper labels kept washing out. The name of the first street has worn away under the collar.",
     "detail": "Under a loose corner is a square of yellow gingham. It used to be a curtain. There is enough left to cover one more tear, provided nobody tries to make the edges straight.",
     "title": "A coat of many repairs",
@@ -332,6 +341,7 @@ export const lifeStories:LifeStory[] = [
   },
   {
     "key": "tides",
+    "model": "tide-watcher.glb", "stride": 1.13,
     "recollection": "A stopped watch once cost a whole morning at the landing. The nail on the post outside the kitchen went on telling the tide just as well as ever.",
     "detail": "There are two columns in the notebook, one for the water and one for where the ferry actually was. A coffee ring joins the entries on the only day they agreed to the minute.",
     "title": "A clock made of water",
@@ -368,6 +378,7 @@ export const lifeStories:LifeStory[] = [
   },
   {
     "key": "toys",
+    "model": "boat-carver.glb", "stride": 0.95,
     "recollection": "At the first bath trial a toy boat went keel-up before its owner's sleeves were rolled. Upside down, it looked exactly like the chair leg it came from.",
     "detail": "Someone has suggested paint. That will have to wait. A painted hull would cover up the pencil line left by the small hand that drew where the water ought to reach.",
     "title": "A boat for the bath",
@@ -404,6 +415,7 @@ export const lifeStories:LifeStory[] = [
   },
   {
     "key": "type",
+    "model": "letterpress-printer.glb", "stride": 1.0,
     "recollection": "A whole box of lead letters spilled on the floor on moving day. A birthday card got printed anyway, with a little drawing wherever a letter was missing.",
     "detail": "The crooked e looks like it is leaning over to tell the next letter something. The straight replacement has been wrapped in paper and put away in case anyone ever asks for it.",
     "title": "The letter that leans",

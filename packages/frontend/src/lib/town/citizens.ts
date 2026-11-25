@@ -66,22 +66,6 @@ export function settleCity(pages:readonly CityPage[],forgotten:readonly Forgotte
     return true;
   });
   const counts=lifeStories.map(()=>0);
-  const builds=lifeStories.map(()=>bodyBuilds.map(()=>0));
-  const townBuilds=bodyBuilds.map(()=>0);
-  function chooseBuild(id:string,family:number){
-    const counts=builds[family]!;
-    const fewest=Math.min(...counts);
-    const available=bodyBuilds.filter((_,i)=>counts[i]===fewest);
-    const minTown=Math.min(...available.map(b=>townBuilds[bodyBuilds.indexOf(b)]!));
-    const options=available.filter(b=>townBuilds[bodyBuilds.indexOf(b)]===minTown);
-    return options[pick(id,'physique',options.length)]!;
-  }
-  function countBuild(family:number,shape:BodyBuild){
-    const i=bodyBuilds.indexOf(shape);
-    builds[family]![i]!++;townBuilds[i]!++;
-  }
-  for(const p of state.people)if(p.build)countBuild(p.family,p.build);
-  for(const p of state.people)if(!p.build){p.build=chooseBuild(p.id,p.family);countBuild(p.family,p.build);}
   const names=new Set(state.people.map(p=>p.name));
   for(const p of state.people)counts[p.family]!++;
   const migration=!previous;
@@ -103,8 +87,6 @@ export function settleCity(pages:readonly CityPage[],forgotten:readonly Forgotte
     const pool=matches.length?matches:options;
     const pilotFamily=pilot?lifeStories.findIndex(s=>s.title===pilot.life.title):-1;
     const family=pilotFamily>=0?pilotFamily:pool[pick(id,'project',pool.length)]!.i;
-    const build=chooseBuild(id,family);
-    countBuild(family,build);
     counts[family]!++;
     let name=pilot?.life.name??firstNames[pick(id,'first',firstNames.length)]+' '+surnames[pick(id,'last',surnames.length)];
     for(let n=1;names.has(name);n++){
@@ -122,7 +104,7 @@ export function settleCity(pages:readonly CityPage[],forgotten:readonly Forgotte
       arrival=now;establishedCount++;
     }
     lastAt.set(site.id,Math.max(last??0,arrival));
-    state.people.push({id,name,family,build,slot:key,arrival,next:Math.max(arrival,migration?now:0)+day,
+    state.people.push({id,name,family,slot:key,arrival,next:Math.max(arrival,migration?now:0)+day,
       chapters:[],friend:pick(id,'correspondent',3)===0?firstNames[pick(id,'signature',firstNames.length)]!:lifeStories[family]!.correspondent,origin:site.kind});
   }
   const localVenues=new Map<string,Site[]>();
@@ -238,7 +220,7 @@ export function citizenLife(p:Citizen,site?:Site):ResidentLife{
   const finishes=['wrapped in a faded tea towel','marked with two small initials','patched with a stripe of blue','tied with red cotton'];
   const personal=finishes[pick(p.id,'mark',finishes.length)];
   return {name:p.name,title:story.title,heading:'From the pocket notebook',notes:story.notes,tomas:false,
-    family:story.key,build:p.build??bodyBuilds[pick(p.id,'physique',bodyBuilds.length)],chapter:stage,paragraphs:[
+    family:story.key,model:story.model,stride:story.stride,chapter:stage,paragraphs:[
       pick(p.id,'firstMemory',2)?p.name+' '+story.past:story.recollection,friend+', '+relations[pick(p.id,'friend',relations.length)]+', has kept in touch ever since. '+story.promise.replaceAll(story.correspondent,friend),
       story.detail,'The '+keepsake+', '+personal+', usually goes along to '+siteName(p.origin).replace(/^The /,'the ')+'.',
       ...(p.neighbor?['The neighbor who asks how it is going, even on the slow days, is '+p.neighbor+'.']:[]),

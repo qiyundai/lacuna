@@ -19,8 +19,7 @@ test('every occupied type has capacity and each new room contributes one place',
   assert.ok(census.people.length>200);
   assert.equal(census.people[0].arrival,700);
   assert.equal(new Set(census.people.slice(0,12).map(p=>p.family)).size,12);
-  assert.equal(new Set(census.people.slice(0,8).map(p=>p.build)).size,8);
-  for(let family=0;family<12;family++)assert.deepEqual(new Set(census.people.filter(p=>p.family===family).map(p=>p.build)),new Set(bodyBuilds));
+  assert.equal(new Set(census.people.slice(0,12).map(p=>citizenLife(p).model)).size,12);
   assert.equal(new Set(census.people.map(p=>p.name)).size,census.people.length);
   assert.equal(new Set(census.people.map(p=>p.slot)).size,census.people.length);
   assert.deepEqual(settleCity(pages,[],census,101),census);
@@ -86,23 +85,15 @@ test('each family has a local errand, a reachable specialist and a small-town ro
 });
 test('each authored family ships a skinned walking and turning model, keepsake and notebook',async()=>{
   for(const story of lifeStories){
-    const shoulderWidths=[],legHeights=[];
-    const dir=new URL('../packages/frontend/static/city/residents/'+story.key+'/',import.meta.url);
-    const wardrobe=await readFile(new URL('wardrobe.bin',dir));
-    for(const build of bodyBuilds){
-      const gltf=JSON.parse(await readFile(new URL(build+'.gltf',dir),'utf8'));
-      assert.ok(gltf.skins.length && gltf.nodes.some(n=>n.name==='Keepsake tag'));
-      assert.ok(!gltf.nodes.some(n=>n.name==='Canvas market bag'));
-      assert.deepEqual(gltf.animations.map(a=>a.name).sort(),['Market turnaround','Market walk']);
-      const fitted=await readFile(new URL(build+'.bin',dir));
-      assert.equal(gltf.buffers[0].byteLength,wardrobe.length);
-      assert.equal(gltf.buffers[1].byteLength,fitted.length);
-      for(const v of gltf.bufferViews)assert.ok(v.byteOffset+v.byteLength<=gltf.buffers[v.buffer].byteLength);
-      shoulderWidths.push(gltf.nodes.find(n=>n.name==='Sleeve.L').translation[0]);
-      legHeights.push(gltf.nodes.find(n=>n.name==='Shin.L').translation[1]);
-    }
-    assert.ok(Math.max(...shoulderWidths)/Math.min(...shoulderWidths)>1.6);
-    assert.ok(Math.max(...legHeights)/Math.min(...legHeights)>1.45);
     assert.equal(new Set(story.notes).size,7);assert.equal(story.chapters.length,4);
+    const file=await readFile(new URL('../packages/frontend/static/city/residents/'+story.model,import.meta.url));
+    const model=JSON.parse(file.toString('utf8',20,20+file.readUInt32LE(12)));
+    assert.ok(model.skins.length && model.nodes.some(n=>n.name==='Keepsake tag'));
+    assert.deepEqual(model.animations.map(a=>a.name).sort(),['Market turnaround','Market walk']);
+    for(const build of [undefined,...bodyBuilds]){
+      const life=citizenLife({id:'gardener',name:'Remy',family:lifeStories.indexOf(story),build,chapters:[],friend:'Lou',origin:'houses'});
+      assert.equal(life.model,story.model);
+      assert.equal(life.stride,story.stride);
+    }
   }
 });

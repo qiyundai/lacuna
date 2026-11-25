@@ -34,7 +34,11 @@ function releaseShopper(model:GLTF){
   });
   const maps=new Set<T.Texture>();
   for(const material of materials){
-    if(material instanceof T.MeshStandardMaterial && material.map)maps.add(material.map);
+    if(material instanceof T.MeshStandardMaterial){
+      for(const map of [material.map,material.normalMap,material.roughnessMap,material.metalnessMap,material.aoMap]){
+        if(map)maps.add(map);
+      }
+    }
     material.dispose();
   }
   for(const map of maps){
@@ -72,7 +76,7 @@ function figures(){
 function shopperFigure(home:ResidentHome,assets:ReturnType<typeof figures>,redraw:()=>void) {
   const root=new T.Group();
   root.name=home.resident;root.visible=false;root.scale.setScalar(shopperScale);
-  if(!home.life.tomas)root.scale.multiplyScalar(.975+(hashPage(home.resident+'/height')%6)/100);
+  if(!home.life.tomas && !home.life.model)root.scale.multiplyScalar(.975+(hashPage(home.resident+'/height')%6)/100);
   let disposed=false,model:GLTF|undefined,mixer:T.AnimationMixer|undefined;
   let walk:T.AnimationAction|undefined,turn:T.AnimationAction|undefined,active:T.AnimationAction|undefined;
   let head:T.Object3D|undefined,arm:T.Object3D|undefined,elbow:T.Object3D|undefined,bagArm:T.Object3D|undefined;
@@ -83,7 +87,7 @@ function shopperFigure(home:ResidentHome,assets:ReturnType<typeof figures>,redra
   let beat=-1;
   const fabric=new Map<T.Material,T.MeshStandardMaterial>();
   const style=lifeStories.findIndex(s=>s.key===home.life.family);
-  const file=assets.acquire(home.life.family?home.life.family+'/'+home.life.build+'.gltf':'market-shopper.glb');
+  const file=assets.acquire(home.life.model ?? 'market-shopper.glb');
   file.asset.then(source=>{
     if(disposed)return;
     const loaded={...source,scene:cloneRig(source.scene) as T.Group};
@@ -225,7 +229,7 @@ export function createHarborResidents(redraw:()=>void,weekday:number) {
       const memory=remembered?.site?'At '+siteName(remembered.site.kind).replace(/^The /,'the ')+', '+remembered.memory:undefined;
       routes.set(home.resident,{home,path,street,rounds,stops,memory,task:home.life.anchor.task});
       const existing=actors.get(home.resident);
-      if(existing && (existing.life.family!==home.life.family || existing.life.build!==home.life.build || existing.life.chapter!==home.life.chapter)){
+      if(existing && (existing.life.family!==home.life.family || existing.life.model!==home.life.model || existing.life.chapter!==home.life.chapter)){
         existing.root.removeFromParent();existing.dispose();actors.delete(home.resident);
       }
     }
