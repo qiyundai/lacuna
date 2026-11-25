@@ -5,6 +5,8 @@ import { browserVault, WebVault, WebVaultError, announceBrowserLock, forgetWebPa
 import type { EntryData } from './api.js';
 import { canSettle, isSettlement, morning, nextMorning, population } from '../../../shared/river.js';
 
+import { settleCity } from './town/citizens.js';
+
 function page<T extends { id: string }>(items: T[], cursor: string | null, kind: string, limit: number) {
   let offset = 0;
   if (cursor) {
@@ -21,7 +23,14 @@ export async function webRequest(path: string, method = 'GET', value?: unknown, 
   const data = vault.read(), url = new URL(path, 'https://local.invalid'), body = value as Record<string, unknown>;
   const timestamp = Math.floor(Date.now() / 1000);
   if (path === '/village' && method === 'GET') return {entries:data.entries};
-  if (path === '/city' && method === 'GET') return {entries:data.entries,forgotten:data.forgotten??[]};
+  if (path === '/city' && method === 'GET') {
+    const census=settleCity(data.entries,data.forgotten??[],data.census,timestamp);
+    if(JSON.stringify(census)===JSON.stringify(data.census))return {entries:data.entries,forgotten:data.forgotten??[],census};
+    return vault.update(journal=>{
+      journal.census=settleCity(journal.entries,journal.forgotten??[],journal.census,timestamp);
+      return {entries:journal.entries,forgotten:journal.forgotten??[],census:journal.census};
+    });
+  }
   if (path === '/village/thread' && method === 'POST') return vault.update(journal => reviseThread(journal.entries,body));
   if (path === '/village/encounter' && method === 'POST') return vault.update(journal => remember(journal.entries, body));
   if(path === '/town' && method === 'GET') {
@@ -60,7 +69,9 @@ export async function webRequest(path: string, method = 'GET', value?: unknown, 
       }
       journal.river=morning(journal,timestamp);
       if(body.city !== true)attachPresence(journal.entries, entry);
-      journal.entries.push(entry); return { entry, created:true };
+      journal.entries.push(entry);
+      if(journal.census)journal.census=settleCity(journal.entries,journal.forgotten??[],journal.census,timestamp);
+      return { entry, created:true };
     });
   }
   const entry = /^\/entries\/([a-f0-9]{32})(\/keep)?$/.exec(path);

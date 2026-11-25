@@ -2,16 +2,19 @@ import { hashPage, type CityPage } from './city-growth.js';
 import { siteDistrict, siteName, type Architecture } from './architecture-catalog.js';
 import type { Coast, Site } from './painted-coast.js';
 
+import type { BodyBuild } from './resident-builds.js';
+
 export type Gesture = 'read'|'bag'|'greet';
 export type Errand = {task:string; journey:string; gesture:Gesture};
 export type Destination = {kinds:readonly Architecture[]; errand:Errand; memory?:string};
 export type ResidentLife = {
+  family?:string; build?:BodyBuild; chapter?:number;
   name:string; title:string; paragraphs:string[]; notes:readonly string[]; heading:string;
   anchor:Errand; destinations:Destination[]; atHome:Errand; corner:Errand;
   lunch:string; shift:number; tint:number; tomas:boolean;
 };
 export type ResidentHome = {resident:string; site:Site; arrival:number; life:ResidentLife};
-export type ResidentVisit = {life:ResidentLife; task:string; stops:string[]; memory?:string; site:Site};
+export type ResidentVisit = {life:ResidentLife; task:string; stops:string[]; memory?:string; site?:Site};
 const errand=(task:string,journey:string,gesture:Gesture):Errand=>({task,journey,gesture});
 const stop=(kinds:Architecture[],task:string,journey:string,gesture:Gesture,memory?:string):Destination=>({kinds,errand:errand(task,journey,gesture),memory});
 

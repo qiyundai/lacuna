@@ -23,6 +23,8 @@
   import type { PageMarker } from '$lib/town/city-page-markers.js';
   import { residentHomes, type ResidentVisit } from '$lib/town/resident-lives.js';
 
+  import { emptyCensus, housedResidents, citizenLife, type Census } from '$lib/town/citizens.js';
+  let census=$state.raw<Census>(emptyCensus()), now=$state(Math.floor(Date.now()/1000)), query=$state('');
   let {guest=false,readOnly=false,afterglow=false,fixedHour,onExit,navigation,draft=$bindable(''),draftId=$bindable(''),busy=$bindable(false)}:{guest?:boolean;readOnly?:boolean;afterglow?:boolean;fixedHour?:number;onExit?:()=>void;navigation?:Snippet;draft?:string;draftId?:string;busy?:boolean}=$props();
   const notes = [
     'The light was still on across the street.', 'Made tea before the alarm.', 'The morning train was nearly empty.',
@@ -55,25 +57,42 @@
   let readId=$state('');
   let markers=$state.raw<PageMarker[]>([]),writingDate=$state(new Date());
   const valleyViews=['City','Overlook'] as const;
-  let panel=$state<'write'|'pages'|'read'|'forget'|'resident'>('write'),alive=false;
+  let panel=$state<'write'|'pages'|'read'|'forget'|'resident'|'directory'>('write'),alive=false;
   let resident=$state.raw<ResidentVisit>(),openedResident=$state.raw<ResidentVisit>();
-  let recipeNote=$state(''),canFindResident=$state(false);
+  let recipeNote=$state('');
   let savedPage:string|undefined;
   const ordered=$derived([...entries].sort((a,b)=>b.created_at-a.created_at||b.id.localeCompare(a.id)));
   const seen = new WeakMap<EntryData, SceneCues>();
   const plan=$derived.by(()=>{
     const coast = paintedCoast(entries,forgotten);
-    return {...coast, details: journalDetails(coast,entries,seen), homes:residentHomes(coast,entries,guest)};
+    return {...coast, details: journalDetails(coast,entries,seen), homes:guest?residentHomes(coast,entries,true):housedResidents(census,coast,entries)};
   });
   $effect(()=>{
-    const first=Math.min(...plan.homes.map(h=>h.arrival));
-    const delay=first*1000-Date.now();
-    canFindResident=delay<=0;
-    if(delay>0 && Number.isFinite(delay)){
-      const timer=setTimeout(()=>canFindResident=true,delay);
-      return ()=>clearTimeout(timer);
-    }
+    const deadlines=guest?plan.homes.map(h=>h.arrival):census.people.flatMap(p=>p.slot && p.chapters.length<3?[p.arrival,p.next]:[p.arrival]);
+    const next=deadlines.reduce((best,t)=>t>now?Math.min(t,best):best,Infinity);
+    if(!Number.isFinite(next))return;
+    const timer=setTimeout(()=>{now=Math.floor(Date.now()/1000);if(!guest)void read();},Math.min(2147483000,Math.max(0,next*1000-Date.now()+50)));
+    return ()=>clearTimeout(timer);
   });
+  const directory=$derived.by(()=>{
+    const housed=new Map(plan.homes.map(h=>[h.resident,h]));
+    const people=guest?plan.homes.map(h=>({id:h.resident,name:h.life.name,arrival:h.arrival})):census.people;
+    return people.filter(p=>p.arrival<=now).map(p=>({id:p.id,name:p.name,place:housed.get(p.id)?.site})).sort((a,b)=>a.name.localeCompare(b.name));
+  });
+  const searchKey=(s:string)=>s.normalize('NFD').replace(/\p{M}/gu,'').trim().toLocaleLowerCase();
+  let directoryLimit=$state(60);
+  const matches=$derived(directory.filter(p=>searchKey(p.name+' '+(p.place?siteName(p.place.kind):'Between homes')).includes(searchKey(query))));
+  function meet(id:string){
+    const visit=scene?.visitResident(id);
+    if(visit)resident=visit;
+    else{
+      const person=census.people.find(p=>p.id===id);
+      if(!person)return;
+      const site=plan.homes.find(h=>h.resident===id)?.site;
+      resident={life:citizenLife(person,site),site,task:site?'At '+siteName(site.kind):'Between homes',stops:[]};
+    }
+    void open('resident');
+  }
   const openedPage=$derived(entries.find(entry=>entry.id===readId));
   const site=$derived(plan.addresses.get(readId));
   const neighbors=$derived(site?ordered.filter(page=>plan.addresses.get(page.id)===site):[]);
@@ -88,9 +107,9 @@
   async function read(){
     const request=++readRequest, version=sessionVersion.value;
     try{
-      const journal=guest?{entries:examples(),forgotten:[]}:await api.city.get();
+      const journal=guest?{entries:examples(),forgotten:[],census:emptyCensus()}:await api.city.get();
       if(!alive || request!==readRequest || version!==sessionVersion.value)return;
-      entries=journal.entries;forgotten=journal.forgotten;
+      entries=journal.entries;forgotten=journal.forgotten;census=journal.census;now=Math.floor(Date.now()/1000);
       ready=true;error='';
       if(readId && !entries.some(e=>e.id===readId)){readId='';dialog?.close();}
     }
@@ -105,7 +124,7 @@
     try{
       const {createHarbor}=await import('$lib/town/harbor.js');
       if(!alive)return;
-      const city=await createHarbor(canvas,readPage,afterglow,next=>{if(alive)markers=next;},fixedHour,visit=>{if(alive)resident=visit;});
+      const city=await createHarbor(canvas,readPage,afterglow,next=>{if(alive)markers=next;},fixedHour,visit=>{if(alive)resident=visit;},meet);
       if(alive)scene=city;else city.destroy();
     }catch{if(alive)graphicsError=true;}
   }
@@ -167,7 +186,7 @@
     if(!dialog.open)opener=document.activeElement instanceof HTMLElement?document.activeElement:null;
     closing=false;
     pageTurn?.cancel();
-    panel=which;error='';if(which==='write')writingDate=new Date();
+    panel=which;error='';if(which==='directory'){query='';directoryLimit=60;}if(which==='write')writingDate=new Date();
     if(which==='resident' && resident){
       openedResident=resident;
       const notes=resident.life.notes;
@@ -183,7 +202,7 @@
     }
     pageOpen=true;
     dialog.scrollTop=0;
-    dialog.querySelector<HTMLElement>(which==='write'?'textarea':which==='forget'?'[data-keep-page]':'#journal-heading')?.focus({preventScroll:true});
+    dialog.querySelector<HTMLElement>(which==='directory'?'input[type=search]':which==='write'?'textarea':which==='forget'?'[data-keep-page]':'#journal-heading')?.focus({preventScroll:true});
   }
   function readPage(id:string,direction=1){
     if(busy)return;
@@ -200,7 +219,7 @@
       await dismiss();
       if(!alive||version!==sessionVersion.value)return;
       forgotten=[...forgotten.filter(a=>a.id!==id),address].sort((a,b)=>a.position-b.position);
-      entries=entries.filter(e=>e.id!==id);
+      entries=entries.filter(e=>e.id!==id);if(!guest)await read();
       readId='';notice='Page forgotten. Its address remains.';
     }catch{error='Could not forget this page. Try again.';}
     finally{if(alive)busy=false;}
@@ -218,6 +237,7 @@
       if(!alive||version!==sessionVersion.value)return;
       savedPage=created && !entries.some(page=>page.id===entry.id)?entry.id:undefined;
       entries=[...entries.filter(e=>e.id!==entry.id),entry];draft='';draftId='';
+      if(!guest)await read();
       await tick();
       const home=plan.addresses.get(entry.id);
       notice=home?'Page saved at '+siteName(home.kind).replace(/^The /,'the ')+'.':'Page saved.';
@@ -232,7 +252,7 @@
 {/snippet}
 <!-- While the listening room is open the city is its backdrop: everything laid over the canvas steps aside -->
 <main class="coast" class:listening={musicWindow.mode==='room'} aria-label="Journal city">
-  <canvas bind:this={canvas} inert={opening} tabindex="0" aria-label="A city growing along the valley river. Drag or use arrow keys to orbit, right-drag to pan, and scroll or pinch to zoom. Home returns to the city. Select a building to read its page."></canvas>
+  <canvas bind:this={canvas} inert={opening} tabindex="0" aria-label="A city growing along the valley river. Drag or use arrow keys to orbit, right-drag to pan, and scroll or pinch to zoom. Home returns to the city. Select a building to read its page or a resident to meet them."></canvas>
   {#if ready && scene}
     {#each markers as marker,i (marker.id)}
       {@const marked=plan.addresses.get(marker.id)}
@@ -254,9 +274,9 @@
         {#each valleyViews as view}
           <IconAction icon={view==='City'?'city':'overlook'} label={view==='City'?'City view':view} onclick={()=>scene?.visit(view)}/>
         {/each}
-        {#if canFindResident}<IconAction icon="resident" label="Find resident" onclick={()=>scene?.visitResident()}/>{/if}
         <IconAction icon={paused?'play':'pause'} label={paused?'Resume ambient motion':'Pause ambient motion'} onclick={()=>paused=!paused}/>
       {/if}
+      {#if directory.length}<IconAction icon="resident" label="Residents" onclick={()=>open('directory')}/>{/if}
       {@render navigation?.()}
       {#if guest}
         <IconAction icon="leave" label="Leave visit" onclick={onExit}/>
@@ -296,20 +316,20 @@
         {:else if panel==='resident' && openedResident}
           <div class="plate">
             {#if openedResident.life.tomas}<img src="/city/residents/tomas.webp" alt="Tomás with his market bag."/>
-            {:else if openedResident.site.elevation!==undefined}
+            {:else if openedResident.site?.elevation!==undefined}
               <svg viewBox={`${openedResident.site.elevation%3} ${Math.floor(openedResident.site.elevation/3)} 1 1`} aria-hidden="true">
                 <image href={'/city/paint/'+openedResident.site.kind+'.webp'} width="3" height="2"/>
               </svg>
-            {:else}<img src={'/city/paint/'+openedResident.site.kind+'.webp'} alt=""/>{/if}
+            {:else if openedResident.site}<img src={'/city/paint/'+openedResident.site.kind+'.webp'} alt=""/>{/if}
           </div>
-          <div class="imprint"><span>{openedResident.life.tomas?'Harbor resident':siteName(openedResident.site.kind)}</span><strong>{openedResident.life.name}</strong></div>
+          <div class="imprint"><span>{openedResident.life.tomas?'Harbor resident':openedResident.site?siteName(openedResident.site.kind):'Between homes'}</span><strong>{openedResident.life.name}</strong></div>
         {:else}
           <div class="imprint"><span>{guest?'Example journal':'City journal'}</span><strong>Lacuna</strong></div>
         {/if}
       </aside>
       <div class="leaf">
         <header class="leaf-head">
-          <span>{panel==='resident'?openedResident?.life.heading:panel==='write'?'Page '+(folios.size+1):panel==='pages'?'Journal index':'Page '+(folios.get(readId)??'')}</span>
+          <span>{panel==='directory'?'City directory':panel==='resident'?openedResident?.life.heading:panel==='write'?'Page '+(folios.size+1):panel==='pages'?'Journal index':'Page '+(folios.get(readId)??'')}</span>
           <div class="leaf-tools">
             <SoundToggle surface="paper"/>
             <button class="paper-control" aria-label="Close" disabled={busy} onclick={dismiss}><Icon name="close"/></button>
@@ -317,7 +337,7 @@
         </header>
         {#if panel==='resident' && openedResident}
           <h2 id="journal-heading" tabindex="-1">{openedResident.life.title}</h2>
-          <div class="resident-story">
+          <div class="resident-story"><small>{openedResident.task}</small>
             {#each openedResident.life.paragraphs as paragraph}<p>{paragraph}</p>{/each}
             {#if openedResident.memory}<p>{openedResident.memory}</p>{/if}
             {#if !openedResident.life.tomas && openedResident.stops.length}
@@ -325,6 +345,16 @@
               <ul>{#each openedResident.stops as stop}<li>{stop}</li>{/each}</ul>
             {/if}
             <blockquote>{recipeNote}</blockquote>
+          </div>
+        {:else if panel==='directory'}
+          <h2 id="journal-heading" tabindex="-1">Residents</h2>
+          <label for="resident-search">Name or building</label>
+          <input type="search" id="resident-search" bind:value={query} oninput={()=>directoryLimit=60}/>
+          <div class="index">
+            {#each matches.slice(0,directoryLimit) as person (person.id)}
+              <button class="index-entry" onclick={()=>meet(person.id)}><strong>{person.name}</strong><span>{person.place?siteName(person.place.kind):'Between homes'}</span></button>
+            {:else}<p>No residents match your search.</p>{/each}
+            {#if matches.length>directoryLimit}<button class="atlas-link" onclick={()=>directoryLimit+=60}>Show more residents</button>{/if}
           </div>
         {:else if panel==='write'}
           <h2 id="journal-heading" tabindex="-1">A new page</h2>
@@ -474,4 +504,6 @@
     .leaf{padding:var(--space-3) var(--sheet-inset) var(--space-5)}.leaf-head{margin-bottom:var(--space-4)}.leaf-foot{gap:var(--space-1)}
     .entry-body{margin:var(--space-4) 0 var(--space-5)}
   }
+  dialog:modal,dialog::backdrop{overscroll-behavior:contain}
+  dialog::backdrop{overflow:hidden}
 </style>

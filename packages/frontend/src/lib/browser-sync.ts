@@ -64,20 +64,33 @@ export async function removeOnline(vault:WebVault,send:Transport=fetch) {
   await vault.setPairing(pairing,undefined);
 }
 
+import { emptyCensus, settleCity } from './town/citizens.js';
+
 function journalContent(data:WebJournal) {
   const {deviceSync,reflectionConsent,acceptedTerms,revision,...journal}=data;
   return journal;
 }
 function combineNewPages(local:WebJournal,cloud:WebJournal,baseCount:number) {
-  const {entries:left,...a}=journalContent(local),{entries:right,...b}=journalContent(cloud);
+  const {entries:left,census:localCast,...a}=journalContent(local),{entries:right,census:cloudCast,...b}=journalContent(cloud);
   if (left.length<baseCount || right.length<baseCount || JSON.stringify(a)!==JSON.stringify(b)) return;
   if (left.slice(0,baseCount).some((entry,i)=>JSON.stringify(entry)!==JSON.stringify(right[i]))) return;
   const existing=new Map(right.map(entry=>[entry.id,entry]));
   const additions=left.slice(baseCount);
   if (additions.some(entry=>existing.has(entry.id) && JSON.stringify(existing.get(entry.id))!==JSON.stringify(entry))) return;
   const extra=additions.filter(entry=>!existing.has(entry.id));
-  if (!extra.length) return cloud;
-  return {...cloud,revision:Math.max(local.revision,cloud.revision)+1,entries:[...right,...extra]};
+  const entries=[...right,...extra];
+  const census=structuredClone(cloudCast??emptyCensus());
+  const people=new Map(census.people.map(p=>[p.id,p]));
+  for(const p of localCast?.people??[]){
+    const same=people.get(p.id);
+    if(!same)people.set(p.id,p);
+    else if(p.chapters.length>same.chapters.length)people.set(p.id,{...same,chapters:p.chapters,places:p.places,neighbor:p.neighbor??same.neighbor,next:p.next});
+  }
+  census.serial=Math.max(census.serial,localCast?.serial??0);
+  census.people=[...people.values()];
+  const merged=settleCity(entries,cloud.forgotten??[],census,Math.floor(Date.now()/1000));
+  if(!extra.length && JSON.stringify(merged)===JSON.stringify(cloudCast))return cloud;
+  return {...cloud,revision:Math.max(local.revision,cloud.revision)+1,entries,census:merged};
 }
 export class SyncConflict extends Error {}
 function preserveForgottenPages(journal:WebJournal,local:WebJournal) {

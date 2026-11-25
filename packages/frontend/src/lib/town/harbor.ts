@@ -146,7 +146,7 @@ function streetDeck(shop:Workshop,points:T.Vector3[]){
   const mesh=new T.Mesh(g,[shop.materials.ashlar,shop.materials.gravel]);mesh.receiveShadow=true;mesh.castShadow=true;return mesh;
 }
 export type ValleyView='City'|'Overlook';
-export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=>void,afterglow=false,onMarkers?:(markers:PageMarker[])=>void,fixedHour?:number,onResident?:(visit?:ResidentVisit)=>void){
+export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=>void,afterglow=false,onMarkers?:(markers:PageMarker[])=>void,fixedHour?:number,onResident?:(visit?:ResidentVisit)=>void,onMeet?:(id:string)=>void){
   const wind={value:0};
   const [shop,gardens,furniture]=await Promise.all([harborWorkshop(wind),loadGardenPlants(wind),loadJournalFurniture(wind)]);
   const courts=courtTemplates(shop,gardens.props);
@@ -170,10 +170,16 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   const target=new T.Vector3();
   const scenery=new T.Group(),structures=new T.Group(),paths=new T.Group(),travel=new T.Group();
   city.add(scenery,structures,paths,travel);
-  const residents=createHarborResidents(schedule,hour*3600,new Date().getDay());
+  const residents=createHarborResidents(schedule,new Date().getDay());
+  function routineTime(){
+    if(fixedHour!==undefined)return fixedHour*3600+time;
+    const now=new Date();
+    return localHour(now)*3600+now.getMilliseconds()/1000;
+  }
   city.add(residents.layer);
   let homes:ResidentHome[]=[];
-  let nextResident=0;
+  const residentRay=new T.Raycaster();
+  const residentFrustum=new T.Frustum(),residentProjection=new T.Matrix4();
   const bore=canalTunnel(shop);
   const tunnel=bake(bore.group,valley.plant);city.add(tunnel);
   const vessel=shop.ferry();
@@ -249,21 +255,20 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     selectedPage=id;
     inspected=true;moveTo(pose,true);
   }
-  function visitResident(){
-    const arrived=homes.filter(home=>Date.now()/1000>=home.arrival);
-    if(!arrived.length)return;
-    const home=arrived[nextResident%arrived.length]!;
-    nextResident++;
+  function visitResident(id:string){
+    const home=homes.find(h=>h.resident===id && h.arrival<=Date.now()/1000);
+    if(!home)return;
     const inlet=Math.floor(home.site.x/1800);
     if(Math.abs(inlet-loadedInlet)>1)update(plan,undefined,inlet);
-    const pose=residents.focus(home.resident,time);
-    if(!pose)return;
+    const seconds=routineTime(),pose=residents.focus(home.resident,seconds);
+    if(!pose)return {life:home.life,site:home.site,stops:[],task:home.life.anchor.task};
     inspected=true;selectedPage=undefined;
     const subject=inValley(pose.point.add(v(0,.80,0)));
     moveTo({target:subject,eye:inValley(pose.eye)},true);
     residentLook=subject;
     following=home.resident;
     followOffset.copy(inValley(pose.eye)).sub(subject);
+    return residents.visit(id,seconds);
   }
   function moveTo(pose:{eye:T.Vector3;target:T.Vector3},glide:boolean){
     leaveResident();
@@ -377,7 +382,9 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     water.position.z=camera.position.z;
     shop.breezeTime.value=motionPreference.matches?0:time;
     city.worldToLocal(localEye.copy(camera.position));meadow?.view();
-    if(residents.update(time,Date.now()/1000))renderer.shadowMap.needsUpdate=true;
+    residentProjection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse).multiply(city.matrixWorld);
+    residentFrustum.setFromProjectionMatrix(residentProjection);
+    if(residents.update(routineTime(),Date.now()/1000,localEye,residentFrustum,following))renderer.shadowMap.needsUpdate=true;
     const visit=following?residents.visit(following):undefined;
     if(visit?.life!==lastVisit?.life || visit?.task!==lastVisit?.task || visit?.stops!==lastVisit?.stops){
       lastVisit=visit;onResident?.(visit);
@@ -613,6 +620,13 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       const access=new T.Group();
       const entrance=connectDoors(shop,access,lot,streetsByBank.get(site.bank)![laneOf(site)]!,clearance);
       if(entrance)fronts.push({site,origin:entrance.origin,target:entrance.target});
+      else{
+        const street=streetsByBank.get(site.bank)?.[laneOf(site)];
+        if(street?.length){
+          const edge=street.reduce((a,b)=>a.distanceToSquared(model.position)<b.distanceToSquared(model.position)?a:b);
+          fronts.push({site,origin:edge,target:edge});
+        }
+      }
       access.traverse(clearWalk);
       model.attach(access);
       const newBuilding=site===savedSite && site.id===savedPage;
@@ -704,6 +718,17 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   const input=valleyInput(canvas,camera,target,signals.signal,schedule,
     ()=>{inspected=true;framing=undefined;leaveResident();checkedEye.x=Infinity;},()=>{inspected=false;fit(true);},
     (x,y)=>{
+      if(onMeet){
+        const bounds=canvas.getBoundingClientRect();
+        residentRay.setFromCamera(new T.Vector2((x-bounds.left)/bounds.width*2-1,1-(y-bounds.top)/bounds.height*2),camera);
+        const hit=residents.pick(residentRay);
+        if(hit){
+          residentRay.far=hit.distance;
+          const hidden=residentRay.intersectObject(structures,true).length>0;
+          residentRay.far=Infinity;
+          if(!hidden){onMeet(hit.id);return;}
+        }
+      }
       if(!onPage)return;
       const found=pageTargets.pick(x,y);
       if(found)onPage(selectedPage&&plan.addresses.get(selectedPage)===found?selectedPage:found.readableId??found.id);
