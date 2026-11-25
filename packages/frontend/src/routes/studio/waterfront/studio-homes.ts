@@ -4,7 +4,9 @@ import { residentHomes } from '$lib/town/resident-lives.js';
 
 const names = [
   'Remy Linden', 'Oren Finch', 'Idris Bell', 'Mara Costa', 'Ada Chen', 'Gil Navarro',
-  'Jun Reed', 'Noor Shaw', 'Iona Hart', 'Ellis West', 'Luz Silva', 'Kit Perry'
+  'Jun Reed', 'Noor Shaw', 'Iona Hart', 'Ellis West', 'Luz Silva', 'Kit Perry',
+  'Pia Sato', 'Alba Rios', 'Ravi Alder', 'Leila Mori', 'Esme Cole',
+  'Etta Park', 'Inés Dale', 'Ren Silva', 'Finn Reed', 'Nico West'
 ];
 
 export const studioHomes: typeof residentHomes = (coast, pages) => {

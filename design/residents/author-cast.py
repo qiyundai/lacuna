@@ -18,6 +18,16 @@ models = {
     "tides": "tide-watcher",
     "toys": "boat-carver",
     "type": "letterpress-printer",
+    "glaze": "kiln-potter",
+    "letters": "letter-carrier",
+    "minutes": "clock-restorer",
+    "rushes": "reed-weaver",
+    "stars": "night-astronomer",
+    "crust": "bread-baker",
+    "rain": "rain-recorder",
+    "strings": "violin-maker",
+    "tiles": "tile-setter",
+    "floats": "swim-steward",
 }
 
 families = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else list(models)

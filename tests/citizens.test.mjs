@@ -18,8 +18,8 @@ test('every occupied type has capacity and each new room contributes one place',
   assert.equal(census.people.length,coast.sites.reduce((n,s)=>n+capacities[s.kind],0)+pages.length-coast.sites.length);
   assert.ok(census.people.length>200);
   assert.equal(census.people[0].arrival,700);
-  assert.equal(new Set(census.people.slice(0,12).map(p=>p.family)).size,12);
-  assert.equal(new Set(census.people.slice(0,12).map(p=>citizenLife(p).model)).size,12);
+  assert.equal(new Set(census.people.slice(0,lifeStories.length).map(p=>p.family)).size,lifeStories.length);
+  assert.equal(new Set(census.people.slice(0,lifeStories.length).map(p=>citizenLife(p).model)).size,lifeStories.length);
   assert.equal(new Set(census.people.map(p=>p.name)).size,census.people.length);
   assert.equal(new Set(census.people.map(p=>p.slot)).size,census.people.length);
   assert.deepEqual(settleCity(pages,[],census,101),census);
@@ -37,7 +37,7 @@ test('old towns preserve pilot arrivals, introduce at most four neighbors, and a
   let later=month;
   for(let i=1;i<=2;i++)later=settleCity(pages,[],later,now+(30+5*i)*day);
   const complete=later.people.filter(p=>p.chapters.length===3);
-  assert.equal(new Set(complete.map(p=>p.family)).size,12);
+  assert.equal(new Set(complete.map(p=>p.family)).size,lifeStories.length);
   assert.ok(complete.some(p=>p.chapters[2]===2) && complete.some(p=>p.chapters[2]===3));
   for(const p of complete){
     const life=citizenLife(p);

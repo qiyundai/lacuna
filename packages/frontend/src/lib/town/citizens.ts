@@ -136,84 +136,10 @@ export function settleCity(pages:readonly CityPage[],forgotten:readonly Forgotte
   return state;
 }
 
-const stageTasks=[
-  [
-    "Listening for ripe seed heads",
-    "Folding the first envelopes",
-    "Collecting drawings of last year’s flowers",
-    "Handing out birthday seeds"
-  ],
-  [
-    "Listening for the first echo",
-    "Walking the map with eyes closed",
-    "Correcting the troublesome turning",
-    "Sharing the listening map"
-  ],
-  [
-    "Sorting the fittings",
-    "Tracing a missing hinge",
-    "Trying the repaired latch",
-    "Lending a tin of spare parts"
-  ],
-  [
-    "Counting the chairs",
-    "Writing place cards",
-    "Testing the bread pudding",
-    "Collecting recipes after supper"
-  ],
-  [
-    "Sorting the photographs",
-    "Pencilling a name beneath the dog",
-    "Checking the family’s address",
-    "Sharing copies of the named prints"
-  ],
-  [
-    "Trimming the wick",
-    "Tracing the crescent of light",
-    "Adjusting the foil collar",
-    "Lighting the finished lamp"
-  ],
-  [
-    "Weighing the two spars",
-    "Tying a second tail",
-    "Timing the first steady flight",
-    "Showing someone how to launch"
-  ],
-  [
-    "Listening for the eighth note",
-    "Filing a new clapper",
-    "Practising the last two bars",
-    "Playing the complete lullaby"
-  ],
-  [
-    "Threading the needle",
-    "Matching the red scrap",
-    "Stitching names along the seams",
-    "Showing the names inside the cape"
-  ],
-  [
-    "Checking the water mark",
-    "Scribing a brass scale",
-    "Comparing the last three readings",
-    "Setting the tide gauge"
-  ],
-  [
-    "Checking the toy keel",
-    "Moving the ballast",
-    "Drying the first sail",
-    "Launching the wooden boat"
-  ],
-  [
-    "Setting the dancing letter",
-    "Pulling the first proof",
-    "Cutting the last letter",
-    "Inking the full alphabet"
-  ]
-];
 
 export function citizenLife(p:Citizen,site?:Site):ResidentLife{
   const story=lifeStories[p.family]!,stage=p.chapters.length;
-  const work=stageTasks[p.family]![stage]!;
+  const work=story.tasks[stage]!;
   const friend=p.friend;
   const keepsake=story.keepsake;
   const gesture=p.family%3===0?'bag':p.family%3===1?'read':'greet';

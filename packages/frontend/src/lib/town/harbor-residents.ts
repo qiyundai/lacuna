@@ -89,7 +89,7 @@ function shopperFigure(home:ResidentHome,assets:ReturnType<typeof figures>,redra
   note.position.set(0,.245,.027);note.rotation.z=.21;
   let beat=-1,resting:ReturnType<typeof overlookPose>|undefined,heldPosture:ResidentMotion['posture'];
   const fabric=new Map<T.Material,T.MeshStandardMaterial>();
-  const style=lifeStories.findIndex(s=>s.key===home.life.family);
+  const workPose=lifeStories.find(s=>s.key===home.life.family)?.workPose;
   const file=assets.acquire(home.life.model ?? 'market-shopper.glb');
   file.asset.then(source=>{
     if(disposed)return;
@@ -172,9 +172,9 @@ function shopperFigure(home:ResidentHome,assets:ReturnType<typeof figures>,redra
           arm.rotateX(-envelope*.55);elbow.rotateX(-envelope*.92);elbow.rotateZ(envelope*.22);
         }
       }
-      if(style>=0 && motion.gesture && bagArm && arm && elbow && head){
+      if(workPose && motion.gesture && bagArm && arm && elbow && head){
         const strength=motion.strength??0;
-        const [lift,roll,reach,nod,tempo]=workPoses[style]!;
+        const [lift,roll,reach,nod,tempo]=workPose;
         const wave=Math.sin(tick*tempo);
         bagArm.rotateX(strength*(lift+.10*wave));bagArm.rotateZ(strength*roll);
         arm.rotateZ(strength*reach);elbow.rotateX(strength*wave*.19);head.rotateX(strength*nod);
@@ -191,12 +191,6 @@ function shopperFigure(home:ResidentHome,assets:ReturnType<typeof figures>,redra
   };
 }
 
-const workPoses=[
-  [-.54,.32,.31,.17,.21],[-.92,.49,-.21,-.12,.10],[-.78,-.16,.51,.23,.74],
-  [-.66,.41,.64,.06,.16],[-1.08,.26,.15,.29,.12],[-1.34,-.27,-.12,-.24,.20],
-  [-.52,-.68,-.52,-.32,.29],[-.91,.18,-.27,-.13,.72],[-.73,.47,.53,.22,.39],
-  [-1.12,-.14,-.16,-.10,.13],[-.57,.28,.48,.33,.51],[-.89,.38,.42,.26,.62]
-];
 
 function routeByDoor(lot:WaterfrontLot,street:T.Vector3[],front?:ShopFront) {
   const entrance=lot.gallery[0]??front?.origin;
