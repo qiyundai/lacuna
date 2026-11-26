@@ -36,8 +36,7 @@ Entering the valley starts a soundtrack and positional ambience: river, wind, le
 
 The menu also leads to:
 
-- **Journal**: your pages as a timeline. Filter to **kept close**, search with **find a word**, and keep a thought close from its reading view. Soul map and memoir are marked Coming soon.
-- **Quiet writing**: a blank space for a single thought. Type, then hold for a moment (or press Control/Command+Enter) to save it.
+- **Timeline** shows the same pages outside the city. Filter to **kept close**, search with **find a word**, and keep a thought close from its reading view. Soul map and memoir are marked Coming soon. Choose **Return to city** to go back.
 - **Journal settings** includes About Lacuna, Data and privacy, storage and backups, journal export, lock and deletion. Reflections is marked coming soon. Lacuna is for writers aged 13 and older in the US and Canada outside Québec. Journals start on this device. Writers can turn on free encrypted sync in Privacy & storage.
 
 ### Install on a phone

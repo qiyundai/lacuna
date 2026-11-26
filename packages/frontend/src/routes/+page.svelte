@@ -1,7 +1,6 @@
 <script lang="ts">
   import IconAction from '$lib/components/IconAction.svelte';
   import { swipeDetector } from '$lib/gesture.js';
-  import Void from '$lib/components/Void.svelte';
   import DownSpace from '$lib/components/DownSpace.svelte';
   import JournalCity from '$lib/components/JournalCity.svelte';
 
@@ -17,15 +16,11 @@
   });
   let settings:UserMenu;
   let busy=$state(false),draft=$state(''),draftId=$state('');
-  let view=$state<'town'|'journal'|'quiet'>('town');
-  let section=$state<0|1|2>(0);
-  const destinations=[['town','City'],['journal','Journal'],['quiet','Quiet writing']] as const;
+  let view=$state<'town'|'journal'>('town');
   let surface:HTMLDivElement;
   let entrance:Animation|undefined;
-  const journal=()=>navigate('journal');
   async function navigate(next:typeof view){
     if(next===view)return;
-    if(next==='journal')section=0;
     view=next;
     await tick();
     if(view!==next)return;
@@ -39,9 +34,11 @@
   const town=()=>navigate('town');
 </script>
 {#snippet navigation()}
-  {#each destinations as item}
-    <IconAction icon={item[0]} label={item[1]} current={view===item[0]?'page':undefined} disabled={busy} onclick={()=>navigate(item[0])}/>
-  {/each}
+  {#if view==='town'}
+    <IconAction icon="journal" label="Timeline" disabled={busy} onclick={()=>navigate('journal')}/>
+  {:else}
+    <IconAction icon="town" label="Return to city" onclick={town}/>
+  {/if}
   <IconAction icon="settings" label="Journal settings" onclick={()=>settings.showSettings()}/>
 {/snippet}
 <UserMenu bind:this={settings}/>
@@ -51,8 +48,8 @@
 {:else}
   <div class="application">
     <Masthead journalMenu>{@render navigation()}</Masthead>
-    <div class="page" use:swipeDetector={{onSwipeDown:journal,onSwipeUp:town}}>
-      {#if view==='quiet'}<Void onSwipeDown={journal}/>{:else}{#key archiveRevision}<DownSpace active initial={section}/>{/key}{/if}
+    <div class="page" use:swipeDetector={{onSwipeUp:town}}>
+      {#key archiveRevision}<DownSpace active/>{/key}
     </div>
   </div>
 {/if}
