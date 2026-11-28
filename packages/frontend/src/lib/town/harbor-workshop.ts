@@ -35,7 +35,7 @@ export function isWorkplace(kind:Site['kind']){
   if (isRiverVenue(kind)) return siteDistrict(kind) !== 'residential';
   return ['market','warehouse','crane','station','civic','wharf','glasshouse','arches','belfry'].includes(kind);
 }
-export async function harborWorkshop(breezeTime={value:0}){
+export async function harborWorkshop(breezeTime={value:0},snowCover={value:0}){
   const clockHour={value:0},fixtures=publicFixtures();
   const textures=new T.TextureLoader();
   const materials={} as Record<Skin,T.MeshStandardMaterial>;
@@ -136,7 +136,7 @@ export async function harborWorkshop(breezeTime={value:0}){
   const box=(p:Part,k:Skin,x:number,y:number,z:number,w:number,h:number,d:number)=>piece(p,geometries.box,k,x,y,z,w,h,d);
   const pole=(p:Part,k:Skin,x:number,y:number,z:number,w:number,h:number)=>piece(p,geometries.round,k,x,y,z,w,h,w);
   const paint = await loadGouache();
-  const forest=coastalTrees(breezeTime,paint);
+  const forest=coastalTrees(breezeTime,paint,snowCover);
   const treeModels=forest.trees;
   function tree(p:Part,x:number,y:number,z:number,h:number,seed:number){
     const species=T.MathUtils.euclideanModulo(seed,treeModels.length),instance=treeModels[species]!.clone();

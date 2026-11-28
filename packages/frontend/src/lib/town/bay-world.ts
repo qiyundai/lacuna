@@ -50,7 +50,7 @@ const skyFragment = `
   uniform sampler2D weather;
   uniform vec3 sunDirection;
   uniform float seconds;
-  uniform float gouache,daylight,twilight,dawn,starTime,meteorAge;
+  uniform float gouache,daylight,twilight,dawn,starTime,meteorAge,overcast;
   uniform vec2 meteorStart;
   float hashStar(vec2 p){
     vec3 q=fract(vec3(p.xyx)*vec3(.1031,.1030,.0973));
@@ -154,6 +154,11 @@ const skyFragment = `
     sky=sky*transmission+clouds*mix(vec3(.031,.030,.064),mix(vec3(1.),duskTint,twilight),daylight);
     float valleyMist=pow(abs(dir.z),18.)*(1.-smoothstep(.002,.065,abs(dir.y)));
     sky=mix(sky,mix(vec3(.026,.032,.058),vec3(.15,.24,.25),daylight),valleyMist*.94);
+    if(overcast>.001){
+      vec3 grey=mix(vec3(.018,.028,.051),vec3(.42,.49,.53),daylight);
+      float cloudMass=.56+.30*veil+.17*filament+.20*altitude;
+      sky=mix(sky,grey*cloudMass,overcast);
+    }
     gl_FragColor = vec4(sky,1.);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -207,9 +212,9 @@ function headlands(sector: number) {
   return geometry;
 }
 
-export type ValleyLighting = { direction:T.Vector3; direct:T.Color; sky:T.Color; ground:T.Color };
+export type ValleyLighting = { direction:T.Vector3; direct:T.Color; sky:T.Color; ground:T.Color; snowCover:T.IUniform<number> };
 
-export function createBayWorld(scene: T.Scene, throughCorridor=false) {
+export function createBayWorld(scene: T.Scene, throughCorridor=false, overcast:T.IUniform<number>={value:0},snowCover:T.IUniform<number>={value:0}) {
   const noise = cloudNoise();
   const sunDirection = new T.Vector3();
   const daylight={value:1},twilight={value:0},meteorAge={value:-1},meteorStart=new T.Vector2();
@@ -218,7 +223,7 @@ export function createBayWorld(scene: T.Scene, throughCorridor=false) {
       weather: { value: noise },daylight,twilight,dawn:{value:0},meteorAge,meteorStart:{value:meteorStart},starTime:{value:0},
       sunDirection: { value: sunDirection },
       seconds: { value: 0 },
-      gouache: { value: 1 }
+      gouache: { value: 1 },overcast
     },
     vertexShader: horizonVertex,
     fragmentShader: skyFragment,
@@ -250,7 +255,7 @@ export function createBayWorld(scene: T.Scene, throughCorridor=false) {
   let centerSector: number | undefined;
   const sun = new T.DirectionalLight('#ffddac',1.98);
   const ambient = new T.HemisphereLight('#cbdaf5','#a88b83',.84);
-  const lighting:ValleyLighting={direction:sunDirection,direct:new T.Color(),
+  const lighting:ValleyLighting={direction:sunDirection,direct:new T.Color(),snowCover,
     sky:ambient.color.clone().multiplyScalar(ambient.intensity),
     ground:ambient.groundColor.clone().multiplyScalar(ambient.intensity)};
   sun.castShadow=true;
@@ -261,7 +266,7 @@ export function createBayWorld(scene: T.Scene, throughCorridor=false) {
   scene.add(sky,range,sun,sun.target,ambient);
   const daySun=sun.color.clone(),nightSun=new T.Color('#9fb6ff'),duskSun=new T.Color('#ffa884');
   const daySky=ambient.color.clone(),nightSky=new T.Color('#94a0cd'),duskSky=new T.Color('#eebed1');
-  const dayGround=ambient.groundColor.clone(),nightGround=new T.Color('#666280');
+  const dayGround=ambient.groundColor.clone(),nightGround=new T.Color('#666280'),cloudSky=new T.Color('#d1dced');
   function setTime(seconds: number, focusX: number, cameraX: number, focusZ=0,light:CityLight=lightAt(12),starSeconds=seconds,focusY=4) {
     const sector = Math.floor(cameraX/sectorWidth);
     if (centerSector!==sector) {
@@ -292,7 +297,8 @@ export function createBayWorld(scene: T.Scene, throughCorridor=false) {
     sun.color.copy(nightSun).lerp(daySun,light.daylight).lerp(duskSun,light.twilight*.80);
     ambient.color.copy(nightSky).lerp(daySky,light.daylight).lerp(duskSky,light.twilight*.55);
     ambient.groundColor.copy(nightGround).lerp(dayGround,light.daylight);
-    sun.intensity=T.MathUtils.lerp(.40,2.38+elevation*.52,light.daylight);
+    ambient.color.lerp(cloudSky,overcast.value*light.daylight*.42);
+    sun.intensity=T.MathUtils.lerp(.40,2.38+elevation*.52,light.daylight)*(1-.78*overcast.value);
     ambient.intensity=T.MathUtils.lerp(.52,.84,light.daylight);
     lighting.sky.copy(ambient.color).multiplyScalar(ambient.intensity);
     lighting.ground.copy(ambient.groundColor).multiplyScalar(ambient.intensity);

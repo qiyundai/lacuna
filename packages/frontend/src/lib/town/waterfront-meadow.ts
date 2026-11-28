@@ -62,7 +62,7 @@ function blades(count:number,seed:number) {
   return {position:new T.Float32BufferAttribute(position,3),normal:new T.Float32BufferAttribute(normals,3),uv:new T.Float32BufferAttribute(roots,2),color:new T.Float32BufferAttribute(colors,3),bladeSection:new T.Float32BufferAttribute(sections,1),index:new T.Uint16BufferAttribute(indices,1)};
 }
 
-export function createMeadow(ground:T.BufferGeometry,rows:number,eye:T.Vector3,heath:T.Texture,breezeTime:T.IUniform<number>={value:0}) {
+export function createMeadow(ground:T.BufferGeometry,rows:number,eye:T.Vector3,heath:T.Texture,breezeTime:T.IUniform<number>={value:0},snowCover:T.IUniform<number>={value:0}) {
   const pos=ground.getAttribute('position'),normal=ground.getAttribute('normal'),habitat=ground.getAttribute('habitat');
   ground.computeBoundingBox();
   const bounds=ground.boundingBox!, min=bounds.min, step=.32;
@@ -77,12 +77,12 @@ export function createMeadow(ground:T.BufferGeometry,rows:number,eye:T.Vector3,h
     material.customProgramCacheKey=()=>'coastal-lawn';
     material.onBeforeCompile=shader=>{
       Object.assign(shader.uniforms,{lawnEye:{value:eye},bladeRange:{value:new T.Vector2(layer.start,layer.end)},pavingMask:{value:paths},maskBounds:{value:new T.Vector4(min.x,min.z,width*step,depth*step)},lawnTexture:{value:heath}});
-      shader.uniforms.breezeTime=breezeTime;
+      shader.uniforms.breezeTime=breezeTime;shader.uniforms.snowCover=snowCover;
       shader.vertexShader=coastalBreeze+meadowPigment+`
         attribute vec3 corner, edgeB, edgeC, turfCover, treeCover;
         attribute vec4 scatter;
         attribute float bladeSection;
-        uniform vec3 lawnEye; uniform vec2 bladeRange; uniform vec4 maskBounds;
+        uniform float snowCover;uniform vec3 lawnEye; uniform vec2 bladeRange; uniform vec4 maskBounds;
         uniform sampler2D pavingMask;
         varying vec2 bladeUv;
       `+shader.vertexShader.replace('#include <beginnormal_vertex>',`
@@ -105,7 +105,7 @@ export function createMeadow(ground:T.BufferGeometry,rows:number,eye:T.Vector3,h
         float growth=smoothstep(.13,.76,meadow)*(1.-smoothstep(.08,.70,path))*lod;
         float fold=sin(root.x*.18-root.z*.24);
         float drift=.5+.27*sin(root.x*.38+root.z*.24+1.65*fold)+.23*cos(root.z*.40-root.x*.19+fold);
-        float lengthScale=(.85+.54*drift-.22*stand)*growth;
+        float lengthScale=(.85+.54*drift-.22*stand)*growth*mix(1.,.14,snowCover);
         vec2 lean=mat2(scatter.z,scatter.w,-scatter.w,scatter.z)*position.xz;
         float up=max(position.y,0.);
         vec2 localWind=(vec3(breezeDirection.x,0.,breezeDirection.y)*mat3(modelMatrix)).xz;
@@ -113,6 +113,7 @@ export function createMeadow(ground:T.BufferGeometry,rows:number,eye:T.Vector3,h
         vec2 bend=lean*growth+wind*(up*lengthScale*(1.-cos(angle))/angle);
         vec3 transformed=root+vec3(bend.x,position.y*lengthScale*curl/angle-.009,bend.y);
         vColor.rgb*=meadowPigment(worldRoot.xz,stand,worldRoot.y)*mix(.95,1.10,gust*bladeSection);
+        vColor.rgb=mix(vColor.rgb,vec3(.62,.67,.69),snowCover*.87*bladeSection);
       `);
       shader.fragmentShader='uniform sampler2D lawnTexture; varying vec2 bladeUv;\n'+shader.fragmentShader.replace('#include <color_fragment>',`
         #include <color_fragment>

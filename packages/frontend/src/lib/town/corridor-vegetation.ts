@@ -146,7 +146,7 @@ export function distantCrowns(height:Surface,coverAt:Cover,west:number,east:numb
 }
 
 export function corridorGrass(height:Surface,hasTownLawn:(x:number,z:number)=>boolean,west:number,east:number,
-  breezeTime:T.IUniform<number>,eye:T.Vector3,coverAt:Cover){
+  breezeTime:T.IUniform<number>,eye:T.Vector3,coverAt:Cover,snowCover:T.IUniform<number>={value:0}){
   const drawDistance=150;
   const positions:number[]=[],normals:number[]=[],colors:number[]=[],indices:number[]=[];
   for(let j=0;j<4;j++){
@@ -163,9 +163,9 @@ export function corridorGrass(height:Surface,hasTownLawn:(x:number,z:number)=>bo
   const color=new T.Float32BufferAttribute(colors,3),index=new T.Uint16BufferAttribute(indices,1);
   const material=new T.MeshLambertMaterial({side:T.DoubleSide,vertexColors:true,fog:false});
   material.onBeforeCompile=shader=>{
-    Object.assign(shader.uniforms,{breezeTime,meadowEye:{value:eye}});
+    Object.assign(shader.uniforms,{breezeTime,snowCover,meadowEye:{value:eye}});
     shader.vertexShader=coastalBreeze+meadowPigment+`
-      uniform vec3 meadowEye;
+      uniform vec3 meadowEye;uniform float snowCover;
       attribute vec4 growth,habitat;
     `+shader.vertexShader.replace('#include <beginnormal_vertex>',`
       vec3 root=growth.xyz;
@@ -180,9 +180,10 @@ export function corridorGrass(height:Surface,hasTownLawn:(x:number,z:number)=>bo
     `).replace('#include <begin_vertex>',`
       vec3 transformed=vec3(lean.x,position.y,lean.y)*(.74+.68*growth.w)*fade;
       transformed.xz+=breezeDirection*transformed.y*transformed.y*(.44+1.8*gust);
-      transformed.y*=1.-.29*gust;
+      transformed.y*=(1.-.29*gust)*mix(1.,.18,snowCover);
       transformed+=root;
       vColor.rgb*=meadowPigment(root.xz,habitat.w,root.y)*(.92+.15*growth.w);
+      vColor.rgb=mix(vColor.rgb,vec3(.58,.66,.67),snowCover*smoothstep(.10,.46,position.y));
     `);
     shader.fragmentShader=shader.fragmentShader.replace('#include <normal_fragment_begin>',
       '#include <normal_fragment_begin>\n normal*=faceDirection;');

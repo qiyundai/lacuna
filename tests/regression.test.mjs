@@ -231,9 +231,10 @@ test('postcard editions follow distinct Monday writing weeks and survive forgett
   assert.equal(writingWeeks([sunday,{created_at:start*86400}]),1);
   assert.equal(writingWeeks([sunday,{created_at:(start+7)*86400}]),2);
   assert.equal(postcardEdition(0),0);
+  assert.equal(postcardEdition(26),8);
   for(const [i,m] of monuments.entries()){
     assert.equal(postcardEdition(m.weeks-1),i+1);
-    assert.equal(postcardEdition(m.weeks),i+2);
+    assert.equal(postcardEdition(m.weeks),m.edition);
   }
   const vault=new WebVault(webStorage());
   await vault.unlock(samplePassphrase,true);
