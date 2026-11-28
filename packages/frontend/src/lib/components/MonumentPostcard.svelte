@@ -26,7 +26,7 @@
 
 <dialog bind:this={dialog} aria-labelledby={titleId} onclose={()=>onopen(false)}>
   <button type="button" class="paper-control close" aria-label="Close postcard" onclick={()=>dialog.close()}><Icon name="close"/></button>
-  <img class:linen={card.id==='linen-exchange'} src={'/city/postcards/'+card.id+'.webp'} alt=""/>
+  <img class:linen={card.id==='linen-exchange'} src={'/city/postcards/'+card.id+'.webp'} width="512" height="512" loading="lazy" alt=""/>
   <div class="caption" aria-live="polite">
     <h2 id={titleId}>{card.name}</h2>
     {#if opened}
