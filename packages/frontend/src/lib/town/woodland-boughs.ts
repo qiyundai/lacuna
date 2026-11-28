@@ -2,7 +2,7 @@ import * as T from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { corridorShadow } from './corridor-light.js';
 import type { ValleyLighting } from './bay-world.js';
-import { coastalTreeGeometry } from './coastal-flora.js';
+import { coastalTreeGeometry, crownSnowPigment } from './coastal-flora.js';
 import { canopySway, treeFlex } from './coastal-breeze.js';
 import { leafBrushCoordinates, leafBrushPigment, type Gouache } from './gouache.js';
 import { boughStart, boughEnd, farCrownStart, farCrownEnd, woodlandEnd, treeDither } from './tree-dither.js';
@@ -51,13 +51,14 @@ export function woodlandBoughs(lighting:ValleyLighting,clock:T.IUniform<number>,
     return new T.ShaderMaterial({
       side:leafy?T.DoubleSide:T.FrontSide,
       clipping:true,uniforms:{sunDir:{value:lighting.direction},sunColor:{value:lighting.direct},
-        skyColor:{value:lighting.sky},groundColor:{value:lighting.ground},seconds:clock,driftTime:clock,forestEye:{value:eye},sprays:{value:sprays},
+        skyColor:{value:lighting.sky},groundColor:{value:lighting.ground},snowCover:lighting.snowCover,seconds:clock,driftTime:clock,forestEye:{value:eye},sprays:{value:sprays},
         ...(paint?{gouacheMap:{value:paint.strokes},gouacheCoverage:paint.coverage}:{})},
       vertexShader:`
         #include <clipping_planes_pars_vertex>
         uniform vec3 forestEye,sunDir,sunColor,skyColor,groundColor;
         uniform float seconds;
         ${canopySway}
+        ${crownSnowPigment}
         attribute vec3 position1,normal1,position2,normal2;
         attribute vec4 tint,tint1,tint2;
         ${paint?'varying vec3 leafBrush;'+leafBrushCoordinates:''}
@@ -99,8 +100,9 @@ export function woodlandBoughs(lighting:ValleyLighting,clock:T.IUniform<number>,
           local.xz+=${treeFlex}*length(modelMatrix[1].xyz)*crown.w*canopySway(trunk.xz,local.xz,p.y,seconds);
           n.xz=turn*n.xz/planting.w;
           n=normalize(mat3(modelMatrix)*n);
-          ambient=pigment.rgb*mix(groundColor,skyColor,.5+.5*n.y)/3.14159265;
-          direct=pigment.rgb*sunColor*max(0.,dot(n,sunDir))/3.14159265;
+          vec3 foliage=snowCover>.001?crownSnowPigment(pigment.rgb,p,pigment.a):pigment.rgb;
+          ambient=foliage*mix(groundColor,skyColor,.5+.5*n.y)/3.14159265;
+          direct=foliage*sunColor*max(0.,dot(n,sunDir))/3.14159265;
           shade=max(intercepted(northCrown,local),intercepted(southCrown,local));
           vec4 mvPosition=viewMatrix*vec4(trunk+local,1.);
           gl_Position=projectionMatrix*mvPosition;

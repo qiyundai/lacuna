@@ -16,7 +16,7 @@ const screenVertex=`
 `;
 
 export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camera:T.PerspectiveCamera,
-  sun:T.DirectionalLight,direction:T.Vector3,mist:ReturnType<typeof createLowCloud>,afterglow:boolean,daylight:T.IUniform<number>,beamLimit:number){
+  sun:T.DirectionalLight,direction:T.Vector3,mist:ReturnType<typeof createLowCloud>,afterglow:boolean,daylight:T.IUniform<number>,beamLimit:number,overcast:T.IUniform<number>){
   const hdr=renderer.extensions.has('EXT_color_buffer_float');
   const targetType=hdr?T.HalfFloatType:T.UnsignedByteType;
   const beauty=new T.WebGLRenderTarget(1,1,{type:targetType,samples:Math.min(2,renderer.capabilities.maxSamples)});
@@ -30,7 +30,7 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
   const pollen=afterglow?createSunlitPollen(direction,sun.shadow.matrix):null;
   if(pollen)scene.add(pollen.points);
   const uniforms={
-    daylight,geometryDepth:{value:beauty.depthTexture},shadowDepth:{value:null as T.DepthTexture|null},
+    daylight,overcast,geometryDepth:{value:beauty.depthTexture},shadowDepth:{value:null as T.DepthTexture|null},
     invProjection:{value:camera.projectionMatrixInverse},eyeFrame:{value:camera.matrixWorld},
     shadowFrame:{value:sun.shadow.matrix},sunDir:{value:direction},eye:{value:eye},seconds:{value:0}
   };
@@ -40,10 +40,11 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
     uniform highp sampler2DShadow shadowDepth;
     uniform mat4 invProjection,eyeFrame,shadowFrame;
     uniform vec3 sunDir,eye;
-    uniform float seconds,daylight;
+    uniform float seconds,daylight,overcast;
     ${afterglow?sunbreak:''}
     void main(){
-      if(daylight<.001){gl_FragColor=vec4(0.,0.,0.,1.);return;}
+      float strength=daylight*(1.-overcast);
+      if(strength<.001){gl_FragColor=vec4(0.,0.,0.,1.);return;}
       float z=texture2D(geometryDepth,screenUv).r;
       vec4 endpoint=invProjection*vec4(screenUv*2.-1.,z*2.-1.,1.);
       vec3 sight=mat3(eyeFrame)*(endpoint.xyz/endpoint.w);
@@ -68,19 +69,20 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
         light+=visibility*layer*gap*exp(-d*.009)*stepSize;`}
       }
       float phase=.34+2.45*pow(max(dot(ray,sunDir),0.),9.);
-      gl_FragColor=vec4(${afterglow?'vec3(1.,.83,.53)*light*.012*(.64+.48*phase)':'vec3(1.,.72,.45)*light*.00130*phase'}*daylight,1.);
+      gl_FragColor=vec4(${afterglow?'vec3(1.,.83,.53)*light*.012*(.64+.48*phase)':'vec3(1.,.72,.45)*light*.00130*phase'}*strength,1.);
     }`});
   const shafts=new FullScreenQuad(haze);
   const combine=new ShaderPass(new T.ShaderMaterial({
-    uniforms:{daylight,beauty:{value:beauty.texture},vapor:{value:vapor.texture},air:{value:air.texture},geometryDepth:{value:beauty.depthTexture},
+    uniforms:{daylight,overcast,beauty:{value:beauty.texture},vapor:{value:vapor.texture},air:{value:air.texture},geometryDepth:{value:beauty.depthTexture},
       sunUv:{value:sunUv},aspect:{value:1},seconds:uniforms.seconds,sunDir:uniforms.sunDir,invProjection:uniforms.invProjection,
       eyeFrame:uniforms.eyeFrame,shadowFrame:uniforms.shadowFrame,shadowDepth:uniforms.shadowDepth},depthTest:false,depthWrite:false,vertexShader:screenVertex,fragmentShader:`
       varying vec2 screenUv;
       uniform sampler2D beauty,air,geometryDepth,vapor;
       uniform vec3 sunUv;
-      uniform float aspect,daylight;
+      uniform float aspect,daylight,overcast;
+      uniform mat4 invProjection;
       ${afterglow?`
-      uniform mat4 invProjection,eyeFrame,shadowFrame;
+      uniform mat4 eyeFrame,shadowFrame;
       uniform highp sampler2DShadow shadowDepth;
       uniform float seconds;
       uniform vec3 sunDir;
@@ -98,8 +100,17 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
       }`:''}
       void main(){
         vec3 lit=texture2D(beauty,screenUv).rgb;
-        ${afterglow?'lit=valleyLight(lit,texture2D(geometryDepth,screenUv).r);':''}
+        ${afterglow?'lit=mix(valleyLight(lit,texture2D(geometryDepth,screenUv).r),lit,overcast);':''}
         vec4 cloud=texture2D(vapor,screenUv);
+        if(overcast>.001){
+          float depth=texture2D(geometryDepth,screenUv).r;
+          vec4 point=invProjection*vec4(0.,0.,depth*2.-1.,1.);
+          float distanceToEye=-point.z/max(.000001,point.w);
+          float veil=overcast*(1.-exp(-max(0.,distanceToEye-17.)*.00165));
+          vec3 haze=mix(vec3(.014,.023,.038),vec3(.17,.225,.251),daylight);
+          lit=mix(lit,haze,veil*.80);
+          cloud.rgb=mix(cloud.rgb,haze*cloud.a,overcast*.50);
+        }
         lit=lit*(1.-cloud.a)+cloud.rgb+texture2D(air,screenUv).rgb*(1.-.7*cloud.a);
         vec2 aspectScale=vec2(aspect,1.);
         float visibility=0.;
@@ -118,7 +129,7 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
         float teal=length((screen+axis*.78)*aspectScale);
         vec3 flare=vec3(1.,.52,.22)*(.20*exp(-source*15.)+.033*(1.-smoothstep(.038,.054,amber)));
         flare+=vec3(.38,.84,.77)*(.028*exp(-pow(abs(teal-.074)/.014,2.))+.018*exp(-teal*17.));
-        gl_FragColor=vec4(lit+flare*visibility*daylight,1.);
+        gl_FragColor=vec4(lit+flare*visibility*daylight*(1.-overcast),1.);
       }`}));
   const composer=new EffectComposer(renderer,hdr?undefined:new T.WebGLRenderTarget(1,1,{type:targetType}));
   const bloom=new UnrealBloomPass(new T.Vector2(1,1),afterglow ? .36 : .23,.48,afterglow ? 1.24 : 1.12),output=new ShaderPass(worldGradeMaterial());
@@ -143,7 +154,7 @@ export function createBayAtmosphere(renderer:T.WebGLRenderer,scene:T.Scene,camer
       if(pollen){
         pollen.uniforms.seconds.value=seconds;
         pollen.uniforms.shadowDepth.value=sun.shadow.map?.depthTexture??null;
-        pollen.points.visible=daylight.value>.25 && Boolean(pollen.uniforms.shadowDepth.value);
+        pollen.points.visible=daylight.value>.25 && overcast.value<.28 && Boolean(pollen.uniforms.shadowDepth.value);
       }
       renderer.setRenderTarget(beauty);renderer.render(scene,camera);
       const clearAlpha=renderer.getClearAlpha();

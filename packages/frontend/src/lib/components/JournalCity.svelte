@@ -21,6 +21,7 @@
   import { paintedCoast, type Site } from '$lib/town/painted-coast.js';
   import { journalDetails } from '$lib/town/journal-details.js';
   import type { SceneCues } from '$lib/town/journal-scenes.js';
+  import type { WeatherPreview } from '$lib/town/valley-weather.js';
   import type { createHarbor } from '$lib/town/harbor.js';
 
   import type { PageMarker } from '$lib/town/city-page-markers.js';
@@ -29,7 +30,7 @@
   import { lifeStories } from '$lib/town/life-stories.js';
   import { emptyCensus, housedResidents, citizenLife, type Census } from '$lib/town/citizens.js';
   let census=$state.raw<Census>(emptyCensus()), now=$state(Math.floor(Date.now()/1000)), query=$state('');
-  let {guest=false,readOnly=false,exampleHomes=residentHomes,lightBudget,afterglow=false,fixedHour,onExit,navigation,draft=$bindable(''),draftId=$bindable(''),busy=$bindable(false)}:{guest?:boolean;readOnly?:boolean;exampleHomes?:typeof residentHomes;lightBudget?:LightBudget;afterglow?:boolean;fixedHour?:number;onExit?:()=>void;navigation?:Snippet;draft?:string;draftId?:string;busy?:boolean}=$props();
+  let {guest=false,readOnly=false,exampleHomes=residentHomes,lightBudget,afterglow=false,fixedHour,weatherPreview,onExit,navigation,draft=$bindable(''),draftId=$bindable(''),busy=$bindable(false)}:{guest?:boolean;readOnly?:boolean;exampleHomes?:typeof residentHomes;lightBudget?:LightBudget;afterglow?:boolean;fixedHour?:number;weatherPreview?:WeatherPreview;onExit?:()=>void;navigation?:Snippet;draft?:string;draftId?:string;busy?:boolean}=$props();
   let canvas:HTMLCanvasElement,dialog:HTMLDialogElement;
   let postcard=$state<MonumentPostcard>();
   let postcardRead=$state(0), postcardOpen=$state(false);
@@ -127,7 +128,7 @@
     try{
       const {createHarbor}=await import('$lib/town/harbor.js');
       if(!alive)return;
-      const city=await createHarbor(canvas,readPage,afterglow,next=>{if(alive)markers=next;},fixedHour,visit=>{if(alive)resident=visit;},meet,lightBudget);
+      const city=await createHarbor(canvas,readPage,afterglow,next=>{if(alive)markers=next;},fixedHour,visit=>{if(alive)resident=visit;},meet,lightBudget,weatherPreview);
       if(alive)scene=city;else city.destroy();
     }catch{if(alive)graphicsError=true;}
   }

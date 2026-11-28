@@ -40,7 +40,16 @@ export function coastalTreeGeometry(species:number,level:number){
   return geometry;
 }
 
-export function coastalTrees(clock:T.IUniform<number>,paint?:Gouache){
+export const crownSnowPigment=`
+  uniform float snowCover;
+  vec3 crownSnowPigment(vec3 pigment,vec3 branch,float leaves){
+    float crown=smoothstep(.34,.83,branch.y);
+    float drift=.63+.33*sin(dot(branch,vec3(11.,6.,13.)));
+    return mix(pigment,vec3(.72,.77,.78),crown*leaves*min(1.,snowCover*1.35)*drift);
+  }
+`;
+
+export function coastalTrees(clock:T.IUniform<number>,paint?:Gouache,snowCover:T.IUniform<number>={value:0}){
   const material=new T.MeshLambertMaterial({vertexColors:true,side:T.DoubleSide});
   stirCanopy(material,clock,treeFlex);
   if(paint){
@@ -55,6 +64,16 @@ export function coastalTrees(clock:T.IUniform<number>,paint?:Gouache){
         .replace('#include <color_fragment>','#include <color_fragment>\n diffuseColor.rgb*=leafBrushPigment(leafBrush);');
     };
   }
+  const prepare=material.onBeforeCompile.bind(material), programKey=material.customProgramCacheKey();
+  material.customProgramCacheKey=()=>programKey+'/snow-crown';
+  material.onBeforeCompile=(shader,renderer)=>{
+    prepare(shader,renderer);
+    shader.uniforms.snowCover=snowCover;
+    shader.vertexShader=(paint?'':'attribute float leafMask;\n')+'varying vec4 snowBranch;\n'+shader.vertexShader
+      .replace('#include <project_vertex>','snowBranch=vec4(position,leafMask);\n#include <project_vertex>');
+    shader.fragmentShader=crownSnowPigment+'varying vec4 snowBranch;\n'+shader.fragmentShader
+      .replace('#include <color_fragment>','#include <color_fragment>\n if(snowCover>.001)diffuseColor.rgb=crownSnowPigment(diffuseColor.rgb,snowBranch.xyz,snowBranch.w);');
+  };
   const shapes=forms.map((_,species)=>coastalTreeGeometry(species,0));
   const trees=shapes.map(shape=>{
     const model=new T.Group();model.add(new T.Mesh(shape,material));return model;

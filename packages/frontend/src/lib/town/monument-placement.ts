@@ -39,7 +39,7 @@ export function reserveMonument(id:MonumentId,world:string, milestone:string,anc
       const layout=(side:Bank):MonumentLot=>{
         const depth=id==='tide-organ'?3.4+2*depthNoise:id==='post-office'?56+24*depthNoise:49+23*depthNoise;
         const z=bankPosition(x,side,depth);
-        const along=id==='post-office'?27:id==='linen-exchange'?17:21;
+        const along=id==='post-office'?27:id==='rain-archive'?28:id==='linen-exchange'?17:21;
         return {x,z,bank:side,along,across:id==='linen-exchange'?31:id==='tide-organ'?12:along};
       };
       const lots=dual?[layout(0),layout(1)]:[layout(bank)],a=lots[0]!;

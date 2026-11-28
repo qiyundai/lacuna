@@ -6,17 +6,26 @@ import type { MonumentPlot } from './monument-placement.js';
 import { monumentLamps } from './monument-light.js';
 import { monuments, type MonumentId } from '../../../../shared/monuments.js';
 import { cliffPostOffice, mailCrate, cablePoint, postOfficeSlope, bellYard, tideOrgan } from './monument-halls.js';
-import { winterGarden, sakura, blossomCrown } from './monument-winter-garden.js';
+import type { ValleyWeather } from './valley-weather.js';
+import { archiveWater, type ArchiveWaterOptics } from './archive-water.js';
+import { rainArchive, archiveBasin, archiveRoof, archiveGroundHeight, archiveShelter } from './rain-archive.js';
+import { snowOnMeshes } from './valley-snow.js';
+import { winterGarden, sakura, blossomCrown, conservatoryShelter } from './monument-winter-garden.js';
 import { exchangeBank, exchangeRigging, wovenLinen } from './monument-crossings.js';
 
 type Ground=(x:number,z:number)=>number;
 type GroundGrade=(x:number,z:number,height:number)=>number;
 
-function makeLandmark(plot:MonumentPlot,shop:Workshop,ground:Ground) {
+type MonumentWeather={
+  snowCover:T.IUniform<number>;
+  water:ArchiveWaterOptics;
+};
+
+function makeLandmark(plot:MonumentPlot,shop:Workshop,ground:Ground,{snowCover,water}:MonumentWeather) {
   const {id,lots,seed}=plot,first=lots[0]!,base=ground(first.x,first.z);
   const kit=createModelWorkshop(6,4,shop.paint,false,shop.clockHour,shop.breezeTime);
   const resources:{dispose:()=>void}[]=[],group=new T.Group();
-  let tick:((time:number)=>void)|undefined;
+  let tick:((time:number,power:number,weather:ValleyWeather)=>void)|undefined;
   group.rotation.y=plot.yaw;
   group.position.set(first.x,base,first.z);
   const surface=(x:number,z:number)=>ground(first.x+x,first.z+z)-base;
@@ -38,13 +47,13 @@ function makeLandmark(plot:MonumentPlot,shop:Workshop,ground:Ground) {
       group.add(kit.module(cliffPostOffice));
       const crate=kit.module(mailCrate);crate.name='Mail carrier';
       const carriers=Array.from({length:4},(_,i)=>{const car=i?crate.clone():crate;group.add(car);return car;});
-      tick=time=>{for(const [i,car] of carriers.entries()){
+      const moveCarriers=(time:number)=>{for(const [i,car] of carriers.entries()){
         const leg=i>>1,side=i%2?1:-1,phase=time*(leg?.26:.31)+(seed%641)*.013+leg*.9;
         const t=.5+side*.49*T.MathUtils.clamp(1.12*Math.sin(phase),-1,1);
         cablePoint(leg,side,t,car.position);
         car.rotation.z=.03*Math.cos(phase)*Math.sin(Math.PI*t);
       }};
-      tick(0);
+      tick=moveCarriers;moveCarriers(0);
       for(let i=0;i<42;i++){
         const x=-20+13*(1+Math.sin(i*2.399))+i%4,z=-8+8.8*(1+Math.cos(i*1.21));
         if((x>1&&z>5)||(x<-.5&&z<-6)||(x<-11&&z>8))continue;
@@ -92,6 +101,15 @@ function makeLandmark(plot:MonumentPlot,shop:Workshop,ground:Ground) {
       }
       aim.set(0,13+rise/2,span/2);bearing.set(-1,.27,.135);distance=91;width=span+57;break;
     }
+    case 'rain-archive':{
+      const archive=kit.module(rainArchive);
+      snowOnMeshes(snowCover,archiveShelter)(archive);
+      group.add(archive);
+      const weatherEffects=archiveWater(archiveBasin.radius,archiveBasin.waterline,archiveRoof.outlet,water);group.add(weatherEffects.group);resources.push(weatherEffects);
+      tick=(seconds,power,weather)=>weatherEffects.tick(seconds,1-power,weather);
+      aim.set(0,8.1,0);bearing.set(.14,.33,1);distance=56;width=50;
+      break;
+    }
     case 'winter-garden':{
       const shell=kit.module(winterGarden);
       shell.traverse(part=>{
@@ -100,6 +118,7 @@ function makeLandmark(plot:MonumentPlot,shop:Workshop,ground:Ground) {
         glazing.opacity=.15;glazing.side=T.DoubleSide;glazing.forceSinglePass=true;
         glazing.roughness=.17;part.material=glazing;resources.push(glazing);
       });
+      snowOnMeshes(snowCover,conservatoryShelter,true)(shell);
       let buds:ReturnType<typeof sakura>=[];
       const tree=kit.module(p=>{buds=sakura(p);});
       const blossoms=blossomCrown(buds);
@@ -111,6 +130,7 @@ function makeLandmark(plot:MonumentPlot,shop:Workshop,ground:Ground) {
       aim.set(0,12.5,0);bearing.set(-.73,.19,1);distance=54;width=40;break;
     }
   }
+  if(id!=='rain-archive' && id!=='winter-garden')snowOnMeshes(snowCover)(group);
   for(const [i,matrices] of plantings.entries()){
     if(!matrices.length)continue;
     const template=shop.treeModels[i]!.children[0] as T.Mesh<T.BufferGeometry,T.Material>;
@@ -124,10 +144,12 @@ function makeLandmark(plot:MonumentPlot,shop:Workshop,ground:Ground) {
   const c=Math.cos(yaw),s=Math.sin(yaw);
   function grade(station:number,across:number,height:number){
     const dx=station-first.x,dz=across-first.z;
-    if(Math.abs(dx)>34 || Math.abs(dz)>34)return height;
+    const reach=id==='rain-archive'?42:34;
+    if(Math.abs(dx)>reach || Math.abs(dz)>reach)return height;
     const x=c*dx-s*dz,z=s*dx+c*dz;
     const natural=height-base;
     if(id==='post-office')return base+postOfficeSlope(x,z,natural);
+    if(id==='rain-archive')return base+archiveGroundHeight(x,z,natural);
     const outside=id==='bell-yard'?(Math.hypot(x/18.2,z/13.7)-1)*14:Math.max(Math.abs(x)-16.2,Math.abs(z)-11);
     const floor=id==='bell-yard'?1.55:.2,weight=1-T.MathUtils.smoothstep(outside,-.5,5);
     return T.MathUtils.lerp(height,base+floor,weight);
@@ -139,10 +161,10 @@ function makeLandmark(plot:MonumentPlot,shop:Workshop,ground:Ground) {
     kit.glazing.emissiveIntensity=.30*power;kit.bulbs.color.setScalar(.52+power*2.2);
   },dispose(){for(const resource of resources)resource.dispose();kit.dispose();},
     exposure(x:number,z:number,h:number){return T.MathUtils.smoothstep(grade(x,z,h)-h,.24,5.8);},target:aim,direction:new T.Vector3(bearing.z,bearing.y,-bearing.x),distance,width,
-    grade:gradeBanks??(id==='post-office'||id==='bell-yard'||id==='winter-garden'?grade:undefined)};
+    grade:gradeBanks??(id==='post-office'||id==='bell-yard'||id==='winter-garden'||id==='rain-archive'?grade:undefined)};
 }
 
-export function cityMonuments(shop:Workshop,ground:Ground) {
+export function cityMonuments(shop:Workshop,ground:Ground,weather:MonumentWeather) {
   const root=new T.Group();
   const built=new Map<MonumentId,ReturnType<typeof makeLandmark>>();
   const sources:ReturnType<typeof monumentLamps>=[];
@@ -157,7 +179,7 @@ export function cityMonuments(shop:Workshop,ground:Ground) {
         root.remove(model.group);model.dispose();built.delete(id);changed=true;
       }
       for(const plot of plots)if(!built.has(plot.id)){
-        const model=makeLandmark(plot,shop,ground);built.set(plot.id,model);root.add(model.group);changed=true;
+        const model=makeLandmark(plot,shop,ground,weather);built.set(plot.id,model);root.add(model.group);changed=true;
       }
       if(changed){sources.length=0;for(const model of built.values())sources.push(...model.sources);
         clearings=plots.flatMap(p=>p.lots);
@@ -170,7 +192,7 @@ export function cityMonuments(shop:Workshop,ground:Ground) {
       return [lo,hi] as const;
     },
     cleared(x:number,z:number){return clearings.some(l=>Math.abs(x-l.x)<l.along && Math.abs(z-l.z)<l.across);},
-    tick(time:number,power:number){for(const model of built.values()){model.tick?.(time);model.applyLight(power);}},
+    tick(time:number,power:number,weather:ValleyWeather){for(const model of built.values()){model.tick?.(time,power,weather);model.applyLight(power);}},
     grade(x:number,z:number,height:number){
       for(const model of built.values())if(model.grade)height=model.grade(x,z,height);
       return height;

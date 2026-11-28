@@ -8,8 +8,19 @@ function pane(p:Parts,a:T.Vector3,b:T.Vector3,c:T.Vector3,d:T.Vector3) {
   p.place(shape,'crystal',new T.Matrix4());shape.dispose();
 }
 
+const conservatory={halfSpan:15.4,halfDepth:10.2,spring:12,rise:11.4};
+
+export const conservatoryShelter={functionName:'conservatoryExposure',source:`
+  float conservatoryExposure(vec3 local){
+    float span=abs(local.x)/${conservatory.halfSpan};
+    float depth=abs(local.z)/${conservatory.halfDepth};
+    float roof=${conservatory.spring.toFixed(1)}+${conservatory.rise}*sqrt(max(0.,1.-span*span));
+    return max(smoothstep(.98,1.02,max(span,depth)),smoothstep(roof-.9,roof-.3,local.y));
+  }
+`};
+
 export function winterGarden(p:Parts) {
-  const rx=15.4,spring=12,rise=11.4,depth=10.2,base=1.65;
+  const {halfSpan:rx,halfDepth:depth,spring,rise}=conservatory,base=1.65;
   p.box('shade',0,-1.1,0,rx*2+1.2,4.6,depth*2+1.1);
   p.box('oxblood',0,1.09,0,rx*2+1.4,1.35,depth*2+1.4);
   p.box('stone',0,base,0,rx*2+1.75,.28,depth*2+1.7);

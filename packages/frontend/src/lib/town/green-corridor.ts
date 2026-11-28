@@ -7,6 +7,7 @@ import { woodlandFloor } from './woodland-floor.js';
 import type { Gouache } from './gouache.js';
 import { boughStart, boughEnd, farCrownStart, farCrownEnd, woodlandEnd } from './tree-dither.js';
 import { crownNeighbors, type WoodlandTree } from './woodland-boughs.js';
+import { snowSurface } from './valley-snow.js';
 import { meadowPigment } from './meadow-pigment.js';
 import { coastalBreeze } from './coastal-breeze.js';
 import { corridorFlocks } from './corridor-flocks.js';
@@ -32,10 +33,10 @@ export function overlookHeight(x:number,z:number){
   return T.MathUtils.lerp(river,ridge,Math.max(bankSlope,roof));
 }
 
-function corridorFloor(near:number,far:number,extent:number,cityEnd:number,rockCenter?:number){
+function corridorFloor(near:number,far:number,extent:number,cityEnd:number,detailCenters:readonly number[]=[]){
   const p:number[]=[],uv:number[]=[],cover:number[]=[],idx:number[]=[];
   const xs:number[]=[];
-  for(let x=axis-305;x<axis+306;x+=rockCenter!==undefined && Math.abs(x-rockCenter)<31?1.05:x>12&&x<148?1.25:5)xs.push(x);
+  for(let x=axis-305;x<axis+306;x+=detailCenters.some(center=>Math.abs(x-center)<35)?1.05:x>12&&x<148?1.25:5)xs.push(x);
   const sliceSet=new Set(depthSlices(extent));
   for(let z=near-250;z<near;z+=3)sliceSet.add(z);
   for(let z=near;z<=far;z+=1.3)sliceSet.add(z);
@@ -94,10 +95,10 @@ function corridorFloor(near:number,far:number,extent:number,cityEnd:number,rockC
 }
 
 function wallMaterial(moss:T.Texture,normals:T.Texture,woods:T.Texture,driftTime:{value:number},lighting:ValleyLighting){
-  const material=new T.ShaderMaterial({uniforms:{driftTime,sunDirection:{value:lighting.direction},skyColor:{value:lighting.sky},moss:{value:moss},relief:{value:normals},woods:{value:woods}},vertexShader:`
+  const material=new T.ShaderMaterial({uniforms:{driftTime,snowCover:lighting.snowCover,sunDirection:{value:lighting.direction},skyColor:{value:lighting.sky},moss:{value:moss},relief:{value:normals},woods:{value:woods}},vertexShader:`
     varying vec3 p;varying vec3 surfaceNormal;
     void main(){p=(modelMatrix*vec4(position,1.)).xyz;surfaceNormal=normal;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-    fragmentShader:`uniform sampler2D moss,relief,woods;uniform vec3 sunDirection,skyColor;varying vec3 p,surfaceNormal;${corridorShadow}
+    fragmentShader:`uniform sampler2D moss,relief,woods;uniform vec3 sunDirection,skyColor;varying vec3 p,surfaceNormal;${corridorShadow}${snowSurface}
       void main(){
         vec3 n=normalize(surfaceNormal);
         vec3 w=pow(abs(n),vec3(8.));w/=dot(w,vec3(1.));
@@ -118,6 +119,10 @@ function wallMaterial(moss:T.Texture,normals:T.Texture,woods:T.Texture,driftTime
         color=mix(color,vec3(.113,.110,.060)*(.26+mat),seam*.62);
         vec3 tangent=normalize(vec3(n.z,0.,-n.x)+vec3(.0001,0.,0.));
         vec3 bent=normalize(n+tangent*slope.x*.68+vec3(0.,1.,0.)*slope.y*.59);
+        if(snowCover>.001 && n.y>.13){
+          float grain=snowNoise(p.xz*.18+p.y*.037);
+          color=mix(color,snowColor(grain)*.35,settledSnow(p,n.y,1.,grain));
+        }
         float sun=max(dot(bent,sunDirection),0.);
         float lightwell=canopySunlight(p);
         float vertical=.48+.52*smoothstep(35.,560.,p.y);
@@ -164,6 +169,7 @@ function wallGeometry(side:number){
 }
 
 export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighting:ValleyLighting,paint?:Gouache,afterglow=false){
+  const {snowCover}=lighting;
   const root=new T.Group(),owned:T.BufferGeometry[]=[],textures:T.Texture[]=[];
   const loader=new T.TextureLoader();
   const load=(name:string,anisotropy=4)=>loader.loadAsync('/city/materials/'+name+'.webp').then(t=>{
@@ -180,13 +186,14 @@ export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighti
   floor.onBeforeCompile=shader=>{
     shader.uniforms.grassFibres={value:grassFibres};
     shader.uniforms.stoneMap={value:stone??heath};shader.uniforms.stoneNormal={value:stoneNormal??normal??heath};
-    Object.assign(shader.uniforms,{skyColor:{value:lighting.sky},driftTime,breezeTime:driftTime,forestEye:{value:eye},floorShade:{value:understory.texture},shadeLayout:{value:understory.layout}});
-    shader.vertexShader='attribute float outcrop,woodland;varying float bedrock;uniform vec3 forestEye;varying vec3 floorPlace;varying float treeCover,floorDistance;\n'+shader.vertexShader.replace('#include <begin_vertex>',`
+    Object.assign(shader.uniforms,{skyColor:{value:lighting.sky},snowCover,driftTime,breezeTime:driftTime,forestEye:{value:eye},floorShade:{value:understory.texture},shadeLayout:{value:understory.layout}});
+    shader.vertexShader='attribute float outcrop,woodland;varying float bedrock;uniform vec3 forestEye;varying vec3 floorPlace;varying float treeCover,floorDistance,floorUp;\n'+shader.vertexShader.replace('#include <begin_vertex>',`
       #include <begin_vertex>
-      bedrock=outcrop;floorPlace=position;
+      bedrock=outcrop;floorPlace=position;floorUp=normal.y;
       floorDistance=distance(forestEye,position);
       treeCover=woodland;`);
-    shader.fragmentShader=corridorShadow+coastalBreeze+meadowPigment+'uniform vec3 skyColor;uniform sampler2D grassFibres,floorShade,stoneMap,stoneNormal;varying float bedrock;uniform vec4 shadeLayout;varying vec3 floorPlace;varying float treeCover,floorDistance;\n'+shader.fragmentShader.replace('#include <map_fragment>',`
+    shader.fragmentShader=corridorShadow+coastalBreeze+meadowPigment+snowSurface+'uniform vec3 skyColor;uniform sampler2D grassFibres,floorShade,stoneMap,stoneNormal;varying float bedrock;uniform vec4 shadeLayout;varying vec3 floorPlace;varying float treeCover,floorDistance,floorUp;\n'+shader.fragmentShader.replace('#include <map_fragment>',`
+      float snowShade=0.;
       #ifdef USE_MAP
         vec3 floorDx=dFdx(floorPlace),floorDy=dFdy(floorPlace);
         float station=${valleyOrigin.z}.-floorPlace.z;
@@ -244,8 +251,15 @@ export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighti
           strata*= (.83+.45*relief.g)*(1.-.32*cleft);exposed*=1.-.64*ledge;
           diffuseColor.rgb=mix(diffuseColor.rgb,strata,exposed);
         }
+        if(snowCover>.001){
+          float snowGrainValue=snowNoise(land*.14)+.13*grain;
+          float exposure=(1.-.19*shelter)*smoothstep(.14,1.15,floorPlace.y);
+          float coat=settledSnow(floorPlace,floorUp,exposure,snowGrainValue);
+          diffuseColor.rgb=mix(diffuseColor.rgb,snowColor(clamp(snowGrainValue,0.,1.)),coat);
+          snowShade=coat;
+        }
       #endif`)
-      .replace('#include <opaque_fragment>','outgoingLight=mix(outgoingLight*mix(vec3(.17,.27,.25),vec3(1.02,.95,.69),canopySunlight(floorPlace)),vec3(.135,.220,.241)*min(vec3(1.),skyColor/vec3(.50,.59,.77)),(1.-exp(-floorDistance*.000087))*.97);\n#include <opaque_fragment>');
+      .replace('#include <opaque_fragment>','outgoingLight=mix(outgoingLight*mix(mix(vec3(.17,.27,.25),vec3(.30,.38,.44),snowShade),mix(vec3(1.02,.95,.69),vec3(.95,.98,1.),snowShade),canopySunlight(floorPlace)),vec3(.135,.220,.241)*min(vec3(1.),skyColor/vec3(.50,.59,.77)),(1.-exp(-floorDistance*.000087))*.97);\n#include <opaque_fragment>');
   };
   function add(g:T.BufferGeometry,material:T.Material){owned.push(g);const mesh=new T.Mesh(g,material);root.add(mesh);return mesh;}
   const west=add(wallGeometry(-1),walls),east=add(wallGeometry(1),walls);
@@ -253,15 +267,16 @@ export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighti
   let detailNear=valleyOrigin.z-72,detailFar=valleyOrigin.z+72,extent=-farEnd;
   let cityLength=144,surface=corridorFloor(detailNear,detailFar,extent,cityLength);
   const paving=add(surface.geometry,floor);paving.receiveShadow=true;
-  let rockDetail:number|undefined;
-  function followRiver(start:number,end:number,cityEnd:number,rockCenter?:number){
+  let terrainDetail='';
+  function followRiver(start:number,end:number,cityEnd:number,detailCenters:readonly number[]=[]){
     const near=valleyOrigin.z-end-16,far=valleyOrigin.z-start+16,length=Math.max(-farEnd,cityEnd+2200);
-    if(detailNear===near&&detailFar===far&&extent===length&&cityLength===cityEnd&&rockDetail===rockCenter)return;
-    rockDetail=rockCenter;
+    const detail=detailCenters.join('/');
+    if(detailNear===near&&detailFar===far&&extent===length&&cityLength===cityEnd&&terrainDetail===detail)return;
+    terrainDetail=detail;
     detailNear=near;detailFar=far;extent=length;cityLength=cityEnd;
     west.scale.z=east.scale.z=length/-farEnd;
     const old=paving.geometry;
-    surface=corridorFloor(near,far,length,cityLength,rockDetail);paving.geometry=surface.geometry;
+    surface=corridorFloor(near,far,length,cityLength,detailCenters);paving.geometry=surface.geometry;
     grass.clear();forest.clear();distant.clear();understory.clear();owned[owned.indexOf(old)]=paving.geometry;old.dispose();
   }
   const ground=(x:number,z:number)=>surface.height(x,z);
@@ -273,7 +288,7 @@ export async function createGreenCorridor(heath:T.Texture,trees:T.Group[],lighti
     const station=valleyOrigin.z-z;
     if(station<portalStation+8&&station>hiddenStation-12&&Math.abs(x-valleyOrigin.x-channelCenter(station))<tunnelRadius+2&&ground(x,z)<7.2)return true;
     return z>=detailNear-12&&z<=detailFar+12&&depth>=-riverWidth(valleyOrigin.z-z)-43&&depth<=86;
-  },bounds.west,bounds.east,driftTime,eye,coverAt);
+  },bounds.west,bounds.east,driftTime,eye,coverAt,snowCover);
   root.add(grass.group);
   const forest=corridorForest(trees,ground,coverAt,bounds.west,bounds.east);
   root.add(forest.group);

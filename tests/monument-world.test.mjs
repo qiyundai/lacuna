@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as T from 'three';
+import { studioWeather, valleyWeatherAt } from '../packages/frontend/src/lib/town/valley-weather.ts';
+import { archiveEntryZ, archiveGroundHeight } from '../packages/frontend/src/lib/town/rain-archive.ts';
+import { capillarySlopes } from '../packages/frontend/src/lib/town/bay-water.ts';
+import { snowOnMeshes } from '../packages/frontend/src/lib/town/valley-snow.ts';
 import { paintedCoast } from '../packages/frontend/src/lib/town/painted-coast.ts';
 import { reserveMonument, reservation } from '../packages/frontend/src/lib/town/monument-placement.ts';
 import { cityMonuments } from '../packages/frontend/src/lib/town/monument-models.ts';
@@ -21,6 +25,10 @@ test('the playable example reaches all monument milestones at an every-other-day
   assert.ok(pages.slice(1).every((p,i)=>p.created_at-pages[i].created_at===2*86400));
   assert.deepEqual(coast.monumentPlots.map(p=>p.id),monuments.map(m=>m.id));
   assert.deepEqual(exampleJournal(),pages);
+  const archive=coast.monumentPlots.at(-1);
+  assert.equal(archive.id,'rain-archive');
+  assert.equal(archive.lots.length,1);
+  assert.ok(Math.abs(archive.lots[0].z-bankEdge(archive.lots[0].x,archive.lots[0].bank))>45);
 });
 
 const journal=(world,n,edition=5)=>Array.from({length:n},(_,i)=>({id:world+'-'+i,riverEdition:edition,created_at:1609459200+i*604800}));
@@ -94,11 +102,55 @@ test('a shaft eases across its range cutoff while the world clock is stationary'
   }finally{shafts.dispose();}
 });
 
+test('valley weather has continuous fronts, winter snow, and runoff after the rain',()=>{
+  const January=Date.UTC(2026,0,1), July=Date.UTC(2026,6,1), minute=60_000;
+  const states=Array.from({length:14*24*12},(_,i)=>valleyWeatherAt(January+i*5*minute));
+  assert.ok(states.some(w=>w.rain>.5) && states.some(w=>w.snow>.5));
+  assert.ok(states.some(w=>w.rain+w.snow+w.overcast===0));
+  assert.ok(states.some(w=>w.rain===0 && w.snow===0 && w.runoff>.1));
+  assert.ok(states.some(w=>w.snow===0 && w.snowCover>.1));
+  assert.ok(states.every(w=>!(w.rain && w.snow) && Object.values(w).every(value=>value>=0 && value<=1)));
+  for(let i=0;i<14*24*12;i++)assert.equal(valleyWeatherAt(July+i*5*minute).snow,0);
+  for(let i=0;i<14*8;i++){
+    const boundary=January+i*180*minute;
+    const before=Object.values(valleyWeatherAt(boundary-1)),after=Object.values(valleyWeatherAt(boundary+1));
+    assert.ok(before.every((value,index)=>Math.abs(value-after[index])<1e-5));
+  }
+  assert.equal(studioWeather('hail'),undefined);
+  assert.deepEqual(valleyWeatherAt(July,studioWeather('rain')),valleyWeatherAt(January,'rain'));
+});
+
+test('the Archive approach lands level and blends smoothly into the hillside',()=>{
+  const height=(x,z)=>11+x*.11-z*.18;
+  const grade=(x,z)=>archiveGroundHeight(x,z,height(x,z));
+  for(const x of [-2.5,0,2.5])assert.ok(Math.abs(grade(x,archiveEntryZ)-(-.12))<1e-6);
+  for(const [x,z] of [[0,40],[40,20],[-40,-30]])assert.equal(grade(x,z),height(x,z));
+  for(let z=15;z<36;z+=.25){
+    const before=grade(0,z-.01),here=grade(0,z),after=grade(0,z+.01);
+    assert.ok(Math.abs(after-2*here+before)<.001);
+  }
+});
+
+test('shared snow materials can inherit a previously coated shader',()=>{
+  const stone=new T.MeshStandardMaterial(),lit=stone.clone(),shape=new T.BoxGeometry();
+  lit.onBeforeCompile=(shader,renderer)=>stone.onBeforeCompile(shader,renderer);
+  const cover={value:.72},coat=snowOnMeshes(cover);
+  coat(new T.Mesh(shape,lit));
+  coat(new T.Mesh(shape,stone));
+  const shader={vertexShader:'#include <project_vertex>',fragmentShader:'#include <normal_fragment_begin>',uniforms:{}};
+  lit.onBeforeCompile(shader,undefined);
+  assert.equal(shader.uniforms.snowCover,cover);
+  assert.equal(shader.fragmentShader.match(/float settledSnow\(/g).length,1);
+  stone.dispose();lit.dispose();shape.dispose();
+});
+
 test('carriers traverse both cables and all monuments supply clock-controlled light',()=>{
   const tree=new T.Group(),leaf=new T.BoxGeometry();
   leaf.setAttribute('leafMask',new T.Float32BufferAttribute(Array(leaf.getAttribute('position').count).fill(1),1));
   const foliage=new T.MeshStandardMaterial();tree.add(new T.Mesh(leaf,foliage));
-  const wind={value:0},city=cityMonuments({treeModels:[tree],breezeTime:wind,clockHour:{value:12}},landHeight);
+  const wind={value:0},snowCover={value:0},slopes=capillarySlopes();
+  const city=cityMonuments({treeModels:[tree],breezeTime:wind,clockHour:{value:12}},landHeight,
+    {snowCover,water:{slopes,sunDirection:new T.Vector3(1,1,0),hdr:false}});
   const plots=paintedCoast(journal('lighting',30)).monumentPlots;
   const scene=new T.Scene(),pool=monumentLightPool(scene,4),camera=new T.PerspectiveCamera(60,1,.1,700);
   try{
@@ -110,10 +162,40 @@ test('carriers traverse both cables and all monuments supply clock-controlled li
       assert.ok(scene.children.some(light=>light.intensity>0),id);
       pool.update(model.sources,camera,0,.1);assert.ok(scene.children.every(light=>light.intensity===0));
     }
+    const archive=city.view('rain-archive');
+    const fall=archive.group.getObjectByName('Oculus waterfall'),poolWater=archive.group.getObjectByName('Rain pool');
+    assert.ok(fall && poolWater);
+    const clear=valleyWeatherAt(0,'clear'),rain=valleyWeatherAt(0,'rain');
+    const clearing=valleyWeatherAt(0,'clearing'),snow=valleyWeatherAt(0,'snow');
+    assert.equal(poolWater.isReflector,true);
+    assert.equal(poolWater.material.uniforms.slopes.value,slopes);
+    const spray=archive.group.getObjectByName('Cascade spray');
+    assert.ok(spray);
+    const outdoor=archive.group.children[0].children.find(part=>part.isMesh && part.material.customProgramCacheKey().includes('/settled-snow/'));
+    assert.ok(outdoor);
+    assert.ok(!archive.group.getObjectsByProperty('isLineSegments',true).length);
+    city.tick(2,.75,rain);
+    assert.equal(fall.visible,true);
+    assert.equal(spray.visible,true);
+    assert.equal(fall.material.uniforms.time.value,2);
+    assert.equal(fall.material.uniforms.runoff.value,rain.runoff);
+    assert.equal(poolWater.material.uniforms.day.value,.25);
+    const rainyWidth=fall.scale.x;
+    city.tick(4,0,clearing);
+    assert.equal(fall.visible,true);
+    assert.ok(fall.scale.x<rainyWidth);
+    city.tick(6,0,snow);
+    assert.equal(fall.visible,false);
+    assert.equal(spray.visible,false);
+    city.tick(7,0,clear);
+    assert.equal(fall.visible,false);
+    assert.equal(spray.visible,false);
+    assert.equal(poolWater.material.uniforms.time.value,7);
+    assert.equal(fall.material.uniforms.day.value,1);
     const carriers=city.view('post-office').group.children.filter(c=>c.name==='Mail carrier');
-    assert.equal(carriers.length,4);city.tick(1,0);const a=carriers.map(c=>c.position.clone());
-    city.tick(8,1);assert.ok(carriers.every((c,i)=>c.position.distanceTo(a[i])>1));
-    const held=carriers.map(c=>c.position.clone());city.tick(8,1);assert.deepEqual(carriers.map(c=>c.position),held);
+    assert.equal(carriers.length,4);city.tick(1,0,clear);const a=carriers.map(c=>c.position.clone());
+    city.tick(8,1,clear);assert.ok(carriers.every((c,i)=>c.position.distanceTo(a[i])>1));
+    const held=carriers.map(c=>c.position.clone());city.tick(8,1,clear);assert.deepEqual(carriers.map(c=>c.position),held);
     city.update([]);assert.equal(city.sources.length,0);assert.equal(city.root.children.length,0);
-  }finally{pool.dispose();city.dispose();leaf.dispose();foliage.dispose();}
+  }finally{pool.dispose();city.dispose();slopes.dispose();leaf.dispose();foliage.dispose();}
 });

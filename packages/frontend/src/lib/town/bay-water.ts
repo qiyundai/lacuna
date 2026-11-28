@@ -2,7 +2,7 @@ import {sunbreak} from './sunbreak.js';
 import { valleyOrigin } from './valley-river.js';
 import { ferryWake, wakeLifetime, wakeSamples } from './ferry-wake.js';
 import * as T from 'three';
-import { Reflector } from 'three/addons/objects/Reflector.js';
+import { waterReflection, waterNoise, rainImpactRipples } from './water-optics.js';
 
 export function capillarySlopes() {
   const size=128, data=new Uint8Array(size*size*4);
@@ -28,39 +28,23 @@ export function capillarySlopes() {
   return texture;
 }
 
-export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr:boolean,afterglow:boolean,daylight:T.IUniform<number>) {
+export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr:boolean,afterglow:boolean,daylight:T.IUniform<number>,rain:T.IUniform<number>,overcast:T.IUniform<number>) {
   const geometry=new T.PlaneGeometry(12000,12000);
-  const water=new Reflector(geometry,{textureWidth:960,textureHeight:640,multisample:0,clipBias:.003});
-  if(!hdr)water.getRenderTarget().texture.type=T.UnsignedByteType;
-  water.rotation.x=-Math.PI/2;water.position.y=.01;water.renderOrder=1;
-  const material=water.material as T.ShaderMaterial,slopes=capillarySlopes();
-  const bounds=new T.Vector2(),clock={value:0};
+  const clock={value:0},bounds=new T.Vector2();
+  const {surface:water,material}=waterReflection(geometry,clock,hdr,{textureWidth:960,textureHeight:640,multisample:0,clipBias:.003});
+  water.position.y=.01;water.renderOrder=1;water.name='Valley river';
+  const slopes=capillarySlopes();
   const wakes=[ferryWake(),ferryWake()];
   const wakeCounts=new Int32Array(wakes.length);
   const hulls=wakes.map(()=>new T.Vector4(0,0,0,0));
   material.uniforms.hulls={value:hulls};
   Object.assign(material.uniforms,{wakeTrail:{value:wakes.flatMap(w=>w.trail.value)},wakeCount:{value:wakeCounts},wakeBounds:{value:wakes.map(w=>w.bounds.value)}});
-  Object.assign(material.uniforms,{daylight,slopes:{value:slopes},sunDirection:{value:sunDirection},bounds:{value:bounds},clock});
+  Object.assign(material.uniforms,{daylight,rain,overcast,slopes:{value:slopes},sunDirection:{value:sunDirection},bounds:{value:bounds},clock});
   material.uniforms.shadowFrame={value:sun.shadow.matrix};
   material.uniforms.shadowDepth={value:null};
-  const reflect=water.onBeforeRender.bind(water);
-  const reflectedEye=new T.Vector3(),reflectedRotation=new T.Quaternion(),reflectedProjection=new T.Matrix4();
-  const worldToReflection=new T.Matrix4(),surfaceInverse=new T.Matrix4();
-  const reflectionUv=material.uniforms.textureMatrix!.value as T.Matrix4;
-  let reflectedAt=-Infinity;
+  const reflect=water.onBeforeRender;
   water.onBeforeRender=(...args)=>{
-    const camera=args[2],elapsed=clock.value-reflectedAt;
-    const travel=T.MathUtils.clamp((camera.position.y-water.position.y)*.025,.3,2.5);
-    if(elapsed<0 || elapsed>=.14 || water.forceUpdate || !reflectedProjection.equals(camera.projectionMatrix)
-      || reflectedEye.distanceToSquared(camera.position)>travel*travel
-      || Math.abs(reflectedRotation.dot(camera.quaternion))<.9998){
-      reflect(...args);
-      reflectedAt=clock.value;reflectedEye.copy(camera.position);reflectedRotation.copy(camera.quaternion);
-      reflectedProjection.copy(camera.projectionMatrix);
-      worldToReflection.multiplyMatrices(reflectionUv,surfaceInverse.copy(water.matrixWorld).invert());
-    }else{
-      reflectionUv.multiplyMatrices(worldToReflection,water.matrixWorld);
-    }
+    reflect(...args);
     material.uniforms.shadowDepth!.value=sun.shadow.map?.depthTexture;
   };
   material.vertexShader='varying vec3 surface;'+material.vertexShader.replace('vUv =','surface=(modelMatrix*vec4(position,1.)).xyz; vUv =');
@@ -71,22 +55,13 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
     uniform vec2 bounds;
     uniform mat4 shadowFrame;
     uniform highp sampler2DShadow shadowDepth;
-    uniform float clock,daylight;
+    uniform float clock,daylight,rain,overcast,reflectionEnabled;
     uniform vec4 hulls[${wakes.length}];
     uniform int wakeCount[${wakes.length}];
     uniform vec4 wakeTrail[${wakeSamples*wakes.length}],wakeBounds[${wakes.length}];
     ${afterglow?sunbreak:''}
-    float cellValue(vec2 cell){
-      vec3 h=fract(vec3(cell.xyx)*vec3(.1031,.1030,.0973));
-      h+=dot(h,h.yzx+33.33);
-      return fract((h.x+h.y)*h.z);
-    }
-    float flowNoise(vec2 p){
-      vec2 cell=floor(p),f=fract(p);
-      f=f*f*(3.-2.*f);
-      return mix(mix(cellValue(cell),cellValue(cell+vec2(1.,0.)),f.x),
-                 mix(cellValue(cell+vec2(0.,1.)),cellValue(cell+1.),f.x),f.y);
-    }
+    ${waterNoise}
+    ${rainImpactRipples}
     void main(){
       vec2 p=surface.xz;
       vec3 eye=cameraPosition-surface;
@@ -117,6 +92,8 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
       float footprint=max(length(dFdx(p)),length(dFdy(p)));
       vec2 detail=(across*fine.x+downstream*fine.y)*(1.-smoothstep(.4,2.7,footprint));
       vec2 slope=detail+(downstream*swell+across*field.x*.035)*(1.-smoothstep(2.,9.,footprint));
+      vec3 rainImpact=rainRipples(p,clock,footprint,rain,breeze);
+      slope+=.23*rainImpact.xy;
       float propWash=0.;
       for(int route=0;route<${wakes.length};route++){
         vec4 region=wakeBounds[route];
@@ -150,17 +127,16 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
       vec3 reflectedBend=mat3(viewMatrix)*(reflect(-eye,n)-reflect(-eye,vec3(0.,1.,0.)));
       vec2 distortion=reflectedBend.xy*vec2(.13,.21)*min(1.,48./max(range,1.));
       distortion*=1.-smoothstep(160.,1100.,range);
-      vec3 reflected=texture2D(tDiffuse,clamp(uv+distortion,.001,.999)).rgb;
+      vec3 reflected=reflectionEnabled>.5?texture2D(tDiffuse,clamp(uv+distortion,.001,.999)).rgb:
+        mix(vec3(.019,.030,.052),vec3(.25,.32,.35),daylight);
       float coast=(1.-smoothstep(0.,14.,max(bounds.x-station,station-bounds.y)));
       float shallow=exp(-.16*max(0.,bankDistance))*(.68+.32*field.y);
       vec3 body=mix(vec3(.017,.080,.113),vec3(.062,.171,.146),shallow);
       float bed=1.-smoothstep(.12,3.3,bankDistance);
       body=mix(body,vec3(.116,.123,.084)*(.77+.38*breeze),bed);
       vec3 halfAngle=normalize(eye+sunDirection);
-      float rough=.079+.045*riffle+.027*smoothstep(.25,1.9,footprint);
-      float a2=rough*rough, nh=max(dot(n,halfAngle),0.);
-      float denom=(1.-nh*nh)+a2*nh*nh;
-      float glint=.0058*a2/max(.00001,denom*denom);
+      float rough=.079+.044*rain+.045*riffle+.027*smoothstep(.25,1.9,footprint);
+      float glint=waterGlint(n,halfAngle,rough);
       vec3 sc=(shadowFrame*vec4(surface,1.)).xyz;
       float sunlight=1.;
       if(all(greaterThan(sc,vec3(0.)))&&all(lessThan(sc,vec3(1.))))
@@ -174,16 +150,17 @@ export function createBayWater(sunDirection:T.Vector3,sun:T.DirectionalLight,hdr
       }
       body*=mix(vec3(.10,.13,.24),vec3(1.),daylight);
       vec3 color=mix(body*(.74+.26*sunlight),reflected,clamp(fresnel+.21,0.,1.))
-        +sunlight*glint*mix(vec3(.10,.16,.33),vec3(2.1,1.21,.52),daylight);
+        +sunlight*glint*(1.-.86*overcast)*mix(vec3(.10,.16,.33),vec3(2.1,1.21,.52),daylight);
       ${afterglow?`
-      color+=daylight*sunbreakAt(surface,clock,sunDirection)*sunlight*glint*vec3(1.45,.97,.44);`:''}
+      color+=daylight*(1.-overcast)*sunbreakAt(surface,clock,sunDirection)*sunlight*glint*vec3(1.45,.97,.44);`:''}
       float foam=coast*exp(-1.9*abs(bankDistance-.5-field.x))*smoothstep(.52,.82,breeze);
       color=mix(color,vec3(.55,.67,.58)*mix(.12,1.,daylight),clamp(foam*.36+propWash,0.,.8));
+      color+=rainImpact.z*mix(.012,.049,daylight)*vec3(.69,.80,.84);
       gl_FragColor=vec4(color,1.);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`;
-  return {water,bounds,clock,wakes,wakeCounts,hulls,resize(w:number,h:number){
+  return {water,slopes,bounds,clock,wakes,wakeCounts,hulls,resize(w:number,h:number){
     const scale=Math.min(.52,800/w,512/h);
     water.getRenderTarget().setSize(Math.max(1,Math.round(w*scale)),Math.max(1,Math.round(h*scale)));
     water.forceUpdate=true;
