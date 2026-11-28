@@ -171,7 +171,8 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   const world=createBayWorld(scene,afterglow,overcast,snowCover);
   const valley=await createGreenCorridor(shop.materials.heath.map!,shop.treeModels,world.lighting,shop.paint,afterglow);
   renderer.localClippingEnabled=true;
-  renderer.setPixelRatio(Math.min(devicePixelRatio,1.65));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFShadowMap;
+  const pixelRatioCap=matchMedia('(pointer: coarse)').matches?1.3:1.65;
+  renderer.setPixelRatio(Math.min(devicePixelRatio,pixelRatioCap));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFShadowMap;
   renderer.shadowMap.autoUpdate=false;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;
   const camera=new T.PerspectiveCamera(47,1,.30,valley.far);
   const precipitation=createValleyPrecipitation(camera,world.daylight);
@@ -239,6 +240,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
   const motionPreference=matchMedia('(prefers-reduced-motion: reduce)');
   let frame=0,paused=false,skipped=false,dead=false,last=0,time=afterglow?133:0,framed=false,inspected=false;
   let lastShadowTime = -Infinity;
+  let residentShadowPending=false;
   const shadowEye=new T.Vector3(Infinity,0,0);
   let focusX=0,loadedInlet=0;
   let construction: {arrival:ReturnType<typeof buildingArrival>; start:number; site:Site} | undefined;
@@ -366,10 +368,7 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
         construction=undefined;
         atmosphere.invalidateRooms();
       }
-      if (!construction || time-lastShadowTime>.10) {
-        renderer.shadowMap.needsUpdate=true;
-        lastShadowTime=time;
-      }
+      if (!construction || time-lastShadowTime>.10) renderer.shadowMap.needsUpdate=true;
     }
     beam.rotation.y=-Math.PI*.5+Math.sin(time*.18)*1.20;
     for(const [i,{boat,course,phase,wake}] of fleet.entries()){
@@ -423,11 +422,6 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
       const radius=Math.cos(altitude)/(1+Math.sin(altitude));
       world.meteorStart.set((Math.random()-.5)*.021,Math.sign(look.z)*radius);
     }
-    if (time - lastShadowTime >= (movingMonumentNear() && !paused ? .45 : 3) || shadowEye.distanceToSquared(camera.position)>2.25) {
-      renderer.shadowMap.needsUpdate = true;
-      lastShadowTime = time;
-    }
-    if(renderer.shadowMap.needsUpdate)shadowEye.copy(camera.position);
     water.position.x=camera.position.x;
     water.position.z=camera.position.z;
     shop.breezeTime.value=time;
@@ -437,7 +431,15 @@ export async function createHarbor(canvas:HTMLCanvasElement,onPage?:(id:string)=
     city.worldToLocal(localEye.copy(camera.position));meadow?.view();
     residentProjection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse).multiply(city.matrixWorld);
     residentFrustum.setFromProjectionMatrix(residentProjection);
-    if(residents.update(routineTime(),Date.now()/1000,localEye,residentFrustum,following))renderer.shadowMap.needsUpdate=true;
+    if(residents.update(routineTime(),Date.now()/1000,localEye,residentFrustum,following))residentShadowPending=true;
+    const shadowAge=time-lastShadowTime;
+    if ((residentShadowPending && (paused || shadowAge>=.16)) || shadowEye.distanceToSquared(camera.position)>2.25
+      || shadowAge>=(movingMonumentNear() && !paused ? .45 : 3)) renderer.shadowMap.needsUpdate=true;
+    if(renderer.shadowMap.needsUpdate){
+      lastShadowTime=time;
+      shadowEye.copy(camera.position);
+      residentShadowPending=false;
+    }
     const visit=following?residents.visit(following):undefined;
     if(visit?.life!==lastVisit?.life || visit?.task!==lastVisit?.task || visit?.stops!==lastVisit?.stops){
       lastVisit=visit;onResident?.(visit);
